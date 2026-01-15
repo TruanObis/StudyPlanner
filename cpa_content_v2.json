@@ -1,0 +1,1388 @@
+{
+  "meta": {
+    "appTitle": "2026 CPA Master Planner V2",
+    "version": "2.0"
+  },
+  "home": {
+    "title": "2026 CPA 1차 마스터 플래너",
+    "subtitle": "타이머, 진도율, 커스텀 노트 기능 탑재 (Local Storage 저장)",
+    "subjects": [
+      {
+        "id": "subject_management",
+        "name": "경영학",
+        "examInfo": "80점 / 32문항",
+        "badge": "1교시"
+      },
+      {
+        "id": "subject_economics",
+        "name": "경제원론",
+        "examInfo": "80점 / 32문항",
+        "badge": "1교시"
+      },
+      {
+        "id": "subject_tax",
+        "name": "세법개론",
+        "examInfo": "100점 / 40문항",
+        "badge": "2교시"
+      },
+      {
+        "id": "subject_law",
+        "name": "기업법",
+        "examInfo": "100점 / 40문항",
+        "badge": "2교시"
+      },
+      {
+        "id": "subject_accounting",
+        "name": "회계학",
+        "examInfo": "150점 / 50문항",
+        "badge": "3교시"
+      },
+      {
+        "id": "subject_accounting_deep",
+        "name": "회계학 기출",
+        "examInfo": "150점 / 50문항",
+        "badge": "3교시"
+      }
+    ],
+    "dDays": []
+  },
+  "details": {
+    "subject_management": {
+      "id": "subject_management",
+      "title": "경영학 상세 가이드",
+      "subtitle": "인사·조직·전략·마케팅·생산·재무 핵심",
+      "cards": [
+        {
+          "id": "card_mgt_motivation",
+          "title": "동기부여 이론",
+          "scope": "내용이론(ERG, 2요인) vs 과정이론(기대, 공정성)",
+          "badge": "조직행동",
+          "qbox": "브룸의 기대이론: $M = E \\times I \\times V$",
+          "module": "mod_mgt_motivation",
+          "category": "org"
+        },
+        {
+          "id": "card_mgt_leadership",
+          "title": "리더십 이론",
+          "scope": "상황이론(피들러, 허쉬-블랜차드) 및 현대적 리더십",
+          "badge": "조직행동",
+          "qbox": "피들러 모형: $LPC$ 점수가 높으면 관계지향적 리더",
+          "module": "mod_mgt_leadership",
+          "category": "org"
+        },
+        {
+          "id": "card_mgt_finance_capm",
+          "title": "CAPM과 증권시장선",
+          "scope": "체계적 위험과 균형수익률 산출",
+          "badge": "재무관리",
+          "qbox": "$\\beta = Cov(r_i, r_m) / \\sigma_m^2$",
+          "module": "mod_mgt_finance_capm",
+          "category": "finance"
+        },
+        {
+          "id": "card_mgt_hrm",
+          "title": "직무평가 및 보상관리",
+          "scope": "직무평가(점수법, 요소비교법) 및 임금체계(직무급, 직능급)",
+          "badge": "인적자원관리",
+          "qbox": "핵심: '동일노동 동일임금' 원칙에 부합하는 직무급 체계",
+          "module": "mod_mgt_hrm",
+          "category": "org"
+        },
+        {
+          "id": "card_mgt_om_inventory",
+          "title": "재고관리와 EOQ",
+          "scope": "경제적 주문량($EOQ$) 산출 및 재고 시스템(Q, P)",
+          "badge": "생산운영",
+          "qbox": "공식: $EOQ = \\sqrt{2DS/H}$",
+          "module": "mod_mgt_inventory",
+          "category": "om"
+        },
+        {
+          "id": "card_mgt_om_quality",
+          "title": "품질경영과 식스시그마",
+          "scope": "식스시그마($DMAIC$) 및 품질비용(예방, 평가, 실패)",
+          "badge": "생산운영",
+          "qbox": "핵심: 품질 산포($\\sigma$)의 감소 및 공정능력지수",
+          "module": "mod_mgt_quality",
+          "category": "om"
+        },
+        {
+          "id": "card_mgt_strategy_basic",
+          "title": "경영전략 및 가치사슬",
+          "scope": "본원적 전략, 가치사슬 분석, BCG 매트릭스",
+          "badge": "경영전략",
+          "qbox": "포터의 가치사슬: 기술개발은 '지원활동'에 해당함",
+          "module": "mod_mgt_strategy_basic",
+          "category": "strategy"
+        },
+        {
+          "id": "card_mgt_marketing_stp",
+          "title": "마케팅 전략 (STP)",
+          "scope": "시장세분화 요건, 표적시장 전략, 경쟁자 분석",
+          "badge": "마케팅",
+          "qbox": "세분시장 요건: 측정가능성, 규모 실체성, 접근가능성 등",
+          "module": "mod_mgt_marketing_stp",
+          "category": "marketing"
+        },
+        {
+          "id": "card_mgt_consumer_behavior",
+          "title": "소비자 행동론",
+          "scope": "관여도(ELM), 태도모델(피쉬바인), 지각(웨버의 법칙)",
+          "badge": "마케팅",
+          "qbox": "웨버의 법칙: 자극의 변화를 느끼는 최소의 차이(JND)",
+          "module": "mod_mgt_consumer_behavior",
+          "category": "marketing"
+        },
+        {
+          "id": "card_mgt_marketing_comm",
+          "title": "마케팅 커뮤니케이션",
+          "scope": "광고 효과(이월, 지침), 판매촉진(공제), 홍보 vs PR",
+          "badge": "마케팅",
+          "qbox": "광고의 지침효과(wearout): 노출 빈도가 높으면 효과가 하락함",
+          "module": "mod_mgt_marketing_comm",
+          "category": "marketing"
+        },
+        {
+          "id": "card_mgt_org_group",
+          "title": "집단 역학 및 의사결정",
+          "scope": "집단 응집성, 집단 사고, 사회적 태만, 의사결정 기법",
+          "badge": "조직행동",
+          "qbox": "지명반론자법: 구성원을 지명하여 반대 의견을 제시하게 함",
+          "module": "mod_mgt_org_group",
+          "category": "org"
+        },
+        {
+          "id": "card_mgt_finance_risk",
+          "title": "위험과 수익의 기초",
+          "scope": "효용함수, 확실성 등가($CE$), 위험 프리미엄($RP$)",
+          "badge": "재무관리",
+          "qbox": "위험회피적 투자자: $기대소득 > 확실성 등가$",
+          "module": "mod_mgt_finance_risk",
+          "category": "finance"
+        },
+        {
+          "id": "card_mgt_valuation",
+          "title": "채권 및 주식 가치평가",
+          "scope": "듀레이션(Duration), 고정성장 배당평가모형",
+          "badge": "재무관리",
+          "qbox": "주가($P_0$) = $D_1 / (k - g)$",
+          "module": "mod_mgt_valuation",
+          "category": "finance"
+        },
+        {
+          "id": "card_mgt_cap_structure",
+          "title": "자본구조이론 (MM)",
+          "scope": "MM 무관련성 정리 및 법인세 고려 수정이론",
+          "badge": "재무관리",
+          "qbox": "수정이론 기업가치: $V_L = V_U + T_c \times B$",
+          "module": "mod_mgt_cap_structure",
+          "category": "finance"
+        },
+        {
+          "id": "card_mgt_options",
+          "title": "옵션 및 파생상품",
+          "scope": "이항모형, 풋-콜 등가, 옵션의 델타(Delta)",
+          "badge": "재무관리",
+          "qbox": "풋-콜 등가: $C + PV(X) = P + S$",
+          "module": "mod_mgt_options",
+          "category": "finance"
+        },
+        {
+          "id": "card_mgt_om_process",
+          "title": "공정 및 설비배치",
+          "scope": "MTS vs MTO, 유연성, 슈메너의 서비스 매트릭스",
+          "badge": "생산운영",
+          "qbox": "셀룰러 배치: GT를 활용하여 공정별·제품별 배치의 장점을 결합",
+          "module": "mod_mgt_om_process",
+          "category": "om"
+        },
+        {
+          "id": "card_mgt_om_metrics",
+          "title": "공정 성능 지표",
+          "scope": "리틀의 법칙, 병목공정, 가동률, 흐름시간",
+          "badge": "생산운영",
+          "qbox": "리틀의 법칙: $재공품(L) = 산출률(R) \\times 흐름시간(T)$",
+          "module": "mod_mgt_om_metrics",
+          "category": "om"
+        },
+        {
+          "id": "card_mgt_om_scm",
+          "title": "JIT 및 공급사슬관리",
+          "scope": "채찍효과, 지연차별화, 칸반 시스템, 린 생산",
+          "badge": "생산운영",
+          "qbox": "채찍효과: 고객에서 멀어질수록 주문의 변동 폭이 증가하는 현상",
+          "module": "mod_mgt_om_scm",
+          "category": "om"
+        }
+      ]
+    },
+    "subject_economics": {
+      "id": "subject_economics",
+      "title": "경제원론 상세 가이드",
+      "subtitle": "미시·거시·국제경제 핵심 데이터베이스",
+      "cards": [
+        {
+          "id": "card_eco_consumer",
+          "title": "소비자 이론 및 효용",
+          "scope": "무차별곡선 성질, 최적소비, 대체/소득 효과",
+          "badge": "미시경제",
+          "qbox": "완전보완재 효용함수: $U = \\min\\{ax, by\\}$",
+          "module": "mod_eco_consumer",
+          "category": "micro"
+        },
+        {
+          "id": "card_eco_market_structure",
+          "title": "시장 형태론",
+          "scope": "독점가격 규제, 게임이론(내쉬균형), 과점(꾸르노/슈타켈버그)",
+          "badge": "미시경제",
+          "qbox": "꾸르노 균형: 각 기업의 반응곡선이 교차하는 지점",
+          "module": "mod_eco_market_structure",
+          "category": "micro"
+        },
+        {
+          "id": "card_eco_solow_growth",
+          "title": "솔로우 성장 모델",
+          "scope": "균제상태(Steady State), 황금률(Golden Rule)",
+          "badge": "거시경제",
+          "qbox": "자본축적 방정식: $\\Delta k = sf(k) - (n + g + \\delta)k$",
+          "module": "mod_eco_solow_growth",
+          "category": "macro"
+        },
+        {
+          "id": "card_eco_macro_policy",
+          "title": "IS-LM 및 재정·통화정책",
+          "scope": "구축효과, 유동성 함정, 정책의 유효성 분석",
+          "badge": "거시경제",
+          "qbox": "구축효과: 투자의 이자율탄력성이 클수록 커짐",
+          "module": "mod_eco_macro_policy",
+          "category": "macro"
+        },
+        {
+          "id": "card_eco_inflation_unemp",
+          "title": "인플레이션과 실업",
+          "scope": "필립스곡선, 오쿤의 법칙, 자연실업률",
+          "badge": "거시경제",
+          "qbox": "필립스곡선: $\\pi = \\pi^e - a(u - \\bar{u})$",
+          "module": "mod_eco_inflation_unemp",
+          "category": "macro"
+        },
+        {
+          "id": "card_eco_intl_macro",
+          "title": "국제거시 및 개방경제",
+          "scope": "먼델-플레밍 모형, IRP, PPP",
+          "badge": "국제경제",
+          "qbox": "고정환율제: 재정정책은 소득 증가에 효과적",
+          "module": "mod_eco_intl_macro",
+          "category": "intl"
+        }
+      ]
+    },
+    "subject_law": {
+      "id": "subject_law",
+      "title": "기업법 상세 가이드",
+      "subtitle": "상법·외감법·공인회계사법 핵심 DB",
+      "cards": [
+        {
+          "id": "card_law_general",
+          "title": "상법 총칙 및 상행위",
+          "scope": "지배인 권한, 명의대여자 책임, 영업양도 채무",
+          "badge": "상법총칙",
+          "qbox": "지배인: 영업에 관한 재판상·재판외 모든 행위 권한 보유",
+          "module": "mod_law_general",
+          "category": "law"
+        },
+        {
+          "id": "card_law_company",
+          "title": "회사법 (주식회사)",
+          "scope": "주주총회 결의, 이사 책임, 자본금 증감",
+          "badge": "회사법",
+          "qbox": "특별결의: 출석 주주 의결권 2/3 이상 & 발행주식총수 1/3 이상",
+          "module": "mod_law_company",
+          "category": "law"
+        },
+        {
+          "id": "card_law_special",
+          "title": "외감법 및 공인회계사법",
+          "scope": "감사인 선임, 재무제표 작성 책임, CPA 직무 제한",
+          "badge": "기타법령",
+          "qbox": "외감법: 재무제표 작성 책임은 대표이사 및 회계담당 임원에게 있음",
+          "module": "mod_law_special",
+          "category": "law"
+        }
+      ]
+    },
+    "subject_tax": {
+      "id": "subject_tax",
+      "title": "세법개론 상세 가이드",
+      "subtitle": "국기법·법인세·소득세·부가세 핵심 DB",
+      "cards": [
+        {
+          "id": "card_tax_basic",
+          "title": "국세기본법: 납세의무와 우선권",
+          "scope": "납세의무 성립·확정, 제2차 납세의무, 국세 우선의 원칙",
+          "badge": "국세기본법",
+          "qbox": "제2차 납세의무: 사업양수인은 양수한 재산 가액을 한도로 책임",
+          "module": "mod_tax_basic",
+          "category": "basic"
+        },
+        {
+          "id": "card_tax_corporate",
+          "title": "법인세: 익금과 손금의 교정",
+          "scope": "수입배당금 익금불산입, 접대비·기부금 한도, 감가상각 시부인",
+          "badge": "법인세",
+          "qbox": "기부금: 법정기부금 이월공제 기간은 10년",
+          "module": "mod_tax_corporate",
+          "category": "corporate"
+        },
+        {
+          "id": "card_tax_vat",
+          "title": "부가가치세: 과세표준과 매입세액",
+          "scope": "간주공급, 영세율과 면세, 매입세액 불공제 대상",
+          "badge": "부가가치세",
+          "qbox": "간주공급: 폐업 시 잔존재화는 시가로 과세표준 산정",
+          "module": "mod_tax_vat",
+          "category": "vat"
+        }
+      ]
+    },
+    "subject_accounting": {
+      "id": "subject_accounting",
+      "title": "회계학 상세 가이드",
+      "subtitle": "중급·고급회계, 원가관리, 정부회계 핵심",
+      "cards": [
+        {
+          "id": "card_acc_revenue",
+          "title": "수익인식 5단계 모델",
+          "scope": "수행의무 식별, 거래가격 배분, 기간·시점별 인식",
+          "badge": "재무회계",
+          "qbox": "핵심: 통제가 이전될 때 수익 인식 (K-IFRS 1115호)",
+          "module": "mod_acc_revenue",
+          "category": "financial"
+        },
+        {
+          "id": "card_acc_composite",
+          "title": "복합금융상품 (CB/BW)",
+          "scope": "전환사채(CB) 및 신주인수권부사채(BW)의 가치평가",
+          "badge": "재무회계",
+          "qbox": "전환권대가 = 발행가액 - 부채요소의 공정가치",
+          "module": "mod_acc_composite",
+          "category": "financial"
+        },
+        {
+          "id": "card_acc_consolidation",
+          "title": "사업결합 및 연결회계",
+          "scope": "영업권 산출, 단계적 취득, 내부거래 제거",
+          "badge": "고급회계",
+          "qbox": "영업권 = 이전대가 - 취득일 식별가능 순자산의 공정가치",
+          "module": "mod_acc_consolidation",
+          "category": "advanced"
+        },
+        {
+          "id": "card_acc_govt",
+          "title": "정부회계 (국가/지자체)",
+          "scope": "국가회계기준 vs 지방자치단체 회계기준 비교",
+          "badge": "정부회계",
+          "qbox": "국가: 유동/비유동 구분 vs 지자체: 자산 유형별 분류",
+          "module": "mod_acc_govt",
+          "category": "govt"
+        }
+      ]
+    },
+    "subject_accounting_deep": {
+      "id": "subject_accounting_deep",
+      "title": "회계학 기출 마스터",
+      "subtitle": "재무·고급·원가·정부회계 문항 보강",
+      "cards": [
+        {
+          "id": "card_acc_micro_fin",
+          "title": "재무회계: 수익 및 자산",
+          "scope": "수익인식 5단계, 재고자산 저가법, 유형자산 재평가",
+          "badge": "재무회계",
+          "qbox": "재구매약정: 판매자가 콜옵션을 보유하면 금융협정으로 처리",
+          "module": "mod_acc_micro_fin",
+          "category": "financial"
+        },
+        {
+          "id": "card_acc_advanced_deep",
+          "title": "고급회계: 사업결합 및 연결",
+          "scope": "영업권 산출, 단계적 취득, 지분법 회계처리",
+          "badge": "고급회계",
+          "qbox": "단계적 취득: 기존 지분을 취득일 공정가치로 재측정",
+          "module": "mod_acc_advanced_deep",
+          "category": "advanced"
+        },
+        {
+          "id": "card_acc_cost_deep",
+          "title": "원가관리회계: 성과평가",
+          "scope": "CVP 분석, 변동/전부원가, 표준원가 차이분석",
+          "badge": "원가회계",
+          "qbox": "품질원가: 예방·평가·내부실패·외부실패원가 분류",
+          "module": "mod_acc_cost_deep",
+          "category": "cost"
+        },
+        {
+          "id": "card_acc_govt_deep",
+          "title": "정부회계: 국가 및 지자체",
+          "scope": "재정상태표 분류, 수익인식기준, 유산자산 처리",
+          "badge": "정부회계",
+          "qbox": "국가: 유산자산은 자산 미인식, 주석 공시",
+          "module": "mod_acc_govt_deep",
+          "category": "govt"
+        }
+      ]
+    }
+  },
+  "modules": {
+    "mod_mgt_motivation": {
+      "id": "mod_mgt_motivation",
+      "title": "동기부여 이론",
+      "subtitle": "기출 집중 분석",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 내용이론 (Content Theories)\n- **ERG 이론**: 존재(E), 관계(R), 성장(G) 욕구로 구분하며 '좌절-퇴행' 과정을 인정함.\n- **2요인 이론**: 만족을 주는 동기요인과 불만족을 방지하는 위생요인을 독립된 개념으로 봄.\n\n### 2. 과정이론 (Process Theories)\n- **기대이론 (Vroom)**: 동기부여($M$)는 기대감($E$), 수단성($I$), 유의성($V$)의 곱으로 결정됨.\n- **공정성이론 (Adams)**: 자신의 투입 대비 산출 비율을 준거 인물과 비교하여 불균형 시 이를 해소하려 함.",
+          "questions": [
+            {
+              "id": "q_mgt_2016_2",
+              "text": "알더퍼의 ERG이론, 브룸의 기대이론, 허쯔버그의 2요인이론은 모두 과정이론에 해당한다. (X)",
+              "src": "2016년 경영학 2번"
+            },
+            {
+              "id": "q_mgt_2024_3",
+              "text": "불공정성을 느끼는 경우, 개인은 준거인물을 변경함으로써 불균형 상태를 줄일 수 있다. (O)",
+              "src": "2024년 경영학 3번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_leadership": {
+      "id": "mod_mgt_leadership",
+      "title": "리더십 이론",
+      "subtitle": "상황이론 및 현대적 리더십",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 리더십 상황이론\n- **피들러 (Fiedler)**: 상황 호의성에 따라 과업지향형과 관계지향형 중 최적 리더십이 결정됨. $LPC$ 점수가 낮으면 과업지향적임.\n- **허쉬 & 블랜차드**: 부하의 성숙도(능력과 의지)에 따라 지시형, 설득형, 참여형, 위임형으로 구분함.\n\n### 2. 현대적 리더십\n- **변혁적 리더십**: 이상적 영향력, 영감적 동기부여, 지적 자극, 개별적 배려를 통해 구성원의 변화를 이끎.\n- **서번트 리더십**: 리더가 구성원을 섬기며 그들의 성장과 계발에 초점을 맞춤.",
+          "questions": [
+            {
+              "id": "q_mgt_2017_2",
+              "text": "피들러의 상황모형에서 높은 $LPC$ 점수는 관계지향적 리더십 스타일을 의미한다. (O)",
+              "src": "2017년 경영학 2번"
+            },
+            {
+              "id": "q_mgt_2018_1",
+              "text": "허쉬와 블랜차드에 따르면 부하의 성숙도가 가장 낮을 때는 지시형(telling)이 효과적이다. (O)",
+              "src": "2018년 경영학 1번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_finance_capm": {
+      "id": "mod_mgt_finance_capm",
+      "title": "재무관리: CAPM",
+      "subtitle": "자본자산가격결정모형 분석",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 증권시장선 (SML)\n- 개별 자산의 균형수익률을 산출함: $E(R_i) = R_f + \\beta_i[E(R_m) - R_f]$.\n- **베타($\\beta$)**: 체계적 위험의 측정치이며, 시장수익률에 대한 개별 자산 수익률의 민감도를 나타냄.\n\n### 2. 자산의 평가\n- **과소평가**: 내재수익률이 SML상의 균형수익률보다 큰 경우(SML 위쪽 위치).\n- **과대평가**: 내재수익률이 SML상의 균형수익률보다 작은 경우(SML 아래쪽 위치).",
+          "questions": [
+            {
+              "id": "q_mgt_2016_32",
+              "text": "시장포트폴리오와 상관계수가 1인 포트폴리오 A의 기대수익률이 12%, $R_f=5%$, $E(R_m)=10%$, $\\sigma_m=25%$일 때 A의 표준편차는?",
+              "src": "2016년 경영학 32번"
+            },
+            {
+              "id": "q_mgt_2016_36",
+              "text": "주식 B의 베타가 0.8일 때, SML을 통한 균형수익률보다 내재된 기대수익률이 작다면 해당 주식은 과대평가된 것이다. (O)",
+              "src": "2016년 경영학 36번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_hrm": {
+      "id": "mod_mgt_hrm",
+      "title": "직무평가 및 보상관리",
+      "subtitle": "인사관리 핵심 기출 분석",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 직무평가 방법 (Job Evaluation)\n- **서열법/분류법**: 비계량적 방법. 직무 전체를 포괄적으로 평가.\n- **점수법/요소비교법**: 계량적 방법. 직무 구성 요소를 점수화하여 비교.\n\n### 2. 임금 체계 (Pay Structure)\n- **직무급**: 직무의 상대적 가치에 따라 결정. '동일노동 동일임금'에 가장 부합함.\n- **직능급**: 종업원의 직무수행능력을 기준으로 결정.\n- **연공급**: 근속연수나 경력에 따라 결정.",
+          "questions": [
+            {
+              "id": "q_mgt_2017_4",
+              "text": "'동일노동 동일임금'의 원칙을 실시하기 위해서는 연공급보다 직무급이 더 적합하다. (O)",
+              "src": "2017년 경영학 4번"
+            },
+            {
+              "id": "q_mgt_2023_7",
+              "text": "임금공정성 중 개인공정성은 동일조직에서 동일직무를 담당하는 구성원 간의 성과 수준 등에 따른 임금격차에 대한 지각을 의미한다. (O)",
+              "src": "2023년 경영학 7번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_inventory": {
+      "id": "mod_mgt_inventory",
+      "title": "재고관리와 EOQ",
+      "subtitle": "재고비용 최적화 모형",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 경제적 주문량 (EOQ)\n- **가정**: 수요율 일정, 리드타임 고정, 수량할인 없음.\n- **최적점**: 연간 주문비용과 연간 재고유지비용이 일치하는 지점.\n\n### 2. 재고 시스템 비교\n- **정량발주시스템 (Q)**: 재고가 재주문점($ROP$) 도달 시 고정량($Q$) 주문.\n- **정기발주시스템 (P)**: 정해진 주기마다 목표재고 수준까지 주문.",
+          "questions": [
+            {
+              "id": "q_mgt_2016_21",
+              "text": "주문량은 주기재고(cycle inventory)에 직접적인 영향을 미치며, 판매촉진 등으로 예상되는 수요증가는 안전재고에 영향을 미친다. (O)",
+              "src": "2016년 경영학 21번"
+            },
+            {
+              "id": "q_mgt_2019_20",
+              "text": "연간 수요 900개, 주문비용 10만원, 유지비용 5만원일 때, $EOQ$로 주문량을 변경하면 총 재고비용은 연간 주문비용과 유지비용이 동일해진다. (O)",
+              "src": "2019년 경영학 20번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_quality": {
+      "id": "mod_mgt_quality",
+      "title": "품질경영과 식스시그마",
+      "subtitle": "프로세스 혁신 및 관리",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 식스시그마 방법론 (DMAIC)\n- **Define(정의) - Measure(측정) - Analyze(분석) - Improve(개선) - Control(통제)** 순으로 진행.\n\n### 2. 품질비용 (COQ)\n- **예방비용**: 불량 방지(교육, 설계).\n- **평가비용**: 품질 검사(시험, 관리도).\n- **실패비용**: 내/외부 불량 처리(재작업, 클레임). 일반적으로 예방비용보다 크다.",
+          "questions": [
+            {
+              "id": "q_mgt_2016_18",
+              "text": "식스시그마 DMAIC의 M(Measure) 단계에서는 품질의 현재 수준을 파악한다. (O)",
+              "src": "2016년 경영학 18번"
+            },
+            {
+              "id": "q_mgt_2023_22",
+              "text": "실패비용은 전체 품질비용에서 차지하는 비중이 일반적으로 예방비용에 비해 크다. (O)",
+              "src": "2023년 경영학 22번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_strategy_basic": {
+      "id": "mod_mgt_strategy_basic",
+      "title": "경영전략 및 가치사슬",
+      "subtitle": "전략 수립 및 사업포트폴리오 분석",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 포터(Porter)의 가치사슬 분석\n- **주활동**: 물류투입, 운영, 물류산출, 마케팅/영업, 서비스.\n- **지원활동**: 기업 인프라, 인적자원관리, **기술개발**, 조달.\n\n### 2. BCG 매트릭스\n- **자금 젖소(Cash Cow)**: 상대적 시장점유율은 높으나 시장성장률은 낮은 사업군.\n- **별(Star)**: 점유율과 성장률 모두 높은 사업군.\n\n### 3. 본원적 경쟁전략\n- **차별화(Differentiation)**: 제품의 독특성을 강조하는 전략으로, '기업전략'이 아닌 **'사업전략'** 수준의 의사결정임.",
+          "questions": [
+            {
+              "id": "q_mgt_2017_8",
+              "text": "포터의 가치사슬 분석에서 기술개발은 보조활동(지원활동)에 해당한다. (O)",
+              "src": "2017년 경영학 8번"
+            },
+            {
+              "id": "q_mgt_2017_8_2",
+              "text": "포터의 본원적 전략 중 하나인 차별화는 기업전략에 해당한다. (X)",
+              "src": "2017년 경영학 8번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_marketing_stp": {
+      "id": "mod_mgt_marketing_stp",
+      "title": "마케팅 전략 (STP)",
+      "subtitle": "세분화, 타겟팅 및 포지셔닝",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 효과적인 시장세분화 요건\n- 측정가능성, 규모의 실체성, 접근가능성, 세분시장 내 동질성 및 간 이질성.\n\n### 2. 표적시장 전략\n- **차별적 마케팅**: 여러 세분시장을 공략하여 각각에 맞는 제품을 제공함.\n- **집중적 마케팅**: 특정 세분시장에 자원을 집중함.\n\n### 3. 경쟁자 파악\n- **상표전환 매트릭스**: 고객 행동(구매 전환)에 기초하여 경쟁 범위를 파악하는 방법.",
+          "questions": [
+            {
+              "id": "q_mgt_2016_9",
+              "text": "세분시장의 요건에는 측정가능성, 규모의 실체성, 접근가능성이 포함된다. (O)",
+              "src": "2016년 경영학 9번"
+            },
+            {
+              "id": "q_mgt_2017_9",
+              "text": "차별적 마케팅 전략은 기업이 세분시장의 차이를 무시하고 하나의 제품으로 전체시장을 공략하는 전략이다. (X)",
+              "src": "2017년 경영학 9번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_consumer_behavior": {
+      "id": "mod_mgt_consumer_behavior",
+      "title": "소비자 행동론",
+      "subtitle": "정보처리과정 및 태도 형성",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 정교화가능성 모델 (ELM)\n- **고관여**: 구체적인 제품 정보를 설득력 있게 제시하는 **중심경로**가 효과적임.\n- **저관여**: 광고모델, 배경음악 등 **주변단서**가 더 중요함.\n\n### 2. 웨버의 법칙 (Weber's Law)\n- 자극의 변화를 감지하기 위해 필요한 최소한의 변화폭은 원래 자극의 세기에 비례함 ($JND$).\n\n### 3. 피쉬바인 확장모델\n- 합리적 행동이론에 토대를 두며, 구매행동의도($BI$)를 통해 실제 행동을 예측함.",
+          "questions": [
+            {
+              "id": "q_mgt_2017_15",
+              "text": "정교화가능성모델에 따르면 고관여 소비자에게는 구체적인 제품정보를 제시하는 것이 효과적이다. (O)",
+              "src": "2017년 경영학 15번"
+            },
+            {
+              "id": "q_mgt_2016_12",
+              "text": "500원의 가격인상이 5,000원 제품에서는 크게, 50,000원 제품에서는 작게 여겨지는 현상은 웨버의 법칙으로 설명 가능하다. (O)",
+              "src": "2016년 경영학 12번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_marketing_comm": {
+      "id": "mod_mgt_marketing_comm",
+      "title": "마케팅 커뮤니케이션",
+      "subtitle": "광고 및 판매촉진 효과 분석",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 광고의 동태적 효과\n- **이월효과(carryover)**: 과거의 광고 투자가 현재 매출에 영향을 미침.\n- **지침효과(wearout)**: 반복 노출 시 소비자의 싫증으로 광고 효과가 감소함.\n\n### 2. 판매촉진(Sales Promotion)\n- **중간상 판촉**: 입점공제(신규 입점 대가), 구매공제(대량 구매 대가) 등이 포함됨.\n- **소비자 판촉**: 샘플, 쿠폰, 보너스 팩(다량 구매 유도).\n\n### 3. 홍보(Publicity) vs PR\n- **홍보**: 언론 매체를 통한 비유료 커뮤니케이션. 신뢰성은 높으나 통제가 어려움.\n- **PR**: 기업과 다양한 이해관계자 간의 우호적 관계 구축을 위한 총체적 활동.",
+          "questions": [
+            {
+              "id": "q_mgt_2018_13",
+              "text": "광고예산 결정방법 중 가용예산 할당법은 광고를 비용이 아닌 투자로 간주한다. (X)",
+              "src": "2018년 경영학 13번"
+            },
+            {
+              "id": "q_mgt_2021_15",
+              "text": "S자형 광고 판매반응함수는 가속점(임계점)을 넘어서면 판매가 급격히 증가한다. (O)",
+              "src": "2021년 경영학 15번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_org_group": {
+      "id": "mod_mgt_org_group",
+      "title": "집단 역학 및 의사결정",
+      "subtitle": "집단 행동 및 의사결정 오류",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 집단 사고 (Groupthink)\n- 응집력이 매우 강한 집단에서 합리적 판단을 저해하고 만장일치를 추구하는 경향.\n\n### 2. 의사결정 기법\n- **명목집단법(NGT)**: 구성원 간의 토론이나 대면 커뮤니케이션을 제한하여 독립적인 아이디어를 제안함.\n- **지명반론자법**: 의도적으로 반대 의견을 제시하는 역할을 부여해 집단 사고를 방지함.\n\n### 3. 사회적 태만 (Social Loafing)\n- 집단의 크기가 커질수록 개인의 공헌도가 명확하지 않아 1인당 노력이 감소하는 현상.",
+          "questions": [
+            {
+              "id": "q_mgt_2023_3",
+              "text": "높은 집단응집력은 집단사고의 주요 원인 중 하나이다. (O)",
+              "src": "2023년 경영학 3번"
+            },
+            {
+              "id": "q_mgt_2025_3",
+              "text": "지명반론자법은 구성원 중 일부를 지명하여 해당 사안에 대한 반대 의견을 모두 제시하도록 하는 방법이다. (O)",
+              "src": "2025년 경영학 3번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_finance_risk": {
+      "id": "mod_mgt_finance_risk",
+      "title": "위험과 수익의 기초",
+      "subtitle": "투자자 효용 및 위험 측정",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 투자자의 위험 성향\n- **위험회피형**: 기대소득이 같을 때 확실한 소득을 선호함. 효용함수는 $U(W) = \\sqrt{W}$ 등 오목한($concave$) 형태임.\n- **확실성 등가($CE$)**: 위험한 투자의 기대효용과 동일한 효용을 주는 확실한 금액.\n- **위험 프리미엄($RP$)**: 기대소득과 확실성 등가의 차이 ($RP = E(W) - CE$).\n\n### 2. 지각 오류\n- **자존적 편견**: 성공은 내적 요인(능력)으로, 실패는 외재적 요인(운)으로 귀인하는 경향.",
+          "questions": [
+            {
+              "id": "q_mgt_2023_26",
+              "text": "사고 확률 5%에서 차량 가치가 급락할 때, 위험회피적인 투자자가 지불할 용의가 있는 최대 보험료를 구하시오.",
+              "src": "2023년 경영학 26번"
+            },
+            {
+              "id": "q_mgt_2024_1",
+              "text": "자존적 편견은 자신의 성공을 내재적 요인에, 실패를 외재적 요인에 귀속시키는 경향을 말한다. (O)",
+              "src": "2024년 경영학 1번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_valuation": {
+      "id": "mod_mgt_valuation",
+      "title": "채권 및 주식 가치평가",
+      "subtitle": "배당평가 및 듀레이션 분석",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 듀레이션 (Duration)\n- 채권의 가중평균회수기간으로 이자율 변화에 따른 가격 민감도를 측정함.\n- **특징**: 만기수익률과 액면이자율이 낮을수록 듀레이션은 길어짐.\n\n### 2. 고정성장 배당평가모형\n- 주가는 배당성장률($g$)과 동일한 비율로 성장한다고 가정함.\n- **자기자본비용($k$)**: $k = (D_1 / P_0) + g$.",
+          "questions": [
+            {
+              "id": "q_mgt_2016_34",
+              "text": "재투자수익률($ROE$)이 요구수익률보다 낮을 때 내부유보율을 증가시키면 주가는 하락한다. (O)",
+              "src": "2016년 경영학 34번"
+            },
+            {
+              "id": "q_mgt_2018_35",
+              "text": "채권의 만기수익률이 상승할 때 듀레이션과 볼록성(convexity)을 이용한 가격 변화율을 계산하시오.",
+              "src": "2018년 경영학 35번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_cap_structure": {
+      "id": "mod_mgt_cap_structure",
+      "title": "자본구조이론 (MM)",
+      "subtitle": "기업가치와 자본구조",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. MM 수정이론 (1963)\n- 법인세가 존재할 경우, 부채의 절세효과로 인해 부채비율이 높을수록 기업가치가 증가함.\n- $V_L = V_U + (T_c \times B)$.\n\n### 2. 자본조달순위이론\n- 정보비대칭 하에서 경영자는 내부유보금, 부채, 신주발행 순으로 자금을 조달하려 함.",
+          "questions": [
+            {
+              "id": "q_mgt_2017_29",
+              "text": "무부채기업이 영구사채를 발행하여 자기주식을 매입할 경우, 법인세 절세효과로 인한 주가 상승률을 계산하시오.",
+              "src": "2017년 경영학 29번"
+            },
+            {
+              "id": "q_mgt_2022_27",
+              "text": "소유경영자 지분율이 100%일 때 지분의 대리인 비용이 최소화된다. (O)",
+              "src": "2022년 경영학 27번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_options": {
+      "id": "mod_mgt_options",
+      "title": "옵션 및 파생상품",
+      "subtitle": "옵션가격결정 및 투자전략",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 옵션 가격결정 (이항모형)\n- 위험중립확률을 이용하여 만기 시점의 기대가치를 현재가치로 할인함.\n- **델타(Delta)**: 기초자산 가격 변화에 따른 옵션 가격의 변화율.\n\n### 2. 투자 전략\n- **보호풋(Protective Put)**: 주식 매수 + 풋옵션 매수.\n- **방비콜(Covered Call)**: 주식 매수 + 콜옵션 매도.\n- **스트래들(Straddle)**: 행사가격과 만기가 같은 콜옵션과 풋옵션을 동시에 매수함.",
+          "questions": [
+            {
+              "id": "q_mgt_2016_37",
+              "text": "1기간 이항모형 하에서 풋옵션의 델타와 콜옵션의 델타를 각각 산출하시오.",
+              "src": "2016년 경영학 37번"
+            },
+            {
+              "id": "q_mgt_2024_40",
+              "text": "무배당 주식과 5% 무위험이자율 조건 하에서 풋-콜 등가식을 이용해 옵션의 이론가격을 구하시오.",
+              "src": "2024년 경영학 40번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_om_process": {
+      "id": "mod_mgt_om_process",
+      "title": "공정 및 설비배치",
+      "subtitle": "프로세스 유형 및 배치 전략",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 생산 프로세스 유형\n- **MTS (재고생산)**: 수요예측 기반 생산. 제품 표준화 및 규모의 경제 중시.\n- **MTO (주문생산)**: 고객 주문 후 생산 시작. 유연성이 높으나 리드타임이 김.\n\n### 2. 설비배치 유형\n- **공정별 배치**: 기능별 배치. 다품종 소량 생산에 적합.\n- **제품별 배치**: 연속 생산. 소품종 대량 생산에 적합.\n- **셀룰러 배치**: 그룹 테크놀로지($GT$)를 적용하여 가동준비시간과 재공품을 감소시킴.\n\n### 3. 슈메너($Schmenner$) 서비스 매트릭스\n- 노동집약도와 고객화 정도에 따라 서비스 공장, 서비스 숍, 대량 서비스, 전문 서비스로 구분함.",
+          "questions": [
+            {
+              "id": "q_om_2022_19",
+              "text": "제품 생산과정이 빠르고 수요를 초과한 생산량에 대한 폐기비용이 클 경우 계획생산(MTS)이 주문생산(MTO)보다 유리하다. (X)",
+              "src": "2022년 경영학 19번"
+            },
+            {
+              "id": "q_om_2022_23",
+              "text": "전문서비스(professional service)는 노동집약도와 고객화 정도가 모두 높은 서비스를 의미한다. (O)",
+              "src": "2022년 경영학 23번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_om_metrics": {
+      "id": "mod_mgt_om_metrics",
+      "title": "공정 성능 지표",
+      "subtitle": "리틀의 법칙 및 흐름 분석",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 리틀의 법칙 ($Little's Law$)\n- $L = R \\times T$ (평균 재공품 = 산출률 $\\times$ 평균 흐름시간).\n\n### 2. 병목공정 및 이용률\n- **병목공정**: 프로세스 내에서 가장 긴 작업시간을 갖는 공정.\n- **이용률**: 실제 산출량을 생산능력으로 나눈 비율.\n- **흐름시간**: 투입에서 산출까지 걸리는 총 시간. 병렬 공정의 경우 가장 긴 경로를 포함함.",
+          "questions": [
+            {
+              "id": "q_om_2022_22",
+              "text": "시간당 처리 민원인 수가 10명이고, 평균 체류 시간이 30분일 때, 평균 민원인 수는 5명이다. (O)",
+              "src": "2022년 경영학 22번"
+            },
+            {
+              "id": "q_om_2017_19",
+              "text": "병렬로 배치된 공정 A(2분)와 B(3분)를 거쳐 C(5분), D(4분)로 이어질 때, 병목공정은 C이다. (O)",
+              "src": "2017년 경영학 19번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_mgt_om_scm": {
+      "id": "mod_mgt_om_scm",
+      "title": "JIT 및 공급사슬관리",
+      "subtitle": "재고 최적화 및 전략적 SCM",
+      "backTo": "#/detail/subject_management",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 적시생산시스템 (JIT) / 린 생산\n- **풀(Pull) 방식**: 하류 공정의 수요에 맞춰 생산 유도.\n- **칸반(Kanban)**: 생산 및 운반 지시를 위한 시각적 도구.\n- **준비시간 단축**: 로트 크기를 줄이기 위한 필수 전제 조건.\n\n### 2. 공급사슬관리 (SCM)\n- **채찍효과**: 정보 왜곡으로 인해 상류로 갈수록 재고 변동성이 증폭됨.\n- **지연차별화**: 제품의 최종 분화를 마지막 단계로 미뤄 재고 부담을 완화함.\n- **공급자 재고관리(VMI)**: 공급자가 구매자의 재고 수준을 관리하여 효율성을 높임.",
+          "questions": [
+            {
+              "id": "q_om_2016_22",
+              "text": "고객과의 거리가 멀어질수록 주문의 변동 폭이 증가하는 채찍효과가 발생할 수 있다. (O)",
+              "src": "2016년 경영학 22번"
+            },
+            {
+              "id": "q_om_2018_21",
+              "text": "토요타 생산시스템(TPS)에서는 재작업, 대기, 재고 등을 낭비의 유형으로 간주한다. (O)",
+              "src": "2018년 경영학 21번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_eco_consumer": {
+      "id": "mod_eco_consumer",
+      "title": "소비자 이론 및 효용",
+      "subtitle": "효용극대화와 슬러츠키 방정식",
+      "backTo": "#/detail/subject_economics",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 무차별곡선의 형태\n- **완전보완재**: L자형 무차별곡선을 가지며, $ax = by$인 굴절점에서 최적소비가 발생함.\n- **완전대체재**: 선형 효용함수를 가지며, 구석해(corner solution)가 발생할 가능성이 높음.\n\n### 2. 가격 변화의 효과\n- **대체효과**: 상대가격 변화에 따른 소비량 변화로 항상 음(-)의 방향임.\n- **소득효과**: 실질소득 변화에 따른 효과로, **기픈재**의 경우 소득효과가 대체효과를 압도하여 가격 하락 시 소비가 감소함.",
+          "questions": [
+            {
+              "id": "q_eco_2016_4",
+              "text": "효용함수 $U = \\min\\{x, y\\}$에서 $y$재 가격이 고정될 때, $x$재의 수요곡선은 우하향한다. (O)",
+              "src": "2016년 경제원론 4번"
+            },
+            {
+              "id": "q_eco_2024_15",
+              "text": "정액 회원제 가입 시 배달비가 면제되는 경우, 소비자가 지불할 용의가 있는 최대 회원비를 계산하시오.",
+              "src": "2024년 경제원론 15번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_eco_market_structure": {
+      "id": "mod_eco_market_structure",
+      "title": "시장 형태론",
+      "subtitle": "독점 및 과점 시장 분석",
+      "backTo": "#/detail/subject_economics",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 독점 시장\n- **이윤 극대화**: $MR = MC$ 지점에서 생산량을 결정하며, 가격은 수요곡선상에서 결정됨.\n- **가격차별**: 3급 가격차별 시 가격탄력성이 낮은 시장에 더 높은 가격을 부과함.\n\n### 2. 과점 및 게임이론\n- **꾸르노 모형**: 상대방의 생산량을 주어진 것으로 보고 자신의 생산량을 결정함.\n- **내쉬 균형**: 상대방의 전략이 주어졌을 때 자신의 최선 전략을 선택한 상태로, 어느 누구도 전략을 바꿀 유인이 없음.",
+          "questions": [
+            {
+              "id": "q_eco_2017_8",
+              "text": "꾸르노 균형에서 각 기업의 생산량이 20일 때, 각 기업의 이윤을 계산하시오.",
+              "src": "2017년 경제원론 8번"
+            },
+            {
+              "id": "q_eco_2024_5",
+              "text": "순차적 게임(게임 2)에서 부분게임완전균형에 따른 경기자 1의 선택을 판단하시오.",
+              "src": "2024년 경제원론 5번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_eco_solow_growth": {
+      "id": "mod_eco_solow_growth",
+      "title": "솔로우 성장 모델",
+      "subtitle": "장기 경제성장 경로 분석",
+      "backTo": "#/detail/subject_economics",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 균제상태 (Steady State)\n- 1인당 자본량($k$)의 변화가 없는 상태: $sf(k) = (n + g + \\delta)k$.\n- 기술진보가 없는 경우($g=0$), 균제상태에서 총생산 증가율은 인구증가율($n$)과 같음.\n\n### 2. 자본축적의 황금률 (Golden Rule)\n- 1인당 소비를 극대화하는 자본 수준으로, $MPK = n + g + \\delta$ 조건에서 달성됨.\n- 저축률이 황금률 수준보다 낮을 때 저축률을 높이면, 단기적으로 소비는 감소하나 장기적으로는 증가함.",
+          "questions": [
+            {
+              "id": "q_eco_2016_30",
+              "text": "솔로우 모형에서 인구증가율($n$)의 상승은 균제상태의 1인당 자본량과 소득을 감소시킨다. (O)",
+              "src": "2016년 경제원론 30번"
+            },
+            {
+              "id": "q_eco_2024_10",
+              "text": "인구증가와 기술진보가 없는 모형에서 정부지출 비중($\\gamma$)이 증가할 때 균제상태 1인당 자본량의 변화는?",
+              "src": "2024년 경제원론 40번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_eco_macro_policy": {
+      "id": "mod_eco_macro_policy",
+      "title": "IS-LM 및 재정·통화정책",
+      "subtitle": "총수요 관리 정책의 유효성",
+      "backTo": "#/detail/subject_economics",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. IS-LM 모형과 정책 효과\n- **구축효과(Crowding-out)**: 정부지출 확대로 이자율이 상승하여 민간 투자가 감소하는 현상.\n  - 화폐수요의 소득탄력성이 클수록, 이자율탄력성이 작을수록, 투자의 이자율탄력성이 클수록 구축효과가 커짐.\n- **유동성 함정**: 명목 이자율이 하한(0)에 도달하여 화폐수요가 무한대인 상태. 이 경우 통화정책은 무력하며 재정정책의 효과가 극대화됨.\n\n### 2. 소비이론\n- **항상소득가설**: 일시적 세율 인상보다 영구적 인상이 소비 감소에 더 큰 영향을 미침.\n- **생애주기가설**: 장기적으로 평균소비성향이 일정함을 설명하며, 소비는 부(Wealth)에도 의존함.",
+          "questions": [
+            {
+              "id": "q_eco_2016_29",
+              "text": "IS-LM 모형에서 구축효과가 커지는 조건으로 옳은 것은? (화폐수요의 소득탄력성: 클수록, 화폐수요의 이자율탄력성: 작을수록, 투자의 이자율탄력성: 클수록)",
+              "src": "2016년 경제원론 29번"
+            },
+            {
+              "id": "q_eco_2018_28",
+              "text": "유동성 함정에서 화폐수요는 이자율에 대해 완전탄력적이다. (O)",
+              "src": "2018년 경제원론 28번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_eco_inflation_unemp": {
+      "id": "mod_eco_inflation_unemp",
+      "title": "인플레이션과 실업",
+      "subtitle": "물가와 고용의 동태적 관계",
+      "backTo": "#/detail/subject_economics",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 필립스곡선 (Phillips Curve)\n- **단기**: 물가와 실업 사이에 상충관계(Trade-off)가 존재함.\n- **장기**: 기대가 조정됨에 따라 필립스곡선은 자연실업률 수준에서 수직이 됨.\n- **희생률(Sacrifice Ratio)**: 인플레이션을 1% 포인트 낮추기 위해 감수해야 하는 연간 실질 GDP의 감소율.\n\n### 2. 화폐와 물가\n- **통화승수**: $m = (k+1)/(k+z+e)$ 형태로 결정되며, 현금통화비율이나 지급준비율이 낮을수록 커짐.\n- **피셔 방정식**: 명목이자율 = 실질이자율 + 기대인플레이션율.",
+          "questions": [
+            {
+              "id": "q_eco_2016_25",
+              "text": "정부가 재정지출을 축소할 때 나타날 수 있는 단기 실업률과 물가상승률의 변화는 필립스곡선을 따라 이동한다. (O)",
+              "src": "2016년 경제원론 25번"
+            },
+            {
+              "id": "q_eco_2018_35",
+              "text": "본원통화량이 3억 달러 증가할 때, 지급준비율과 현금보유비율을 이용해 통화량 증가분을 계산하시오.",
+              "src": "2018년 경제원론 35번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_eco_intl_macro": {
+      "id": "mod_eco_intl_macro",
+      "title": "국제거시 및 개방경제",
+      "subtitle": "환율제도와 거시경제 균형",
+      "backTo": "#/detail/subject_economics",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 먼델-플레밍 모형 (자본이동 완전 가정)\n- **변동환율제**: 통화정책은 효과적(환율 상승을 통한 순수출 증가), 재정정책은 무력함(이자율 상승에 따른 환율 하락으로 순수출 감소가 재정확장 효과를 상쇄).\n- **고정환율제**: 재정정책은 효과적(통화량 증가 수반), 통화정책은 무력함(환율 유지를 위해 통화량이 원래 수준으로 복귀).\n\n### 2. 환율 결정 이론\n- **구매력평가설(PPP)**: 양국 물가 수준의 비율에 의해 환율이 결정됨 ($E = P/P^*$).\n- **이자율평형조건(IRP)**: 국가 간 자본 이동이 자유로울 때 양국의 기대수익률은 동일해야 함.",
+          "questions": [
+            {
+              "id": "q_eco_2016_36",
+              "text": "소규모 개방경제에서 고정환율제도 하의 확장적 재정정책은 총소득을 증가시킨다. (O)",
+              "src": "2016년 경제원론 36번"
+            },
+            {
+              "id": "q_eco_2017_39",
+              "text": "이자율 평형조건이 성립할 때, 팽창적 통화정책으로 지속적 인플레이션이 발생하면 환율-이자율 그래프는 우측으로 이동한다. (O)",
+              "src": "2017년 경제원론 39번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_law_general": {
+      "id": "mod_law_general",
+      "title": "상법 총칙 및 상행위",
+      "subtitle": "기업 조직 및 거래의 기초",
+      "backTo": "#/detail/subject_law",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 상업사용인 (지배인)\n- **지배인 권한**: 영업주에 갈음하여 그 영업에 관한 **재판상 또는 재판외의 모든 행위**를 할 수 있음.\n- **공동지배인**: 수인의 지배인에게 공동대리권을 행사하게 할 수 있으며, 이는 **등기사항**임.\n\n### 2. 명의대여자 책임\n- 타인에게 자기의 성명 또는 상호를 사용하여 영업할 것을 허락한 자는 그 타인과 **연대하여 변제할 책임**이 있음.\n\n### 3. 영업양도\n- **상호 속용 시**: 양수인이 양도인의 상호를 계속 사용하는 경우, 양도인의 영업으로 인한 제3자의 채권에 대해 **변제 책임**이 있음.\n- **책임 배제**: 양수인이 지체 없이 채무에 대한 **책임 없음을 등기**하거나 통지한 경우 책임을 면함.",
+          "questions": [
+            {
+              "id": "q_law_2016_1",
+              "text": "지배인은 영업주의 허락 없이 영업주를 위하여 다른 영업을 양수하고 그 영업의 지배인을 선임할 수 있다. (X)",
+              "src": "2016년 상법 1번"
+            },
+            {
+              "id": "q_law_2024_3",
+              "text": "양수인이 양도인의 상호를 계속 사용하는 경우, 영업양도 후 2년이 경과하면 양도인의 제3자에 대한 채무는 소멸한다. (O)",
+              "src": "2024년 상법 3번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_law_company": {
+      "id": "mod_law_company",
+      "title": "회사법 (주식회사)",
+      "subtitle": "기업 거버넌스 및 자본관리",
+      "backTo": "#/detail/subject_law",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 주주총회 결의\n- **보통결의**: 출석 주주 의결권 과반수 & 발행주식총수 1/4 이상.\n- **특별결의**: 출석 주주 의결권 2/3 이상 & 발행주식총수 1/3 이상 (정관 변경, 이사 해임 등).\n\n### 2. 이사의 의무와 책임\n- **자기거래**: 이사가 회사와 거래 시 이사회의 승인을 얻어야 하며, 위반 시 **손해배상책임**을 지고 주주 전원 동의로만 면제 가능함.\n\n### 3. 자본금 및 주식\n- **주식매수선택권**: 발행주식총수 10/100 이상을 가진 주주에게는 부여할 수 없음.\n- **자본금 감소**: 원칙적으로 특별결의와 채권자 보호절차가 필요함.",
+          "questions": [
+            {
+              "id": "q_law_2023_17",
+              "text": "액면주식의 분할은 주주총회 특별결의 사항에 해당한다. (O)",
+              "src": "2023년 상법 17번"
+            },
+            {
+              "id": "q_law_2022_27",
+              "text": "감사는 이사가 주주총회에 제출할 서류를 조사하여 부당한 사항이 있는지 의견을 진술하여야 한다. (O)",
+              "src": "2022년 상법 27번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_law_special": {
+      "id": "mod_law_special",
+      "title": "외부감사법 및 공인회계사법",
+      "subtitle": "회계 투명성 및 전문가 윤리",
+      "backTo": "#/detail/subject_law",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 주식회사 등의 외부감사에 관한 법률 (외감법)\n- **작성 책임**: 재무제표의 작성 책임은 **대표이사 및 회계담당 임원**에게 있음.\n- **감수인 선임**: 감사인 선임 기간 내 미선임 시 **증권선물위원회**가 감사인을 지정할 수 있음.\n\n### 2. 공인회계사법\n- **직무 제한**: 공인회계사는 특정 회사 재무제표를 감사하는 기간 중 해당 회사의 **내부감사 업무를 대행할 수 없음**.\n- **회계법인 사원**: 회계법인은 이사 중 1명을 지정하여 감사업무를 총괄하게 해야 함.",
+          "questions": [
+            {
+              "id": "q_law_2025_35",
+              "text": "지배회사는 연결재무제표 작성을 위해 필요한 범위 내에서 종속회사의 회계 장부를 열람할 수 있다. (O)",
+              "src": "2025년 기업법 35번"
+            },
+            {
+              "id": "q_law_2025_40",
+              "text": "공인회계사는 감사 계약 기간 중 해당 회사의 내부감사 업무를 대행할 수 없다. (O)",
+              "src": "2025년 기업법 40번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_tax_basic": {
+      "id": "mod_tax_basic",
+      "title": "국세기본법 핵심",
+      "subtitle": "납세의무의 확장 및 우선순위",
+      "backTo": "#/detail/subject_tax",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 국세 우선의 원칙\n- **원칙**: 국세는 다른 공과금이나 기타 채권에 우선하여 징수함.\n- **예외**: 강제집행 비용, 사용자의 재산 매각 시 최종 3월분 임금채권 및 재해상속 공제 등은 국세보다 우선함.\n\n### 2. 제2차 납세의무\n- **사업양수인**: 사업 양도일 이전에 확정된 국세를 양도인의 재산으로 충당해도 부족할 경우, 양수한 재산 가액 한도 내에서 책임짐.\n- **과점주주**: 법인의 재산으로 국세를 충당할 수 없는 경우 지분 비율에 따라 무한책임을 지는 무한책임사원과 달리, 주식 소유 비율에 비례하여 책임짐.",
+          "questions": [
+            {
+              "id": "q_tax_2016_2",
+              "text": "공과금의 체납처분을 할 때 그 체납처분금액 중에서 국세를 징수하는 경우, 공과금의 체납처분비는 국세에 우선한다. (O)",
+              "src": "2016년 세법 2번"
+            },
+            {
+              "id": "q_tax_2024_2",
+              "text": "법정기일 전에 전세권이 설정된 재산이라 하더라도 해당 재산에 대해 부과된 종합부동산세는 전세권보다 우선한다. (O)",
+              "src": "2024년 세법 2번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_tax_corporate": {
+      "id": "mod_tax_corporate",
+      "title": "법인세법 핵심",
+      "subtitle": "익금·손금의 세무조정과 시부인",
+      "backTo": "#/detail/subject_tax",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 익금항목과 의제배당\n- **자기주식 소각이익**: 소각 당시 시가가 취득가액을 초과하는 금액을 자본전입하여 수령한 무상주는 의제배당에 해당함.\n- **수입배당금 익금불산입**: 법인이 다른 내국법인으로부터 받은 배당금 중 일정 비율을 익금에 산입하지 않음.\n\n### 2. 손금항목 및 시부인\n- **감가상각**: 법령상 정해진 상각범위액을 초과하여 계상한 금액은 손금불산입(유보) 처리함.\n- **기부금**: 특례기부금(구 법정)과 일반기부금(구 지정)으로 구분하며, 한도 초과액은 10년간 이월하여 손금산입 가능함.",
+          "questions": [
+            {
+              "id": "q_tax_2016_7",
+              "text": "자기주식 소각 당시의 시가가 취득가액을 초과한 경우, 소각이익을 4년 뒤 자본전입하여 주주가 받은 주식가액은 의제배당이다. (O)",
+              "src": "2016년 세법 7번"
+            },
+            {
+              "id": "q_tax_2020_12",
+              "text": "감가상각방법을 신고하지 않은 법인의 기계장치에 대해서는 정률법을 적용하여 상각범위액을 계산한다. (O)",
+              "src": "2020년 세법 12번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_tax_vat": {
+      "id": "mod_tax_vat",
+      "title": "부가가치세법 핵심",
+      "subtitle": "과세표준 및 세금계산서 실무",
+      "backTo": "#/detail/subject_tax",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "이론핵심",
+          "theoryNote": "### 1. 과세대상과 공급시기\n- **간주공급**: 자가공급, 개인적 공급, 사업상 증여, 폐업 시 잔존재화는 시가를 과세표준으로 하여 과세함.\n- **공급시기**: 장기할부판매는 대가의 각 부분을 받기로 한 때, 폐업 전 공급한 재화의 공급시기가 폐업 후 도래하면 폐업일을 공급시기로 봄.\n\n### 2. 영세율과 면세\n- **영세율**: 수출하는 재화, 국외 제공 용역 등에 적용하며 매입세액을 전액 환급받는 '완전면세' 형태임.\n- **면세**: 기초생필품, 의료보건, 교육 등에 적용하며 매입세액을 공제받지 못하는 '부분면세' 형태임.",
+          "questions": [
+            {
+              "id": "q_tax_2017_29",
+              "text": "사업자가 매입세액공제를 받은 재화를 개인적인 목적으로 무상 사용한 경우 재화의 공급으로 본다. (O)",
+              "src": "2017년 세법 29번"
+            },
+            {
+              "id": "q_tax_2024_32",
+              "text": "금융·보험 용역 중 기업합병 중개용역은 부가가치세 면세 대상이 아니다(과세 대상이다). (O)",
+              "src": "2024년 세법 32번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_acc_revenue": {
+      "id": "mod_acc_revenue",
+      "title": "수익인식 5단계 모델",
+      "subtitle": "K-IFRS 1115호 집중 분석",
+      "backTo": "#/detail/subject_accounting",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 수익인식 5단계\n1. 고객과의 계약 식별\n2. 수행의무 식별\n3. 거래가격 산정 (변동대가 포함)\n4. 거래가격을 수행의무에 배분 (상대적 개별판매가격 기준)\n5. 수행의무 이행 시 수익 인식\n\n### 2. 주요 쟁점\n- **미인도청구약정**: 고객이 통제권을 가졌으나 물리적 점유는 기업이 하는 경우.\n- **계약변경**: 구별되는 재화/용역이 추가되고 가격이 적절하면 별도 계약으로 처리.",
+          "questions": [
+            {
+              "id": "q_acc_2018_2",
+              "text": "거래가격은 고객이 지급하는 고정된 금액만을 의미하며 변동대가는 포함하지 않는다. (X)",
+              "src": "2018년 회계학 2번"
+            },
+            {
+              "id": "q_acc_2024_22",
+              "text": "고객에게 지급할 대가가 고객에게서 받은 구별되는 재화의 공정가치를 초과하면 그 초과액을 거래가격에서 차감한다. (O)",
+              "src": "2024년 회계학 22번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_acc_composite": {
+      "id": "mod_acc_composite",
+      "title": "복합금융상품 (CB/BW)",
+      "subtitle": "부채와 자본의 결합상품 평가",
+      "backTo": "#/detail/subject_accounting",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 전환사채 (CB)\n- **부채요소**: 미래 현금흐름(원금+이자)을 일반사채 시장이자율로 할인한 현재가치.\n- **자본요소**: 발행가액에서 부채요소를 차감한 잔액(전환권대가).\n\n### 2. 신주인수권부사채 (BW)\n- **상환할증금**: 권리 미행사 시 만기에 지급하는 추가 금액. 부채요소 계산 시 포함.",
+          "questions": [
+            {
+              "id": "q_acc_2017_12",
+              "text": "전환권 행사 시 전환권대가는 주식발행초과금으로 대체할 수 있다. (O)",
+              "src": "2017년 회계학 12번"
+            },
+            {
+              "id": "q_acc_2020_15",
+              "text": "액면금액 ￦1,000,000, 표시이자 10%인 CB의 발행 시 부채요소와 자본요소를 각각 계산하시오.",
+              "src": "2020년 회계학 15번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_acc_consolidation": {
+      "id": "mod_acc_consolidation",
+      "title": "사업결합 및 연결회계",
+      "subtitle": "고급회계 핵심 - 지배력과 영업권",
+      "backTo": "#/detail/subject_accounting",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 영업권(Goodwill) 산출\n- $영업권 = (이전대가 + 비지배지분 + 이전 보유지분 공정가치) - 식별가능한 순자산의 공정가치$.\n- 취득관련원가(중개수수료 등)는 발생 기간의 비용으로 처리함.\n\n### 2. 내부거래 제거\n- 지배기업과 종속기업 간 재고자산 매매 시 발생하는 **미실현이익**은 연결 결산 시 전액 제거함.",
+          "questions": [
+            {
+              "id": "q_acc_2016_1",
+              "text": "단계적으로 이루어지는 사업결합에서 이전 보유 지분을 취득일 공정가치로 재측정할 때 발생하는 차손익은 당기손익으로 인식한다. (O)",
+              "src": "2016년 회계학 1번"
+            },
+            {
+              "id": "q_acc_2022_26",
+              "text": "취득일 현재 식별가능한 자산·부채의 공정가치가 명백하지 않은 경우 잠정 금액으로 인식하고 1년 이내에 조정할 수 있다. (O)",
+              "src": "2022년 회계학 26번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_acc_govt": {
+      "id": "mod_acc_govt",
+      "title": "정부회계",
+      "subtitle": "국가 및 지방자치단체 회계기준",
+      "backTo": "#/detail/subject_accounting",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "핵심이론",
+          "theoryNote": "### 1. 국가회계기준\n- **자산 분류**: 유동자산, 투자자산, 일반유형자산, 사회기반시설, 무형자산, 기타비유동자산.\n- **수익 인식**: 국세수익은 고지 시점 또는 신고 납부 시점에 인식.\n\n### 2. 지자체 회계기준\n- **순자산 분류**: 고정순자산, 특정순자산, 일반순자산.\n- **특징**: '주민편의시설' 항목이 존재하며 지출원인행위 시점이 중요함.",
+          "questions": [
+            {
+              "id": "q_acc_2019_36",
+              "text": "국가회계에서 유산자산은 자산으로 인식하지 않고 그 종류와 현황을 주석으로 공시한다. (O)",
+              "src": "2019년 회계학 36번"
+            },
+            {
+              "id": "q_acc_2023_40",
+              "text": "지방자치단체 회계에서 기부채납으로 생긴 순자산의 증가는 수익에 포함하지 않는다. (O)",
+              "src": "2023년 회계학 40번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_acc_micro_fin": {
+      "id": "mod_acc_micro_fin",
+      "title": "재무회계 핵심 기출",
+      "subtitle": "수익인식 및 자산평가",
+      "backTo": "#/detail/subject_accounting_deep",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "기출지문",
+          "theoryNote": "### 1. 수익인식 (K-IFRS 1115호)\n- **거래가격**: 고객이 약속한 대가에서 제3자를 대신해 회수한 금액(부가세 등)은 제외한다.\n- **미인도청구약정**: 고객이 제품에 대한 법적 권리를 갖고 제품이 식별 가능하며 즉시 인도가 준비된 경우 수익을 인식한다.\n\n### 2. 자산평가\n- **재고자산**: 순실현가능가치가 취득원가보다 하락하면 저가법을 적용하며, 저가법은 항목별로 적용하는 것이 원칙이다.\n- **유형자산**: 재평가모형 적용 시 기존 감가상각누계액을 제거하거나 비례적으로 수정할 수 있다.",
+          "questions": [
+            {
+              "id": "q_acc_2018_2",
+              "text": "거래가격은 고객이 지급하는 고정된 금액만을 의미하며 변동대가는 포함하지 않는다. (X)",
+              "src": "2018년 회계학 2번",
+              "done": false
+            },
+            {
+              "id": "q_acc_2022_9",
+              "text": "손상차손 발생 후 잔존내용연수나 잔존가치가 변경되면 이를 반영하여 감가상각비를 재계산해야 한다. (O)",
+              "src": "2022년 회계학 9번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_acc_advanced_deep": {
+      "id": "mod_acc_advanced_deep",
+      "title": "고급회계 심화",
+      "subtitle": "사업결합 및 지분법",
+      "backTo": "#/detail/subject_accounting_deep",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "기출지문",
+          "theoryNote": "### 1. 사업결합\n- **취득관련원가**: 중개수수료, 법률비용 등은 발생 기간에 비용으로 처리한다.\n- **잠정 금액**: 취득일 현재 가치평가가 미완료된 경우 잠정 금액으로 인식하며, 취득일로부터 1년 이내에 수정 가능하다.\n\n### 2. 지분법 회계\n- **미실현손익 제거**: 투자자와 관계기업 간의 하향/상향 거래에서 발생한 미실현손익 중 투자자의 지분 해당액은 제거한다.",
+          "questions": [
+            {
+              "id": "q_acc_2016_1",
+              "text": "단계적 사업결합 시 이전에 보유하던 지분을 취득일 공정가치로 재측정하여 발생하는 차손익은 당기손익으로 인식한다. (O)",
+              "src": "2016년 회계학 1번"
+            },
+            {
+              "id": "q_acc_2022_28",
+              "text": "지분법 적용 시 관계기업의 현금배당은 지분법투자주식의 장부금액에서 차감한다. (O)",
+              "src": "2022년 회계학 28번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_acc_cost_deep": {
+      "id": "mod_acc_cost_deep",
+      "title": "원가관리회계 심화",
+      "subtitle": "차이분석 및 품질원가",
+      "backTo": "#/detail/subject_accounting_deep",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "기출지문",
+          "theoryNote": "### 1. 품질원가 (Quality Costing)\n- **통제원가**: 예방원가(교육, 설계)와 평가원가(검사)를 포함한다.\n- **실패원가**: 내부실패원가(폐기, 재작업)와 외부실패원가(AS, 리콜)를 포함한다.\n\n### 2. 표준원가 차이분석\n- **가격차이**: 실제구입량 x (실제가격 - 표준가격)으로 계산한다.\n- **능률차이**: 표준가격 x (실제사용량 - 표준사용량)으로 계산한다.",
+          "questions": [
+            {
+              "id": "q_acc_2018_41",
+              "text": "변동원가계산과 전부원가계산의 영업이익 차이는 기말재고에 포함된 고정제조간접원가와 기초재고에 포함된 고정제조간접원가의 차이다. (O)",
+              "src": "2018년 회계학 41번"
+            },
+            {
+              "id": "q_acc_2022_43",
+              "text": "제조간접원가 배부차이를 매출원가에서 조정할 경우 실제 발생액이 예정 배부액보다 크면 매출원가에 가산한다. (O)",
+              "src": "2022년 회계학 43번"
+            }
+          ]
+        }
+      ]
+    },
+    "mod_acc_govt_deep": {
+      "id": "mod_acc_govt_deep",
+      "title": "정부회계 심화",
+      "subtitle": "국가 및 지자체 회계기준 비교",
+      "backTo": "#/detail/subject_accounting_deep",
+      "tabs": [
+        {
+          "id": "t1",
+          "label": "기출지문",
+          "theoryNote": "### 1. 자산/부채 인식\n- **유산자산(국가)**: 역사적 가치가 있는 자산으로 자산으로 인식하지 않고 주석으로 공시한다.\n- **관리책임자산(지자체)**: 도로, 공원 등은 자산으로 인식하지만 특정 항목은 필수보충정보로 공시한다.\n\n### 2. 수익인식\n- **신고납부 국세**: 납세의무자가 자진신고하는 때에 수익으로 인식한다.",
+          "questions": [
+            {
+              "id": "q_acc_2019_36",
+              "text": "국가회계에서 사회기반시설 중 감가상각을 하지 않는 경우 유지비용을 감가상각비로 대체할 수 있다. (O)",
+              "src": "2019년 회계학 36번"
+            },
+            {
+              "id": "q_acc_2023_40",
+              "text": "지방자치단체 회계에서 기부채납으로 받은 자산의 가액은 수익에 포함하지 않고 순자산의 증가로 처리한다. (O)",
+              "src": "2023년 회계학 40번"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
