@@ -301,7 +301,7 @@ function renderStickyHeader(label, pct, time) {
   `;
 }
 
-// [FIX 2: Scroll Logic] renderRouter wrapper updated
+// [FIX 3: Advanced Scroll Logic]
 function renderRouter(keepScroll = false) { 
   router(keepScroll); 
 }
@@ -466,10 +466,15 @@ function getRoute() {
   return { page: parts[0] || 'home', id: parts[1], focus: params.get('focus') };
 }
 
-// [FIX 2 Implementation] : preserveScroll param added
+// [CRITICAL FIX: Scroll Jumping Prevention]
 function router(keepScroll = false) {
   const route = getRoute();
-  const savedScroll = window.scrollY; // Save Scroll
+  const savedScroll = window.scrollY; // 1. Save Position
+
+  // [Safety Net] Force Body Height to prevent collapse
+  if (keepScroll) {
+    document.body.style.minHeight = document.body.scrollHeight + 'px';
+  }
 
   try {
     if (route.page === 'detail' && route.id && !DATA.details[route.id]) {
@@ -483,6 +488,7 @@ function router(keepScroll = false) {
     else if (route.page === 'detail') renderDetail(route.id);
     else if (route.page === 'module') renderModule(route.id);
     
+    // 2. Restore logic with delay to ensure DOM paint
     setTimeout(() => {
         applyMath();
         if (route.focus) {
@@ -492,14 +498,18 @@ function router(keepScroll = false) {
                 el.classList.add('highlighted');
                 setTimeout(() => el.classList.remove('highlighted'), 1500);
             }
+            document.body.style.minHeight = ''; // Release height
         } else if (keepScroll) {
-            window.scrollTo(0, savedScroll); // Restore Scroll
+            window.scrollTo(0, savedScroll); // 3. Restore Forcefully
+            setTimeout(() => { document.body.style.minHeight = ''; }, 50); // Release height after stable
         } else {
             window.scrollTo(0, 0);
+            document.body.style.minHeight = '';
         }
     }, 50);
   } catch(e) {
       showErrorScreen("페이지 로드 실패: " + e.message);
+      document.body.style.minHeight = '';
   }
 }
 
