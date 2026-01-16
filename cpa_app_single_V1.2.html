@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Universal Master Planner V1.2 by Inmonite</title>
+
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+  <style>
+    :root {
+      /* Light Mode Variables */
+      --primary: #2563eb; --accent: #f59e0b; 
+      --bg: #f8fafc; --card-bg: #ffffff;
+      --text: #1e293b; --text-sub: #64748b;
+      --line: #e2e8f0; --input-bg: #ffffff;
+      --success: #16a34a; --danger: #ef4444;
+      --header-bg: rgba(255,255,255,0.95);
+      --shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+      --radius: 16px;
+    }
+
+    /* Dark Mode Variables */
+    [data-theme="dark"] {
+      --primary: #3b82f6; --accent: #fbbf24;
+      --bg: #0f172a; --card-bg: #1e293b;
+      --text: #f1f5f9; --text-sub: #94a3b8;
+      --line: #334155; --input-bg: #020617;
+      --success: #22c55e; --danger: #f87171;
+      --header-bg: rgba(30, 41, 59, 0.95);
+      --shadow: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -1px rgba(0,0,0,0.2);
+    }
+
+    * { box-sizing: border-box; }
+    body { font-family: 'Pretendard', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; line-height: 1.6; transition: background 0.3s, color 0.3s; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px 20px 100px 20px; }
+    
+    /* Error Screen */
+    #error-screen {
+      position: fixed; inset: 0; background: var(--bg); z-index: 9999;
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      padding: 20px; text-align: center; color: var(--danger);
+    }
+    
+    /* 유틸리티 */
+    .hidden { display: none !important; }
+    .flex-center { display: flex; align-items: center; justify-content: center; }
+    .flex-between { display: flex; align-items: center; justify-content: space-between; }
+    
+    .btn { cursor: pointer; border: none; border-radius: 6px; font-weight: 700; transition: 0.2s; padding: 6px 12px; font-size: 0.85rem;}
+    .btn:hover { opacity: 0.8; transform: translateY(-1px); }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-outline { background: var(--card-bg); border: 1px solid var(--line); color: var(--text); }
+    .btn-icon { background: transparent; padding: 4px; font-size: 1.1rem; color: var(--text-sub); }
+    .btn-icon:hover { color: var(--primary); background: rgba(128,128,128,0.1); border-radius: 4px; }
+    .btn-danger:hover { color: var(--danger); background: rgba(239, 68, 68, 0.1); }
+
+    /* 좌측 상단 도구 (다크모드 버튼 등) */
+    .left-tools {
+      position: absolute; top: 0; left: 0;
+      display: flex; gap: 8px; z-index: 10;
+    }
+
+    /* D-Day */
+    .dday-wrapper {
+      position: absolute; top: 0; right: 0;
+      display: flex; flex-direction: column; gap: 6px; align-items: flex-end;
+      z-index: 10;
+    }
+    .dday-badge {
+      background: #1e293b; color: white; padding: 6px 12px; border-radius: 20px;
+      font-size: 0.85rem; font-weight: 700; box-shadow: var(--shadow);
+      cursor: pointer; transition: 0.2s; display: flex; gap: 8px; align-items: center;
+    }
+    .dday-badge:hover { transform: translateY(-2px); background: var(--primary); }
+    .dday-count { color: var(--accent); font-weight: 800; }
+
+    /* 헤더 & 통계 */
+    .sticky-header {
+      position: sticky; top: 10px; z-index: 100;
+      background: var(--header-bg); backdrop-filter: blur(8px);
+      border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 12px 20px; margin-bottom: 24px; box-shadow: var(--shadow);
+      display: flex; gap: 15px; flex-wrap: wrap; align-items: center;
+    }
+    .prog-wrap { flex: 1; min-width: 200px; }
+    .prog-bar { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; margin-bottom: 4px;}
+    .prog-fill { height: 100%; background: var(--success); width: 0%; transition: width 0.3s ease; }
+    .prog-text { font-size: 0.85rem; color: var(--text-sub); font-weight: 600; display: flex; justify-content: space-between; }
+    
+    /* 카드 스타일 */
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
+    .card {
+      background: var(--card-bg); border-radius: var(--radius); border: 1px solid var(--line);
+      padding: 20px; box-shadow: var(--shadow); position: relative;
+      display: flex; flex-direction: column; transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+    .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; min-height: 32px; }
+    .card-actions { display: flex; gap: 2px; opacity: 0; transition: opacity 0.2s; }
+    .card:hover .card-actions { opacity: 1; }
+    .badge { background: rgba(37, 99, 235, 0.1); color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; }
+    h3 { margin: 0 0 5px 0; font-size: 1.25rem; color: var(--text); display:flex; align-items:center; gap:8px; }
+    .editable:hover { text-decoration: underline; text-decoration-style: dashed; text-underline-offset: 4px; cursor: pointer; color: var(--primary); }
+
+    /* 서브 체크리스트 */
+    .sub-list {
+      margin-top: 15px; padding-top: 10px; border-top: 1px dashed var(--line);
+      font-size: 0.9rem; color: var(--text-sub);
+    }
+    .sub-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .sub-item input { accent-color: var(--success); cursor: pointer; transform: scale(1.1); }
+    .sub-item span { cursor: pointer; transition:0.2s; }
+    .sub-item span:hover { color: var(--primary); text-decoration: underline; }
+    
+    /* 타이머 */
+    .timer-box {
+      margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .timer-display { font-family: 'Courier New', monospace; font-weight: 800; font-size: 1.1rem; color: var(--text); min-width:90px; text-align:center;}
+    .chk-wrap { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 0.9rem; color: var(--text-sub); cursor: pointer; }
+    .chk-wrap input { width: 18px; height: 18px; accent-color: var(--success); cursor: pointer; }
+
+    /* 고스트 카드 */
+    .ghost-card {
+      border: 2px dashed var(--line); background: transparent; box-shadow: none;
+      min-height: 150px; cursor: pointer; color: var(--text-sub); transition: 0.2s;
+    }
+    .ghost-card:hover { border-color: var(--primary); color: var(--primary); background: rgba(37, 99, 235, 0.05); }
+    .ghost-plus { font-size: 2.5rem; margin-bottom: 10px; }
+
+    /* 노트 영역 */
+    .note-area-wrap { margin-top: 15px; border-top: 1px dashed var(--line); padding-top: 10px; }
+    .note-label-small { font-size: 0.8rem; font-weight: 700; color: var(--text-sub); margin-bottom: 4px; display: block; }
+    .note-view {
+      min-height: 60px; padding: 10px; border-radius: 8px; cursor: pointer;
+      font-size: 0.95rem; color: var(--text); border: 1px solid transparent; background: rgba(128,128,128,0.05);
+    }
+    .note-view:hover { background: rgba(128,128,128,0.1); outline: 1px dashed var(--line); }
+    .note-view[data-empty="true"]::before { content: "클릭하여 노트/오답 메모 작성 (Markdown)"; color: var(--text-sub); font-size: 0.9rem; }
+    .note-edit { display: none; width: 100%; margin-top: 5px; }
+    .note-textarea {
+      width: 100%; min-height: 100px; padding: 12px; border: 1px solid var(--line); border-radius: 8px;
+      font-family: 'Consolas', monospace; resize: vertical; background: var(--input-bg); color: var(--text); line-height: 1.5;
+    }
+    .md-content h1, .md-content h2 { border-bottom: 1px solid var(--line); padding-bottom: 5px; font-size: 1.2em; margin-top: 0;}
+    .md-content p { margin: 0.5em 0; }
+    .katex { font-size: 1.1em; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 999;
+      display: none; align-items: center; justify-content: center; backdrop-filter: blur(2px);
+    }
+    .modal { background: var(--card-bg); padding: 24px; border-radius: 20px; width: 400px; max-width: 90%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); border: 1px solid var(--line); }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; margin-bottom: 6px; font-weight: 700; font-size: 0.9rem; color: var(--text); }
+    .form-group input, .form-group textarea, .form-group select { 
+      width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; 
+      font-family: inherit; background: var(--input-bg); color: var(--text);
+    }
+    
+    .highlighted { animation: highlight 1.5s ease-out; }
+    @keyframes highlight { 
+      0% { box-shadow: 0 0 0 0 rgba(37,99,235,0.4); border-color:var(--primary); } 
+      50% { box-shadow: 0 0 0 6px rgba(37,99,235,0.2); } 
+      100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); } 
+    }
+
+    /* 탭 버튼 */
+    .tabs { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 20px; padding-bottom: 5px; flex-wrap: wrap; }
+    .tab-btn { 
+      flex: 0 0 auto; padding: 8px 16px; 
+      border-radius: 20px; border: 1px solid var(--line); 
+      background: var(--card-bg); color: var(--text-sub); font-weight: 700; cursor:pointer; transition:0.2s;
+    }
+    .tab-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .tab-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+  </style>
+</head>
+<body>
+
+<div id="error-screen">
+  <h2 style="font-size:2rem; margin-bottom:10px;">🚨 데이터 오류 발생</h2>
+  <p>불러온 데이터(JSON)에 문제가 있거나, 구조가 맞지 않아 앱을 실행할 수 없습니다.</p>
+  <p id="err-msg" style="background:var(--line); padding:10px; border-radius:8px; font-family:monospace; margin:20px 0; color:var(--text)"></p>
+  <button class="btn btn-danger" style="padding:15px 30px; font-size:1.2rem;" onclick="hardReset()">⚡ 데이터 강제 초기화 (복구)</button>
+</div>
+
+<div id="app" class="container"></div>
+
+<div id="editModal" class="modal-overlay">
+  <div class="modal">
+    <h2 id="modalTitle">편집</h2>
+    <div class="form-group">
+      <label id="lblTitle">제목</label>
+      <input type="text" id="editTitle">
+    </div>
+    <div class="form-group">
+      <label id="lblDesc">내용</label>
+      <textarea id="editDesc" rows="3"></textarea>
+    </div>
+    <div class="form-group" id="grpQBox">
+      <label>핵심 포인트 / 팁 (Markdown)</label>
+      <textarea id="editQBox" rows="2" style="background:var(--input-bg); font-size:0.9rem;"></textarea>
+    </div>
+    <div class="form-group" id="grpBadge">
+      <label>배지/태그</label>
+      <input type="text" id="editBadge">
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:10px;">
+      <button class="btn btn-outline" onclick="closeModal()">취소</button>
+      <button class="btn btn-primary" onclick="saveCardChange()">저장</button>
+    </div>
+  </div>
+</div>
+
+<div id="ddayModal" class="modal-overlay">
+  <div class="modal">
+    <h2>📆 D-Day 설정 (최대 3개)</h2>
+    <div id="ddayInputs"></div>
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+      <button class="btn btn-outline" onclick="document.getElementById('ddayModal').style.display='none'">취소</button>
+      <button class="btn btn-primary" onclick="saveDDays()">저장</button>
+    </div>
+  </div>
+</div>
+
+<div id="moveModal" class="modal-overlay">
+  <div class="modal">
+    <h2 id="moveModalTitle">📂 이동할 위치 선택</h2>
+    
+    <div class="form-group">
+      <label>1. 과목(Subject) 선택</label>
+      <select id="moveSubject" onchange="updateMoveUI_Topics()"></select>
+    </div>
+
+    <div class="form-group" id="grpMoveTopic">
+      <label>2. 주제(Topic) 선택</label>
+      <select id="moveTopic" onchange="updateMoveUI_Tabs()"></select>
+    </div>
+
+    <div class="form-group" id="grpMoveTab">
+      <label>3. 탭(Tab) 선택</label>
+      <select id="moveTab"></select>
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+      <button class="btn btn-outline" onclick="document.getElementById('moveModal').style.display='none'">취소</button>
+      <button class="btn btn-primary" onclick="execMoveCard()">이동</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept=".json" style="display:none" onchange="loadJsonFile(event)">
+
+<script>
+let DATA = null;
+const STORAGE_KEY = 'universal_planner_v9_data';
+const THEME_KEY = 'universal_planner_theme';
+const APP = document.getElementById('app');
+const ERR_SCREEN = document.getElementById('error-screen');
+
+// [Safety: Global Error Handler]
+window.onerror = function(msg, url, line) {
+  showErrorScreen(`Script Error: ${msg} (Line ${line})`);
+  return true; 
+};
+
+function showErrorScreen(msg) {
+  APP.style.display = 'none';
+  ERR_SCREEN.style.display = 'flex';
+  document.getElementById('err-msg').innerText = msg;
+}
+
+window.hardReset = function() {
+  if(confirm('정말 초기화하시겠습니까?')) {
+    localStorage.removeItem(STORAGE_KEY);
+    location.reload();
+  }
+}
+
+// [Core Helpers]
+function renderStickyHeader(label, pct, time) {
+  return `
+    <div class="sticky-header">
+      <div class="prog-wrap">
+        <div class="prog-text"><span>${label}</span><span style="color:var(--primary)">${pct||0}%</span></div>
+        <div class="prog-bar"><div class="prog-fill" style="width:${pct||0}%"></div></div>
+      </div>
+      <div style="background:#1e293b; color:white; padding:6px 12px; border-radius:99px; font-family:monospace; font-weight:700;">
+        ⏱ ${time || "00:00:00"}
+      </div>
+    </div>
+  `;
+}
+
+// [FIX 2: Scroll Logic] renderRouter wrapper updated
+function renderRouter(keepScroll = false) { 
+  router(keepScroll); 
+}
+
+// Badge parsing
+function badgeTags(raw){
+  const s = (raw ?? '').toString().trim();
+  if(!s) return [];
+  return s.split(',').map(x => x.trim()).filter(Boolean);
+}
+
+function applyMath() {
+  if (window.renderMathInElement) {
+    try {
+      renderMathInElement(document.body, {
+        delimiters: [{left: "$$", right: "$$", display: true}, {left: "$", right: "$", display: false}],
+        throwOnError: false
+      });
+    } catch(e) { console.warn('MathJax error', e); }
+  }
+}
+
+// [Deep Clone & ID Regeneration]
+function deepCloneAndRegenerateIds(data, type) {
+  const clone = JSON.parse(JSON.stringify(data));
+  if (type === 'subject') {
+      const oldId = clone.id;
+      const newId = 'subj_' + Date.now() + Math.random().toString(36).substr(2,5);
+      clone.id = newId; clone.time = 0;
+      if(DATA.details[oldId]) {
+          const newDetail = JSON.parse(JSON.stringify(DATA.details[oldId]));
+          newDetail.id = newId; 
+          newDetail.cards = newDetail.cards.map(c => deepCloneAndRegenerateIds(c, 'detail_card'));
+          DATA.details[newId] = newDetail;
+      }
+      return clone;
+  }
+  if (type === 'detail_card') {
+      clone.id = 'card_' + Date.now() + Math.random().toString(36).substr(2,5);
+      clone.time = 0; clone.done = false;
+      if(clone.module && DATA.modules[clone.module]) {
+          const oldModId = clone.module;
+          const newModId = 'mod_' + Date.now() + Math.random().toString(36).substr(2,5);
+          clone.module = newModId;
+          const newMod = JSON.parse(JSON.stringify(DATA.modules[oldModId]));
+          newMod.id = newModId;
+          newMod.tabs.forEach(t => { t.questions = t.questions.map(q => deepCloneAndRegenerateIds(q, 'question')); });
+          DATA.modules[newModId] = newMod;
+      }
+      return clone;
+  }
+  if (type === 'question') {
+      clone.id = 'q_' + Date.now() + Math.random().toString(36).substr(2,5);
+      clone.done = false; clone.time = 0; clone.isRunning = false; clone.userNote = ""; 
+      return clone;
+  }
+  return clone;
+}
+
+// [Init]
+async function init() {
+  // Theme Init
+  initDarkMode();
+
+  const localData = localStorage.getItem(STORAGE_KEY);
+  if (localData) {
+    try {
+      DATA = JSON.parse(localData);
+      if(!DATA.home || !DATA.details || !DATA.modules) throw new Error("Invalid Data Structure");
+    } catch (e) {
+      showErrorScreen("저장된 데이터 손상: " + e.message);
+      return;
+    }
+  } else {
+    DATA = {
+      meta: { appTitle: "CPA Master Planner V9", version: "9.0" },
+      home: { title: "2026 CPA 합격 플래너", subtitle: "과목별 진도와 시간을 체계적으로 관리하세요", subjects: [], dDays:[{label:"1차 시험", date:"2026-02-28"}] },
+      details: {},
+      modules: {}
+    };
+    try {
+      const res = await fetch('cpa_content_v2.json');
+      if(res.ok) { const json = await res.json(); DATA = {...DATA, ...json}; }
+    } catch (e) {}
+    saveData();
+  }
+  
+  if(!DATA.home.dDays) DATA.home.dDays = [];
+
+  if(window.marked) marked.setOptions({ breaks: true });
+  window.addEventListener('hashchange', () => router(false));
+  
+  try {
+    router(false);
+    setInterval(tickTimers, 1000);
+  } catch(e) {
+    showErrorScreen("렌더링 중 오류 발생: " + e.message);
+  }
+}
+
+// [Dark Mode Logic]
+function initDarkMode() {
+  const savedTheme = localStorage.getItem(THEME_KEY);
+  if (savedTheme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+}
+function toggleDarkMode() {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem(THEME_KEY, next);
+}
+
+function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }
+window.resetData = window.hardReset;
+
+window.exportData = function() {
+  const dataStr = JSON.stringify(DATA, null, 2);
+  const blob = new Blob([dataStr], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `planner_backup_${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+window.triggerImport = function() { document.getElementById('fileInput').click(); }
+
+window.loadJsonFile = function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const json = JSON.parse(e.target.result);
+      if(!json.home || !json.details) throw new Error("필수 데이터(home, details)가 누락되었습니다.");
+      if (confirm(`"${file.name}" 파일을 불러오시겠습니까?`)) {
+        DATA = json;
+        if(!DATA.home.dDays) DATA.home.dDays = [];
+        saveData();
+        renderRouter();
+        alert("성공적으로 복원되었습니다!");
+      }
+    } catch (err) {
+      alert("파일을 읽을 수 없습니다.\n" + err.message);
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// [Routing]
+function getRoute() {
+  const hash = window.location.hash || '#/';
+  const [path, query] = hash.replace(/^#/, '').split('?');
+  const parts = path.split('/').filter(Boolean);
+  const params = new URLSearchParams(query);
+  return { page: parts[0] || 'home', id: parts[1], focus: params.get('focus') };
+}
+
+// [FIX 2 Implementation] : preserveScroll param added
+function router(keepScroll = false) {
+  const route = getRoute();
+  const savedScroll = window.scrollY; // Save Scroll
+
+  try {
+    if (route.page === 'detail' && route.id && !DATA.details[route.id]) {
+        DATA.details[route.id] = { id: route.id, title: "새 과목 상세", subtitle: "토픽을 추가하세요", filters: [], cards: [] };
+    }
+    if (route.page === 'module' && route.id && !DATA.modules[route.id]) {
+        DATA.modules[route.id] = { id: route.id, title: "새 학습 모듈", subtitle: "이론 및 문제를 추가하세요", backTo: "#/", tabs: [{ id: "tab1", label: "기본 이론", theoryNote: "", questions: [] }] };
+    }
+
+    if (route.page === 'home') renderHome();
+    else if (route.page === 'detail') renderDetail(route.id);
+    else if (route.page === 'module') renderModule(route.id);
+    
+    setTimeout(() => {
+        applyMath();
+        if (route.focus) {
+            const el = document.getElementById(`card-${route.focus}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('highlighted');
+                setTimeout(() => el.classList.remove('highlighted'), 1500);
+            }
+        } else if (keepScroll) {
+            window.scrollTo(0, savedScroll); // Restore Scroll
+        } else {
+            window.scrollTo(0, 0);
+        }
+    }, 50);
+  } catch(e) {
+      showErrorScreen("페이지 로드 실패: " + e.message);
+  }
+}
+
+// [Renderers]
+function renderHome() {
+  const totalStats = calcTotalStats();
+  const ddays = DATA.home.dDays || [];
+  const ddayHtml = ddays.map(d => {
+    if(!d.date) return '';
+    const target = new Date(d.date).setHours(0,0,0,0);
+    const today = new Date().setHours(0,0,0,0);
+    const diff = (target - today) / (1000 * 60 * 60 * 24);
+    let dLabel = diff > 0 ? `D-${Math.ceil(diff)}` : (diff === 0 ? "D-Day" : `D+${Math.abs(Math.ceil(diff))}`);
+    return `<div class="dday-badge" onclick="openDDayModal()"><span>${d.label}</span><span class="dday-count">${dLabel}</span></div>`;
+  }).join('');
+
+  APP.innerHTML = `
+    <header style="text-align:center; margin-bottom:30px; position:relative; padding-top:20px;">
+      <div class="left-tools">
+        <button class="btn btn-outline" style="border-radius:20px;" onclick="toggleDarkMode()" title="다크모드 토글">🌙/☀️</button>
+      </div>
+      <div class="dday-wrapper">
+        ${ddayHtml}
+        ${ddays.length === 0 ? '<div class="dday-badge" style="background:#eee; color:#aaa" onclick="openDDayModal()">+ D-Day 추가</div>' : ''}
+      </div>
+      <h1 class="editable" onclick="openEditModal('app_info', 'home')" title="제목 수정">${DATA.home.title}</h1>
+      <p class="editable" onclick="openEditModal('app_info', 'home')" style="color:var(--text-sub)">${DATA.home.subtitle}</p>
+      <div style="margin-top:10px; display:flex; gap:8px; justify-content:center;">
+        <button class="btn btn-outline" style="font-size:0.8rem;" onclick="triggerImport()">📂 백업 불러오기</button>
+        <button class="btn btn-outline" style="font-size:0.8rem;" onclick="exportData()">💾 백업 저장</button>
+        <button class="btn btn-outline" style="font-size:0.8rem; color:#ef4444; border-color:#ef4444;" onclick="resetData()">🗑 초기화</button>
+      </div>
+    </header>
+
+    ${renderStickyHeader('전체 진행률', totalStats.pct, totalStats.timeStr)}
+
+    <div class="grid" id="homeGrid">
+      ${DATA.home.subjects.map((sub, idx) => {
+         const detailStats = calcSubjectStats(sub.id); 
+         const detailCards = DATA.details[sub.id] ? DATA.details[sub.id].cards : [];
+         
+         return `
+        <div class="card" draggable="true" data-index="${idx}">
+          <div class="card-top">
+             <div style="display:flex; gap:6px;">
+               <span class="badge">${sub.badge}</span>
+             </div>
+             <div class="card-actions">
+               <button class="btn btn-icon" title="과목 복제" onclick="duplicateCard('subject', null, ${idx});event.stopPropagation()">📑</button>
+               <button class="btn btn-icon" title="링크 복사" onclick="copyLink('subject','${sub.id}','${sub.name}');event.stopPropagation()">🔗</button>
+               <button class="btn btn-icon" title="과목 수정" onclick="openEditModal('subject', 'home', ${idx});event.stopPropagation()">✏️</button>
+               <button class="btn btn-icon btn-danger" title="과목 삭제" onclick="deleteCard('subject', 'home', ${idx});event.stopPropagation()">🗑</button>
+             </div>
+          </div>
+          <h3 style="cursor:pointer;" onclick="location.hash='#/detail/${sub.id}'" title="클릭하여 상세 페이지로 이동">${sub.name}</h3>
+          <p style="color:var(--text-sub); font-size:0.9rem;">${sub.examInfo}</p>
+          
+          <div class="sub-list">
+             ${detailCards.map((c, cIdx) => {
+               const cStats = calcCardStats(c);
+               const isDone = cStats.isComplete;
+               return `
+               <div class="sub-item">
+                  <input type="checkbox" ${isDone ? 'checked' : ''} onchange="toggleDetailCardStatus('${sub.id}', ${cIdx}, this.checked)"> 
+                  <span onclick="location.hash='#/detail/${sub.id}?focus=${c.id}'" style="${isDone?'text-decoration:line-through; color:var(--text-sub)':''}" title="클릭하여 해당 카드로 이동">${c.title}</span>
+               </div>
+               `;
+             }).join('')}
+             ${detailCards.length===0 ? '<span style="font-size:0.8rem; color:#ccc;">(토픽 없음)</span>' : ''}
+          </div>
+          
+          <div class="timer-box" onclick="event.stopPropagation()">
+             <label class="chk-wrap">
+                <input type="checkbox" onchange="toggleCheckAll('subject', '${sub.id}', this.checked)" ${detailStats.pct===100?'checked':''}>
+                <span>${detailStats.pct===100 ? '완료' : '전체'}</span>
+             </label>
+             <div class="flex-center" style="gap:5px;">
+                <button class="btn btn-icon" title="시간 직접 수정" onclick="editTime('subject', null, ${idx}, null)">✏️</button>
+                <div class="timer-display" id="time-disp-subject-${sub.id}">${detailStats.timeStr}</div>
+                <button class="btn btn-outline" style="padding:2px 8px; width:40px; ${sub.isRunning?'color:red; border-color:red;':''}" 
+                  onclick="toggleTimer('subject', null, ${idx}, null)">
+                  ${sub.isRunning ? '❚❚' : '▶'}
+                </button>
+             </div>
+          </div>
+        </div>
+      `}).join('')}
+      <div class="card ghost-card flex-center" style="flex-direction:column;" onclick="openAddModal('subject', 'home')">
+        <div class="ghost-plus">+</div><div>새 과목 추가</div>
+      </div>
+    </div>
+  `;
+  setupDragDrop('home');
+}
+
+function renderDetail(sid) {
+  const detail = DATA.details[sid];
+  const stats = calcSubjectStats(sid);
+  const seen = new Set();
+  const badgeList = [];
+  let hasNone = false;
+  (detail.cards || []).forEach(c => {
+    const tags = badgeTags(c.badge);
+    if (tags.length === 0) { hasNone = true; return; }
+    tags.forEach(t => { if (!seen.has(t)) { seen.add(t); badgeList.push(t); } });
+  });
+
+  const filters = [{ key: 'all', label: '전체보기' }, ...badgeList.map(b => ({ key: b, label: b })), ...(hasNone ? [{ key: '__none__', label: '미분류' }] : [])];
+
+  APP.innerHTML = `
+    <div style="margin-bottom:20px;"><button class="btn btn-outline" onclick="location.hash='#/'">← 홈으로</button></div>
+    <div style="margin-bottom:20px;">
+      <h1 class="editable" onclick="openEditModal('page_info', 'detail', null, null, '${sid}')">${detail.title}</h1>
+      <p class="editable" onclick="openEditModal('page_info', 'detail', null, null, '${sid}')" style="color:var(--text-sub);">${detail.subtitle}</p>
+    </div>
+
+    ${renderStickyHeader('과목 진행률', stats.pct, stats.timeStr)}
+
+    <div class="tabs">
+      ${filters.map(f => `<button class="tab-btn ${f.key==='all'?'active':''}" onclick='filterCards(${JSON.stringify(f.key)}, this)'>${f.label}</button>`).join('')}
+    </div>
+
+    <div class="grid" id="cardGrid">
+      ${detail.cards.map((c, i) => renderCardItem(c, 'detail', sid, i)).join('')}
+      <div class="card ghost-card flex-center" style="flex-direction:column;" onclick="openAddModal('detail', '${sid}')">
+        <div class="ghost-plus">+</div><div>새 카드 추가</div>
+      </div>
+    </div>
+  `;
+  setupDragDrop('detail', sid);
+}
+
+function renderModule(mid) {
+  const mod = DATA.modules[mid];
+  const activeTabId = mod.activeTab || (mod.tabs[0] ? mod.tabs[0].id : null);
+  const activeTab = mod.tabs.find(t => t.id === activeTabId) || mod.tabs[0];
+  const stats = calcModuleStats(mid);
+  if(!activeTab.theoryNote) activeTab.theoryNote = "";
+  
+  const theoryId = `theory-${mid}-${activeTabId}`;
+
+  APP.innerHTML = `
+    <div class="flex-between" style="margin-bottom:20px;">
+      <button class="btn btn-outline" onclick="location.hash='${mod.backTo}'">← 뒤로</button>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-primary" onclick="exportAnki('${mid}')">📥 Anki CSV</button>
+        <button class="btn btn-outline" onclick="location.hash='#/'">🏠 홈</button>
+      </div>
+    </div>
+
+    <h1 class="editable" onclick="openEditModal('page_info', 'module', null, null, '${mid}')">${mod.title}</h1>
+    <p class="editable" onclick="openEditModal('page_info', 'module', null, null, '${mid}')" style="color:var(--text-sub); margin-bottom:20px;">${mod.subtitle}</p>
+
+    ${renderStickyHeader('모듈 진행률', stats.pct, stats.timeStr)}
+
+    <div class="tabs">
+      ${mod.tabs.map(t => `<button class="tab-btn ${t.id===activeTabId?'active':''}" onclick="switchTab('${mid}', '${t.id}')">${t.label}</button>`).join('')}
+      <button class="tab-btn" onclick="openAddModal('tab_add', '${mid}')">+ 탭 추가</button>
+    </div>
+
+    <div class="card theory-card" id="card-${theoryId}" style="margin-bottom:30px;">
+      <div class="card-top">
+        <h3 class="editable" onclick="openEditModal('tab_rename', '${mid}', null, '${activeTabId}')">
+           📌 ${activeTab.label}
+        </h3>
+        <div class="card-actions" style="opacity:1;">
+           <button class="btn btn-icon" title="링크 복사" onclick="copyLink('module','${theoryId}','${activeTab.label}',{pid:'${mid}'})">🔗</button>
+           <button class="btn btn-icon" title="내용 수정" onclick="toggleNoteView('theory-${activeTabId}')">✏️</button>
+           <button class="btn btn-icon btn-danger" title="탭 삭제" onclick="deleteTab('${mid}', '${activeTabId}')">🗑</button>
+        </div>
+      </div>
+      
+      <div id="view-theory-${activeTabId}" class="note-view md-content" 
+           data-empty="${!activeTab.theoryNote}" 
+           onclick="toggleNoteView('theory-${activeTabId}')">
+           ${marked.parse(activeTab.theoryNote || "")}
+      </div>
+      <div id="edit-theory-${activeTabId}" class="note-edit">
+        <textarea id="ta-theory-${activeTabId}" class="note-textarea" placeholder="# 내용을 입력하세요...">${activeTab.theoryNote}</textarea>
+        <div style="text-align:right; margin-top:5px;">
+           <button class="btn btn-primary" onclick="saveNoteText('theory', '${mid}', null, '${activeTabId}', 'theory-${activeTabId}')">저장</button>
+        </div>
+      </div>
+
+      <div class="timer-box" onclick="event.stopPropagation()">
+         <label class="chk-wrap">
+           <input type="checkbox" ${activeTab.done ? 'checked' : ''} onchange="toggleCheck(this, 'theory', '${mid}', 0, '${activeTabId}')">
+           <span>이론 학습 완료</span>
+         </label>
+         <div class="flex-center" style="gap:5px;">
+            <button class="btn btn-icon" title="시간 수정" onclick="editTime('theory', '${mid}', 0, '${activeTabId}')">✏️</button>
+            <div class="timer-display" id="time-disp-theory-${mid}-${activeTabId}">${formatTime(activeTab.time || 0)}</div>
+            <button class="btn btn-outline" style="padding:2px 8px; width:40px; ${activeTab.isRunning?'color:red; border-color:red;':''}" 
+              onclick="toggleTimer('theory', '${mid}', 0, '${activeTabId}')">
+              ${activeTab.isRunning ? '❚❚' : '▶'}
+            </button>
+         </div>
+      </div>
+    </div>
+
+    <div class="grid" id="questionGrid">
+      ${activeTab.questions.map((q, i) => renderCardItem(q, 'module', mid, i, activeTabId)).join('')}
+      <div class="card ghost-card flex-center" style="flex-direction:column;" onclick="openAddModal('module', '${mid}', '${activeTabId}')">
+        <div class="ghost-plus">+</div><div>새 문제 추가</div>
+      </div>
+    </div>
+  `;
+  setupDragDrop('module', mid, activeTabId);
+}
+
+function renderCardItem(item, level, pid, idx, tabId = null) {
+  const isMod = level === 'module';
+  const stableId = item.id || (level + '-' + pid + '-' + idx);
+  const userNote = item.userNote || "";
+  
+  let subItemsHtml = '';
+  let isDone = item.done;
+  let totalTime = item.time || 0;
+
+  if (!isMod && item.module && DATA.modules[item.module]) {
+    const mStats = calcModuleStats(item.module);
+    const moduleTime = mStats.total > 0 ? mStats.rawTime : 0;
+    totalTime = (item.time || 0) + moduleTime; 
+    if (mStats.total > 0) { isDone = mStats.isComplete; } else { isDone = item.done; }
+    
+    const modTabs = DATA.modules[item.module].tabs;
+    subItemsHtml = `<div class="sub-list">`;
+    modTabs.forEach(t => {
+      subItemsHtml += `<div class="sub-item"><input type="checkbox" ${t.done?'checked':''} onchange="toggleSubItem('${item.module}', 'theory', '${t.id}', null, this.checked)"> <span>${t.label} (이론)</span></div>`;
+      t.questions.forEach((q, qIdx) => {
+         const qLabel = q.src || (q.text.length > 15 ? q.text.substring(0,15)+'...' : q.text);
+         subItemsHtml += `<div class="sub-item">
+            <input type="checkbox" ${q.done?'checked':''} onchange="toggleSubItem('${item.module}', 'question', '${t.id}', ${qIdx}, this.checked)"> 
+            <span onclick="location.hash='#/module/${item.module}?focus=${q.id}'; event.stopPropagation();" title="클릭하여 모듈로 이동">${qLabel}</span>
+         </div>`;
+      });
+    });
+    subItemsHtml += `</div>`;
+  }
+
+  let linkLabel = item.title;
+  if (isMod) linkLabel = item.src ? item.src : (item.text.length>20 ? item.text.substring(0,20)+'...' : item.text);
+
+  return `
+    <div class="card ${!isMod && item.module ? 'clickable' : ''}" draggable="true" data-index="${idx}" id="card-${stableId}">
+      <div class="card-top">
+        <div style="display:flex; align-items:center;">
+           <span class="card-handle material-icons" style="cursor:grab; color:#cbd5e1; margin-right:5px;">⠿</span>
+           <span class="badge">${isMod ? (item.src || '문항') : (item.badge || 'Topic')}</span>
+        </div>
+        <div class="card-actions">
+           ${!isMod && item.module ? `<button class="btn btn-icon" title="모듈 바로가기" onclick="location.hash='#/module/${item.module}'; event.stopPropagation();">🚀</button>` : ''}
+           <button class="btn btn-icon" title="복제" onclick="duplicateCard('${level}', '${pid}', ${idx}, '${tabId||''}');event.stopPropagation()">📑</button>
+           <button class="btn btn-icon" title="이동" onclick="moveCard('${level}', '${pid}', ${idx}, '${tabId||''}');event.stopPropagation()">📂</button>
+           <button class="btn btn-icon" title="링크 복사" onclick="copyLink('${level}','${stableId}','${linkLabel.replace(/'/g,"")}',{pid:'${pid}',module:'${item.module||''}'});event.stopPropagation()">🔗</button>
+           <button class="btn btn-icon" title="수정" onclick="openEditModal('${level}', '${pid}', ${idx}, '${tabId || ''}');event.stopPropagation()">✏️</button>
+           <button class="btn btn-icon btn-danger" title="삭제" onclick="deleteCard('${level}', '${pid}', ${idx}, '${tabId || ''}');event.stopPropagation()">🗑</button>
+        </div>
+      </div>
+
+      <div onclick="${!isMod && item.module ? `location.hash='#/module/${item.module}'` : ''}">
+        ${isMod 
+          ? `<div class="md-content" style="font-weight:600; font-size:1.05rem; margin-bottom:10px;">${marked.parse(item.text)}</div>`
+          : `<h3>${item.title}</h3><p>${item.scope || ''}</p>`
+        }
+        ${item.qbox ? `<div class="md-content" style="background:var(--bg); padding:10px; border-radius:8px; font-size:0.9rem; margin-top:10px; color:var(--text-sub);">💡 ${marked.parse(item.qbox)}</div>` : ''}
+      </div>
+
+      ${!isMod ? subItemsHtml : ''}
+
+      ${isMod ? `
+        <div class="note-area-wrap">
+          <span class="note-label-small">📝 오답/필기 노트 (클릭하여 수정)</span>
+          <div id="view-${stableId}" class="note-view md-content" 
+               data-empty="${!userNote}" 
+               onclick="toggleNoteView('${stableId}')">
+               ${marked.parse(userNote)}
+          </div>
+          <div id="edit-${stableId}" class="note-edit">
+             <textarea id="ta-${stableId}" class="note-textarea" placeholder="풀이 작성...">${userNote}</textarea>
+             <div style="text-align:right; margin-top:5px;">
+               <button class="btn btn-primary" onclick="saveNoteText('card', '${pid}', ${idx}, '${tabId}', '${stableId}')">저장</button>
+             </div>
+          </div>
+        </div>
+      ` : ''}
+
+      <div class="timer-box" onclick="event.stopPropagation()">
+         <label class="chk-wrap">
+           <input type="checkbox" ${isDone ? 'checked' : ''} onchange="toggleCheck(this, '${level}', '${pid}', ${idx}, '${tabId || ''}')">
+           <span>완료</span>
+         </label>
+         <div class="flex-center" style="gap:5px;">
+            <button class="btn btn-icon" title="시간 수정" onclick="editTime('${level}', '${pid}', ${idx}, '${tabId||''}')">✏️</button>
+            <div class="timer-display" id="time-disp-${stableId}">${formatTime(totalTime)}</div>
+            <button class="btn btn-outline" style="padding:2px 8px; width:40px; ${item.isRunning?'color:red; border-color:red;':''}" 
+              onclick="toggleTimer('${level}', '${pid}', ${idx}, '${tabId||''}')">
+              ${item.isRunning ? '❚❚' : '▶'}
+            </button>
+         </div>
+      </div>
+    </div>
+  `;
+}
+
+// [Logic]
+function formatTime(s) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sc = s % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sc).padStart(2, '0')}`;
+}
+
+// [FIX 1: Timer Stop on Check] for detail cards
+function toggleDetailCardStatus(pid, idx, status) {
+  if(!DATA.details[pid]) return;
+  const card = DATA.details[pid].cards[idx];
+  
+  card.done = status;
+  if(status) card.isRunning = false; // Stop timer if checked
+
+  if(card.module && DATA.modules[card.module]) {
+    const mod = DATA.modules[card.module];
+    mod.tabs.forEach(t => {
+      t.done = status;
+      t.questions.forEach(q => q.done = status);
+    });
+  }
+  saveData(); renderRouter(true);
+}
+
+function calcCardStats(card) {
+  let ownTime = card.time || 0;
+  if (card.module && DATA.modules[card.module]) {
+    const mStats = calcModuleStats(card.module);
+    return { isComplete: mStats.isComplete, time: ownTime + mStats.rawTime };
+  }
+  return { isComplete: card.done, time: ownTime };
+}
+
+function calcModuleStats(mid) {
+  let total=0, done=0, time=0;
+  if(DATA.modules && DATA.modules[mid]) {
+    DATA.modules[mid].tabs.forEach(t => {
+      total++; if(t.done) done++; time += (t.time || 0);
+      t.questions.forEach(q => {
+        total++; if(q.done) done++; time += (q.time||0);
+      });
+    });
+  }
+  return { pct: total?Math.round((done/total)*100):0, timeStr: formatTime(time), rawTime: time, isComplete: (total>0 && total===done), total };
+}
+
+function calcSubjectStats(sid) {
+  let ownTime = 0;
+  const subj = DATA.home.subjects.find(s => s.id === sid);
+  if (subj) ownTime = subj.time || 0;
+
+  if (!DATA.details[sid]) return { pct: 0, timeStr: formatTime(ownTime), rawTime: ownTime };
+  
+  const cards = DATA.details[sid].cards;
+  let detailTime = 0;
+  let doneCount = 0;
+  cards.forEach(c => {
+    const cStat = calcCardStats(c);
+    detailTime += cStat.time;
+    if(cStat.isComplete) doneCount++;
+  });
+  
+  const totalTime = ownTime + detailTime;
+  return { 
+    pct: cards.length ? Math.round((doneCount/cards.length)*100) : 0, 
+    timeStr: formatTime(totalTime), 
+    rawTime: totalTime 
+  };
+}
+
+function calcTotalStats() { 
+  let t=0, d=0;
+  let totalTime = 0;
+  DATA.home.subjects.forEach(sub => {
+    const stats = calcSubjectStats(sub.id);
+    totalTime += stats.rawTime;
+  });
+  if(DATA.details) Object.values(DATA.details).forEach(x=>{
+    t += x.cards.length; 
+    x.cards.forEach(c => { if(calcCardStats(c).isComplete) d++; });
+  }); 
+  return {pct: t?Math.round((d/t)*100):0, timeStr: formatTime(totalTime)}; 
+}
+
+// [FIX 1: Timer Stop on Check] for sub-items
+function toggleSubItem(mid, type, tid, qIdx, checked) {
+  if (!DATA.modules[mid]) return;
+  const tab = DATA.modules[mid].tabs.find(t => t.id === tid);
+  if (!tab) return;
+  
+  if (type === 'theory') {
+      tab.done = checked;
+      if(checked) tab.isRunning = false; // Stop timer
+  } else if (type === 'question') {
+      tab.questions[qIdx].done = checked;
+      if(checked) tab.questions[qIdx].isRunning = false; // Stop timer
+  }
+  saveData(); renderRouter(true);
+}
+
+function setAllChildStatus(level, pid, idx, status) {
+  if (level === 'subject') {
+    if(DATA.details[pid]) DATA.details[pid].cards.forEach((card, i) => setAllChildStatus('detail', pid, i, status));
+  } else if (level === 'detail') {
+    const card = DATA.details[pid].cards[idx];
+    card.done = status;
+    if(status) card.isRunning = false; // Stop timer
+    if (card.module && DATA.modules[card.module]) {
+      const mod = DATA.modules[card.module];
+      mod.tabs.forEach(t => { 
+          t.done = status; 
+          if(status) t.isRunning = false; 
+          t.questions.forEach(q => { 
+              q.done = status; 
+              if(status) q.isRunning = false; 
+          }); 
+      });
+    }
+  }
+}
+
+// [FIXED] Updated to stop Subject Timer
+function toggleCheckAll(level, pid, checked) {
+  setAllChildStatus(level, pid, null, checked);
+  // [NEW] If subject 'done' is checked, stop the subject timer too.
+  if(level === 'subject' && checked) {
+      const subj = DATA.home.subjects.find(s => s.id === pid);
+      if(subj) subj.isRunning = false;
+  }
+  saveData(); renderRouter(true);
+}
+
+// [FIX 1: Timer Stop on Check] for generic checks
+function toggleCheck(chk, lvl, pid, idx, tid) {
+  const status = chk.checked;
+  if(lvl==='detail') { toggleDetailCardStatus(pid, idx, status); }
+  else if(lvl==='theory') {
+      const item = DATA.modules[pid].tabs.find(t=>t.id===tid);
+      item.done = status;
+      if(status) item.isRunning = false;
+  }
+  else {
+      const item = DATA.modules[pid].tabs.find(t=>t.id===tid).questions[idx];
+      item.done = status;
+      if(status) item.isRunning = false;
+  }
+  saveData(); renderRouter(true);
+}
+
+function toggleTimer(lvl, pid, idx, tid) {
+  let item;
+  if(lvl==='subject') item = DATA.home.subjects[idx];
+  else if(lvl==='theory') item = DATA.modules[pid].tabs.find(t=>t.id===tid);
+  else if(lvl==='detail') item = DATA.details[pid].cards[idx];
+  else item = DATA.modules[pid].tabs.find(t=>t.id===tid).questions[idx];
+  item.isRunning = !item.isRunning; saveData(); renderRouter(true);
+}
+
+function editTime(lvl, pid, idx, tid) {
+  let item;
+  if(lvl==='subject') item = DATA.home.subjects[idx];
+  else if(lvl==='theory') item = DATA.modules[pid].tabs.find(t=>t.id===tid);
+  else if(lvl==='detail') item = DATA.details[pid].cards[idx];
+  else item = DATA.modules[pid].tabs.find(t=>t.id===tid).questions[idx];
+  const minStr = prompt("수정할 시간을 분(minute) 단위로 입력하세요:", Math.floor((item.time||0)/60));
+  if(minStr === null) return;
+  const min = parseInt(minStr);
+  if(!isNaN(min)) { item.time = min * 60; saveData(); renderRouter(true); }
+}
+
+function tickTimers() {
+  let chg = false;
+  const run = (obj) => { if(obj.isRunning){ obj.time=(obj.time||0)+1; chg=true; }};
+  if(!DATA) return;
+  if(DATA.home.subjects) DATA.home.subjects.forEach(s => run(s));
+  if(DATA.details) Object.values(DATA.details).forEach(d => d.cards.forEach(c => run(c)));
+  if(DATA.modules) Object.values(DATA.modules).forEach(m => m.tabs.forEach(t => { run(t); t.questions.forEach(q => run(q)); }));
+  if(chg) { saveData(); updateTimerDOM(); }
+}
+
+function updateTimerDOM() {
+  const update = (id, val) => { const el=document.getElementById(id); if(el) el.innerText=formatTime(val); };
+  DATA.home.subjects.forEach(s => update(`time-disp-subject-${s.id}`, calcSubjectStats(s.id).rawTime));
+  Object.keys(DATA.modules).forEach(mid => {
+    DATA.modules[mid].tabs.forEach(t => {
+      update(`time-disp-theory-${mid}-${t.id}`, t.time||0);
+      t.questions.forEach((q,i) => update(`time-disp-${q.id||('module-'+mid+'-'+i)}`, q.time||0));
+    });
+  });
+  Object.keys(DATA.details).forEach(did => {
+     DATA.details[did].cards.forEach((c,i) => update(`time-disp-${c.id||('detail-'+did+'-'+i)}`, calcCardStats(c).time));
+  });
+}
+
+function toggleNoteView(uniqueId) {
+  const view = document.getElementById(`view-${uniqueId}`);
+  const edit = document.getElementById(`edit-${uniqueId}`);
+  const ta = document.getElementById(`ta-${uniqueId}`);
+  if (edit.style.display === 'none' || edit.style.display === '') {
+    view.style.display = 'none'; edit.style.display = 'block'; if(ta) ta.focus();
+  } else { edit.style.display = 'none'; view.style.display = 'block'; }
+}
+
+function saveNoteText(type, pid, idx, tabId, domId) {
+  const text = document.getElementById(`ta-${domId}`).value;
+  if(type === 'theory') { DATA.modules[pid].tabs.find(t=>t.id===tabId).theoryNote = text; saveData(); renderModule(pid); } 
+  else { 
+    DATA.modules[pid].tabs.find(t=>t.id===tabId).questions[idx].userNote = text; 
+    const view = document.getElementById(`view-${domId}`); 
+    view.innerHTML = marked.parse(text); view.setAttribute('data-empty', !text);
+    toggleNoteView(domId); applyMath(); saveData(); 
+  }
+}
+
+function openAddModal(mode, pid, tabId) { openEditModal(mode, pid, undefined, tabId); }
+let editState = null; 
+function openEditModal(mode, pid, idx, tabId, pageId) {
+  editState = { mode, pid, idx, tabId, pageId };
+  document.getElementById('editModal').style.display = 'flex';
+  document.getElementById('grpBadge').style.display = 'block';
+  document.getElementById('grpQBox').style.display = 'none';
+  const title = document.getElementById('editTitle');
+  const desc = document.getElementById('editDesc');
+  const badge = document.getElementById('editBadge');
+  const qbox = document.getElementById('editQBox');
+  if (mode === 'subject' && idx !== undefined) { const i = DATA.home.subjects[idx]; title.value=i.name; desc.value=i.examInfo; badge.value=i.badge; }
+  else if (mode === 'subject') { title.value=""; desc.value=""; badge.value="New"; }
+  else if (mode === 'app_info') { title.value=DATA.home.title; desc.value=DATA.home.subtitle; document.getElementById('grpBadge').style.display='none'; }
+  else if (mode === 'page_info') { const d = pageId in DATA.details ? DATA.details[pageId] : DATA.modules[pageId]; title.value=d.title; desc.value=d.subtitle; document.getElementById('grpBadge').style.display='none'; }
+  else if (mode === 'tab_rename') { title.value=DATA.modules[pid].tabs.find(x=>x.id===tabId).label; desc.parentElement.style.display='none'; document.getElementById('grpBadge').style.display='none'; }
+  else if (mode === 'tab_add') { title.value=""; desc.parentElement.style.display='none'; document.getElementById('grpBadge').style.display='none'; }
+  else if (mode === 'detail') { 
+    document.getElementById('grpQBox').style.display = 'block';
+    if(idx!==undefined) { const c=DATA.details[pid].cards[idx]; title.value=c.title; desc.value=c.scope; badge.value=c.badge; qbox.value=c.qbox || ""; } 
+    else { title.value=""; desc.value=""; badge.value="Topic"; qbox.value=""; }
+  } else if (mode === 'module') {
+    if(idx!==undefined) { const q=DATA.modules[pid].tabs.find(x=>x.id===tabId).questions[idx]; title.value=q.text; desc.value=q.src; document.getElementById('grpBadge').style.display='none'; }
+    else { title.value=""; desc.value=""; document.getElementById('grpBadge').style.display='none'; }
+  }
+}
+function closeModal() { document.getElementById('editModal').style.display='none'; document.getElementById('editDesc').parentElement.style.display='block'; }
+function saveCardChange() {
+  const t = document.getElementById('editTitle').value;
+  const d = document.getElementById('editDesc').value;
+  const b = document.getElementById('editBadge').value;
+  const q = document.getElementById('editQBox').value;
+  const { mode, pid, idx, tabId, pageId } = editState;
+  if (mode === 'app_info') { DATA.home.title = t; DATA.home.subtitle = d; }
+  else if (mode === 'page_info') { if(DATA.details[pageId]) { DATA.details[pageId].title = t; DATA.details[pageId].subtitle = d; } else { DATA.modules[pageId].title = t; DATA.modules[pageId].subtitle = d; } }
+  else if (mode === 'tab_rename') { DATA.modules[pid].tabs.find(x=>x.id===tabId).label = t; }
+  else if (mode === 'tab_add') { DATA.modules[pid].tabs.push({id: Date.now().toString(), label: t, theoryNote:"", questions:[]}); }
+  else if (mode === 'subject') {
+    if (idx === undefined) { const nid='s_'+Date.now(); DATA.home.subjects.push({ id: nid, name: t, examInfo: d, badge: b }); DATA.details[nid]={id:nid, title:t+" 상세", subtitle:"", cards:[]}; }
+    else { const s=DATA.home.subjects[idx]; s.name=t; s.examInfo=d; s.badge=b; }
+  } else if (mode === 'detail') {
+    const list = DATA.details[pid].cards;
+    if (idx === undefined) { const mid='m_'+Date.now(); list.push({id:Date.now().toString(), title:t, scope:d, badge:b, qbox:q, module:mid, category:'all'}); DATA.modules[mid]={id:mid, title:t, subtitle:d, backTo:`#/detail/${pid}`, tabs:[{id:'t1', label:'기본', questions:[]}]}; } 
+    else { list[idx].title=t; list[idx].scope=d; list[idx].badge=b; list[idx].qbox=q; }
+  } else if (mode === 'module') {
+    const list = DATA.modules[pid].tabs.find(x=>x.id===tabId).questions;
+    if (idx === undefined) list.push({id:Date.now().toString(), text:t, src:d}); else { list[idx].text=t; list[idx].src=d; }
+  }
+  saveData(); closeModal(); renderRouter(true);
+}
+function deleteCard(mode, pid, idx, tabId) { if(confirm('삭제하시겠습니까? (하위 데이터도 모두 삭제됩니다)')) {
+  if (mode === 'subject') { const s = DATA.home.subjects[idx]; const d = DATA.details[s.id]; if(d) { d.cards.forEach(c => { if(c.module) delete DATA.modules[c.module]; }); delete DATA.details[s.id]; } DATA.home.subjects.splice(idx, 1); }
+  else if (mode === 'detail') { const c = DATA.details[pid].cards[idx]; if(c.module) delete DATA.modules[c.module]; DATA.details[pid].cards.splice(idx, 1); }
+  else if (mode === 'module') { DATA.modules[pid].tabs.find(x => x.id === tabId).questions.splice(idx, 1); }
+  saveData(); renderRouter(true);
+}}
+function deleteTab(mid, tid) { if(confirm('탭 삭제?')) { const t=DATA.modules[mid].tabs; if(t.length>1) t.splice(t.findIndex(x=>x.id===tid),1); saveData(); renderModule(mid); }}
+
+// [D-Day Logic]
+function openDDayModal() {
+  const div = document.getElementById('ddayInputs');
+  div.innerHTML = '';
+  const ddays = DATA.home.dDays || [];
+  for(let i=0; i<3; i++) {
+    const d = ddays[i] || {label:'', date:''};
+    div.innerHTML += `
+      <div style="display:flex; gap:5px; margin-bottom:10px;">
+        <input type="text" placeholder="시험/목표명" value="${d.label}" id="ddL_${i}" style="flex:1;">
+        <input type="date" value="${d.date}" id="ddD_${i}">
+      </div>`;
+  }
+  document.getElementById('ddayModal').style.display='flex';
+}
+function saveDDays() {
+  const newDays = [];
+  for(let i=0; i<3; i++) {
+    const l = document.getElementById(`ddL_${i}`).value;
+    const d = document.getElementById(`ddD_${i}`).value;
+    if(l && d) newDays.push({label:l, date:d});
+  }
+  DATA.home.dDays = newDays;
+  saveData();
+  document.getElementById('ddayModal').style.display='none';
+  renderRouter(true);
+}
+
+function copyLink(type, id, title, extra) {
+  let link = '';
+  if (type === 'subject') link = `#/detail/${id}`;
+  else if (type === 'detail') link = extra && extra.module ? `#/module/${extra.module}` : `#/detail/${extra.pid}?focus=${id}`;
+  else if (type === 'module') link = `#/module/${extra.pid}?focus=${id}`;
+  navigator.clipboard.writeText(`[${title}](${link})`).then(() => alert(`링크 복사됨:\n[${title}]`));
+}
+function setupDragDrop(lvl, pid, tid) {
+  const grid = document.getElementById(lvl==='home'?'homeGrid':(lvl==='detail'?'cardGrid':'questionGrid'));
+  let srcIdx = null;
+  grid.querySelectorAll('.card[draggable="true"]').forEach(el => {
+    el.addEventListener('dragstart', e => { srcIdx=+el.dataset.index; el.classList.add('dragging'); });
+    el.addEventListener('dragend', e => el.classList.remove('dragging'));
+    el.addEventListener('dragover', e => e.preventDefault());
+    el.addEventListener('drop', e => {
+      e.stopPropagation(); const tgtIdx=+el.dataset.index;
+      if(srcIdx!==tgtIdx && srcIdx!==null) {
+        let list;
+        if(lvl==='home') list=DATA.home.subjects;
+        else if(lvl==='detail') list=DATA.details[pid].cards;
+        else list=DATA.modules[pid].tabs.find(t=>t.id===tid).questions;
+        const [m] = list.splice(srcIdx, 1); list.splice(tgtIdx, 0, m);
+        saveData(); renderRouter(true);
+      }
+    });
+  });
+}
+function exportAnki(mid) {
+  let csv = "Front,Back,Tags\n";
+  DATA.modules[mid].tabs.forEach(t => t.questions.forEach(q => csv += `"${q.text.replace(/"/g,'""')}","${(q.userNote||"").replace(/"/g,'""')}","${mid}"\n`));
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})); a.download=`${mid}.csv`; a.click();
+}
+function filterCards(k, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+  const cards = DATA.details[getRoute().id].cards;
+  cards.forEach((c, i) => {
+    const el = document.getElementById(`card-${c.id||('detail-'+getRoute().id+'-'+i)}`);
+    if(el) el.style.display = (k==='all' || c.category===k) ? 'flex' : 'none';
+  });
+}
+function switchTab(mid, tid) { DATA.modules[mid].activeTab = tid; saveData(); renderModule(mid); }
+
+// [DUPLICATE & MOVE Implementation]
+function duplicateCard(level, pid, idx, tabId) {
+  if (level === 'subject') {
+    const org = DATA.home.subjects[idx];
+    const clone = deepCloneAndRegenerateIds(org, 'subject');
+    DATA.home.subjects.splice(idx + 1, 0, clone);
+  } 
+  else if (level === 'detail') {
+    const list = DATA.details[pid].cards;
+    const clone = deepCloneAndRegenerateIds(list[idx], 'detail_card');
+    list.splice(idx + 1, 0, clone);
+  }
+  else if (level === 'module') {
+    const list = DATA.modules[pid].tabs.find(t => t.id === tabId).questions;
+    const clone = deepCloneAndRegenerateIds(list[idx], 'question');
+    list.splice(idx + 1, 0, clone);
+  }
+  saveData(); renderRouter(true);
+}
+
+let moveTarget = null;
+function moveCard(level, pid, idx, tabId) {
+  moveTarget = { level, pid, idx, tabId };
+  
+  const selSubject = document.getElementById('moveSubject');
+  const grpTopic = document.getElementById('grpMoveTopic');
+  const grpTab = document.getElementById('grpMoveTab');
+
+  // Init UI
+  selSubject.innerHTML = '';
+  document.getElementById('moveTopic').innerHTML = '';
+  document.getElementById('moveTab').innerHTML = '';
+  
+  DATA.home.subjects.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.innerText = s.name;
+      selSubject.appendChild(opt);
+  });
+
+  if (level === 'detail') {
+      document.getElementById('moveModalTitle').innerText = "📂 주제 카드 이동 (과목 선택)";
+      grpTopic.style.display = 'none';
+      grpTab.style.display = 'none';
+  } 
+  else if (level === 'module') {
+      document.getElementById('moveModalTitle').innerText = "📂 문제 카드 이동 (위치 선택)";
+      grpTopic.style.display = 'block';
+      grpTab.style.display = 'block';
+      updateMoveUI_Topics();
+  }
+  document.getElementById('moveModal').style.display='flex';
+}
+
+function updateMoveUI_Topics() {
+    if(moveTarget.level !== 'module') return;
+    const subId = document.getElementById('moveSubject').value;
+    const selTopic = document.getElementById('moveTopic');
+    selTopic.innerHTML = '';
+    const detail = DATA.details[subId];
+    if(detail && detail.cards.length > 0) {
+        detail.cards.forEach((c, idx) => {
+           if(c.module && DATA.modules[c.module]) {
+               const opt = document.createElement('option');
+               opt.value = c.module; 
+               opt.innerText = c.title;
+               selTopic.appendChild(opt);
+           }
+        });
+    } else {
+        const opt = document.createElement('option');
+        opt.innerText = "(이동 가능한 주제 없음)";
+        selTopic.appendChild(opt);
+    }
+    updateMoveUI_Tabs();
+}
+
+function updateMoveUI_Tabs() {
+    if(moveTarget.level !== 'module') return;
+    const mid = document.getElementById('moveTopic').value;
+    const selTab = document.getElementById('moveTab');
+    selTab.innerHTML = '';
+    if(mid && DATA.modules[mid]) {
+        DATA.modules[mid].tabs.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.id;
+            opt.innerText = t.label;
+            selTab.appendChild(opt);
+        });
+    } else {
+         const opt = document.createElement('option');
+         opt.innerText = "(탭 없음)";
+         selTab.appendChild(opt);
+    }
+}
+
+function execMoveCard() {
+  const { level, pid, idx, tabId } = moveTarget;
+  const targetSubId = document.getElementById('moveSubject').value;
+  
+  if (level === 'detail') {
+      if (pid === targetSubId) { alert("현재와 동일한 과목입니다."); return; }
+      const card = DATA.details[pid].cards.splice(idx, 1)[0];
+      if(!DATA.details[targetSubId]) DATA.details[targetSubId] = {id:targetSubId, title:"상세", cards:[]};
+      DATA.details[targetSubId].cards.push(card);
+      if(card.module && DATA.modules[card.module]) {
+          DATA.modules[card.module].backTo = `#/detail/${targetSubId}`;
+      }
+  } 
+  else if (level === 'module') {
+      const targetMid = document.getElementById('moveTopic').value;
+      const targetTid = document.getElementById('moveTab').value;
+      if (!targetMid || !targetTid || !DATA.modules[targetMid]) {
+          alert("이동할 대상(주제/탭)이 유효하지 않습니다."); return;
+      }
+      const srcList = DATA.modules[pid].tabs.find(t => t.id === tabId).questions;
+      const [q] = srcList.splice(idx, 1);
+      const dstList = DATA.modules[targetMid].tabs.find(t => t.id === targetTid).questions;
+      dstList.push(q);
+  }
+  
+  saveData();
+  document.getElementById('moveModal').style.display='none';
+  renderRouter(true);
+}
+
+init();
+</script>
+</body>
+</html>
