@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Universal Master Planner V1.2 by Inmonite</title>
+  <title>Universal Master Planner V1.6 (Reset Fixed)</title>
 
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -279,12 +279,38 @@ function showErrorScreen(msg) {
   document.getElementById('err-msg').innerText = msg;
 }
 
-window.hardReset = function() {
-  if(confirm('정말 초기화하시겠습니까?')) {
+// [FIX 6: Robust Reset]
+window.hardReset = async function() {
+  if(confirm('모든 데이터를 삭제하고 초기화하시겠습니까? (복구 불가)')) {
+    // 1. Storage Clear
     localStorage.removeItem(STORAGE_KEY);
+    
+    // 2. Memory Reset (Factory Default)
+    DATA = {
+      meta: { appTitle: "CPA Master Planner V9", version: "9.0" },
+      home: { title: "2026 CPA 합격 플래너", subtitle: "과목별 진도와 시간을 체계적으로 관리하세요", subjects: [], dDays:[{label:"1차 시험", date:"2026-02-28"}] },
+      details: {},
+      modules: {}
+    };
+
+    // 3. Try to fetch default template if available (Simulate fresh start)
+    try {
+      const res = await fetch('cpa_content_v2.json');
+      if(res.ok) { 
+         const json = await res.json(); 
+         DATA = {...DATA, ...json}; 
+      }
+    } catch (e) { console.log('Default content fetch skipped'); }
+
+    // 4. Save & Render (Ensures UI updates even if reload fails)
+    saveData();
+    renderRouter();
+    
+    // 5. Reload (Cleaner)
     location.reload();
   }
 }
+window.resetData = window.hardReset;
 
 // [Core Helpers]
 function renderStickyHeader(label, pct, time) {
@@ -417,7 +443,6 @@ function toggleDarkMode() {
 }
 
 function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }
-window.resetData = window.hardReset;
 
 window.exportData = function() {
   const dataStr = JSON.stringify(DATA, null, 2);
@@ -540,7 +565,7 @@ function renderHome() {
       <div style="margin-top:10px; display:flex; gap:8px; justify-content:center;">
         <button class="btn btn-outline" style="font-size:0.8rem;" onclick="triggerImport()">📂 백업 불러오기</button>
         <button class="btn btn-outline" style="font-size:0.8rem;" onclick="exportData()">💾 백업 저장</button>
-        <button class="btn btn-outline" style="font-size:0.8rem; color:#ef4444; border-color:#ef4444;" onclick="resetData()">🗑 초기화</button>
+        <button class="btn btn-outline" style="font-size:0.8rem; color:#ef4444; border-color:#ef4444;" onclick="hardReset()">🗑 초기화</button>
       </div>
     </header>
 
@@ -823,14 +848,16 @@ function formatTime(s) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sc).padStart(2, '0')}`;
 }
 
-// [FIX 1: Timer Stop on Check] for detail cards
+// [FIX 5: Logic Order Corrected]
 function toggleDetailCardStatus(pid, idx, status) {
   if(!DATA.details[pid]) return;
   const card = DATA.details[pid].cards[idx];
   
+  // 1. Update Card Status
   card.done = status;
-  if(status) card.isRunning = false; // Stop timer if checked
+  if(status) card.isRunning = false; 
 
+  // 2. Propagate to Module (MUST BE DONE BEFORE CHECKING STATS)
   if(card.module && DATA.modules[card.module]) {
     const mod = DATA.modules[card.module];
     mod.tabs.forEach(t => {
@@ -838,6 +865,16 @@ function toggleDetailCardStatus(pid, idx, status) {
       t.questions.forEach(q => q.done = status);
     });
   }
+
+  // 3. Check Subject Stats (Now module stats are correct)
+  if (status) {
+     const stats = calcSubjectStats(pid);
+     if (stats.pct === 100) {
+         const subj = DATA.home.subjects.find(s => s.id === pid);
+         if(subj) subj.isRunning = false; // Stop Subject Timer
+     }
+  }
+
   saveData(); renderRouter(true);
 }
 
@@ -901,7 +938,7 @@ function calcTotalStats() {
   return {pct: t?Math.round((d/t)*100):0, timeStr: formatTime(totalTime)}; 
 }
 
-// [FIX 1: Timer Stop on Check] for sub-items
+// [FIX 4: Auto Stop on All Checks] for sub-items
 function toggleSubItem(mid, type, tid, qIdx, checked) {
   if (!DATA.modules[mid]) return;
   const tab = DATA.modules[mid].tabs.find(t => t.id === tid);
@@ -914,6 +951,29 @@ function toggleSubItem(mid, type, tid, qIdx, checked) {
       tab.questions[qIdx].done = checked;
       if(checked) tab.questions[qIdx].isRunning = false; // Stop timer
   }
+
+  // [NEW] Logic: If Module is 100%, Stop Parent Card Timer. 
+  if (checked) {
+      const mStats = calcModuleStats(mid);
+      if (mStats.pct === 100) {
+          // Reverse Lookup to find Parent Card
+          Object.keys(DATA.details).forEach(did => {
+             const detail = DATA.details[did];
+             detail.cards.forEach(c => {
+                 if(c.module === mid) {
+                     if(c.isRunning) c.isRunning = false; // Stop Card Timer
+                     // Check Subject Completion (Chain Reaction)
+                     const sStats = calcSubjectStats(did);
+                     if(sStats.pct === 100) {
+                         const subj = DATA.home.subjects.find(s=>s.id === did);
+                         if(subj) subj.isRunning = false; // Stop Subject Timer
+                     }
+                 }
+             });
+          });
+      }
+  }
+
   saveData(); renderRouter(true);
 }
 
