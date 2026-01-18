@@ -36,12 +36,6 @@
         "name": "회계학",
         "examInfo": "150점 / 50문항",
         "badge": "3교시"
-      },
-      {
-        "id": "subject_accounting_deep",
-        "name": "회계학 기출",
-        "examInfo": "150점 / 50문항",
-        "badge": "3교시"
       }
     ],
     "dDays": []
@@ -369,6 +363,15 @@
           "category": "financial"
         },
         {
+          "id": "card_acc_micro_fin",
+          "title": "재무회계: 수익 및 자산",
+          "scope": "수익인식 5단계, 재고자산 저가법, 유형자산 재평가",
+          "badge": "재무회계",
+          "qbox": "재구매약정: 판매자가 콜옵션을 보유하면 금융협정으로 처리",
+          "module": "mod_acc_micro_fin",
+          "category": "financial"
+        },
+        {
           "id": "card_acc_consolidation",
           "title": "사업결합 및 연결회계",
           "scope": "영업권 산출, 단계적 취득, 내부거래 제거",
@@ -385,31 +388,6 @@
           "qbox": "국가: 유동/비유동 구분 vs 지자체: 자산 유형별 분류",
           "module": "mod_acc_govt",
           "category": "govt"
-        }
-      ]
-    },
-    "subject_accounting_deep": {
-      "id": "subject_accounting_deep",
-      "title": "회계학 기출 마스터",
-      "subtitle": "재무·고급·원가·정부회계 문항 보강",
-      "cards": [
-        {
-          "id": "card_acc_micro_fin",
-          "title": "재무회계: 수익 및 자산",
-          "scope": "수익인식 5단계, 재고자산 저가법, 유형자산 재평가",
-          "badge": "재무회계",
-          "qbox": "재구매약정: 판매자가 콜옵션을 보유하면 금융협정으로 처리",
-          "module": "mod_acc_micro_fin",
-          "category": "financial"
-        },
-        {
-          "id": "card_acc_advanced_deep",
-          "title": "고급회계: 사업결합 및 연결",
-          "scope": "영업권 산출, 단계적 취득, 지분법 회계처리",
-          "badge": "고급회계",
-          "qbox": "단계적 취득: 기존 지분을 취득일 공정가치로 재측정",
-          "module": "mod_acc_advanced_deep",
-          "category": "advanced"
         },
         {
           "id": "card_acc_cost_deep",
@@ -419,15 +397,6 @@
           "qbox": "품질원가: 예방·평가·내부실패·외부실패원가 분류",
           "module": "mod_acc_cost_deep",
           "category": "cost"
-        },
-        {
-          "id": "card_acc_govt_deep",
-          "title": "정부회계: 국가 및 지자체",
-          "scope": "재정상태표 분류, 수익인식기준, 유산자산 처리",
-          "badge": "정부회계",
-          "qbox": "국가: 유산자산은 자산 미인식, 주석 공시",
-          "module": "mod_acc_govt_deep",
-          "category": "govt"
         }
       ]
     }
@@ -1242,7 +1211,7 @@
         {
           "id": "t1",
           "label": "핵심이론",
-          "theoryNote": "### 1. 영업권(Goodwill) 산출\n- $영업권 = (이전대가 + 비지배지분 + 이전 보유지분 공정가치) - 식별가능한 순자산의 공정가치$.\n- 취득관련원가(중개수수료 등)는 발생 기간의 비용으로 처리함.\n\n### 2. 내부거래 제거\n- 지배기업과 종속기업 간 재고자산 매매 시 발생하는 **미실현이익**은 연결 결산 시 전액 제거함.",
+          "theoryNote": "### 1. 영업권(Goodwill) 산출\n- $영업권 = (이전대가 + 비지배지분 + 이전 보유지분 공정가치) - 식별가능한 순자산의 공정가치$.\n- 취득관련원가(중개수수료 등)는 발생 기간의 비용으로 처리함.\n\n### 2. 내부거래 제거\n- 지배기업과 종속기업 간 재고자산 매매 시 발생하는 **미실현이익**은 연결 결산 시 전액 제거함.\n\n## 기출지문\n\n### 1. 사업결합\n- **취득관련원가**: 중개수수료, 법률비용 등은 발생 기간에 비용으로 처리한다.\n- **잠정 금액**: 취득일 현재 가치평가가 미완료된 경우 잠정 금액으로 인식하며, 취득일로부터 1년 이내에 수정 가능하다.\n\n### 2. 지분법 회계\n- **미실현손익 제거**: 투자자와 관계기업 간의 하향/상향 거래에서 발생한 미실현손익 중 투자자의 지분 해당액은 제거한다.",
           "questions": [
             {
               "id": "q_acc_2016_1",
@@ -1253,6 +1222,11 @@
               "id": "q_acc_2022_26",
               "text": "취득일 현재 식별가능한 자산·부채의 공정가치가 명백하지 않은 경우 잠정 금액으로 인식하고 1년 이내에 조정할 수 있다. (O)",
               "src": "2022년 회계학 26번"
+            },
+            {
+              "id": "q_acc_2022_28",
+              "text": "지분법 적용 시 관계기업의 현금배당은 지분법투자주식의 장부금액에서 차감한다. (O)",
+              "src": "2022년 회계학 28번"
             }
           ]
         }
@@ -1267,7 +1241,7 @@
         {
           "id": "t1",
           "label": "핵심이론",
-          "theoryNote": "### 1. 국가회계기준\n- **자산 분류**: 유동자산, 투자자산, 일반유형자산, 사회기반시설, 무형자산, 기타비유동자산.\n- **수익 인식**: 국세수익은 고지 시점 또는 신고 납부 시점에 인식.\n\n### 2. 지자체 회계기준\n- **순자산 분류**: 고정순자산, 특정순자산, 일반순자산.\n- **특징**: '주민편의시설' 항목이 존재하며 지출원인행위 시점이 중요함.",
+          "theoryNote": "### 1. 국가회계기준\n- **자산 분류**: 유동자산, 투자자산, 일반유형자산, 사회기반시설, 무형자산, 기타비유동자산.\n- **수익 인식**: 국세수익은 고지 시점 또는 신고 납부 시점에 인식.\n\n### 2. 지자체 회계기준\n- **순자산 분류**: 고정순자산, 특정순자산, 일반순자산.\n- **특징**: '주민편의시설' 항목이 존재하며 지출원인행위 시점이 중요함.\n\n## 기출지문\n\n### 1. 자산/부채 인식\n- **유산자산(국가)**: 역사적 가치가 있는 자산으로 자산으로 인식하지 않고 주석으로 공시한다.\n- **관리책임자산(지자체)**: 도로, 공원 등은 자산으로 인식하지만 특정 항목은 필수보충정보로 공시한다.\n\n### 2. 수익인식\n- **신고납부 국세**: 납세의무자가 자진신고하는 때에 수익으로 인식한다.",
           "questions": [
             {
               "id": "q_acc_2019_36",
@@ -1287,7 +1261,7 @@
       "id": "mod_acc_micro_fin",
       "title": "재무회계 핵심 기출",
       "subtitle": "수익인식 및 자산평가",
-      "backTo": "#/detail/subject_accounting_deep",
+      "backTo": "#/detail/subject_accounting",
       "tabs": [
         {
           "id": "t1",
@@ -1309,36 +1283,11 @@
         }
       ]
     },
-    "mod_acc_advanced_deep": {
-      "id": "mod_acc_advanced_deep",
-      "title": "고급회계 심화",
-      "subtitle": "사업결합 및 지분법",
-      "backTo": "#/detail/subject_accounting_deep",
-      "tabs": [
-        {
-          "id": "t1",
-          "label": "기출지문",
-          "theoryNote": "### 1. 사업결합\n- **취득관련원가**: 중개수수료, 법률비용 등은 발생 기간에 비용으로 처리한다.\n- **잠정 금액**: 취득일 현재 가치평가가 미완료된 경우 잠정 금액으로 인식하며, 취득일로부터 1년 이내에 수정 가능하다.\n\n### 2. 지분법 회계\n- **미실현손익 제거**: 투자자와 관계기업 간의 하향/상향 거래에서 발생한 미실현손익 중 투자자의 지분 해당액은 제거한다.",
-          "questions": [
-            {
-              "id": "q_acc_2016_1",
-              "text": "단계적 사업결합 시 이전에 보유하던 지분을 취득일 공정가치로 재측정하여 발생하는 차손익은 당기손익으로 인식한다. (O)",
-              "src": "2016년 회계학 1번"
-            },
-            {
-              "id": "q_acc_2022_28",
-              "text": "지분법 적용 시 관계기업의 현금배당은 지분법투자주식의 장부금액에서 차감한다. (O)",
-              "src": "2022년 회계학 28번"
-            }
-          ]
-        }
-      ]
-    },
     "mod_acc_cost_deep": {
       "id": "mod_acc_cost_deep",
       "title": "원가관리회계 심화",
       "subtitle": "차이분석 및 품질원가",
-      "backTo": "#/detail/subject_accounting_deep",
+      "backTo": "#/detail/subject_accounting",
       "tabs": [
         {
           "id": "t1",
@@ -1358,31 +1307,52 @@
           ]
         }
       ]
-    },
-    "mod_acc_govt_deep": {
-      "id": "mod_acc_govt_deep",
-      "title": "정부회계 심화",
-      "subtitle": "국가 및 지자체 회계기준 비교",
-      "backTo": "#/detail/subject_accounting_deep",
-      "tabs": [
+    }
+  },
+  "dailyHistory": {
+    "2026-01-18": {
+      "totalSeconds": 0,
+      "slots": [
         {
-          "id": "t1",
-          "label": "기출지문",
-          "theoryNote": "### 1. 자산/부채 인식\n- **유산자산(국가)**: 역사적 가치가 있는 자산으로 자산으로 인식하지 않고 주석으로 공시한다.\n- **관리책임자산(지자체)**: 도로, 공원 등은 자산으로 인식하지만 특정 항목은 필수보충정보로 공시한다.\n\n### 2. 수익인식\n- **신고납부 국세**: 납세의무자가 자진신고하는 때에 수익으로 인식한다.",
-          "questions": [
+          "id": "s1",
+          "label": "오전 (09-12)",
+          "cardIds": [
             {
-              "id": "q_acc_2019_36",
-              "text": "국가회계에서 사회기반시설 중 감가상각을 하지 않는 경우 유지비용을 감가상각비로 대체할 수 있다. (O)",
-              "src": "2019년 회계학 36번"
+              "type": "theory",
+              "id": "t1",
+              "pid": "mod_mgt_motivation",
+              "time": 0,
+              "isRunning": false,
+              "done": false,
+              "originStr": "%7B%22page%22%3A%22module%22%2C%22id%22%3A%22mod_mgt_motivation%22%7D"
             },
             {
-              "id": "q_acc_2023_40",
-              "text": "지방자치단체 회계에서 기부채납으로 받은 자산의 가액은 수익에 포함하지 않고 순자산의 증가로 처리한다. (O)",
-              "src": "2023년 회계학 40번"
+              "type": "question",
+              "id": "q_mgt_2024_3",
+              "pid": "mod_mgt_motivation",
+              "time": 0,
+              "isRunning": false,
+              "done": false,
+              "originStr": "%7B%22page%22%3A%22module%22%2C%22id%22%3A%22mod_mgt_motivation%22%7D"
+            },
+            {
+              "type": "question",
+              "id": "q_mgt_2016_2",
+              "pid": "mod_mgt_motivation",
+              "time": 0,
+              "isRunning": false,
+              "done": false,
+              "originStr": "%7B%22page%22%3A%22module%22%2C%22id%22%3A%22mod_mgt_motivation%22%7D"
             }
           ]
+        },
+        {
+          "id": "s2",
+          "label": "오후 (13-18)",
+          "cardIds": []
         }
-      ]
+      ],
+      "goalStr": "00:00:00"
     }
   }
 }
