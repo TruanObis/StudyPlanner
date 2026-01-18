@@ -278,27 +278,6 @@
   
 textarea.autogrow{ resize: vertical; overflow:hidden; }
 
-    /* === Mobile UI fixes ===
-       - Keep modals within viewport.
-       - Avoid overlap between the fixed menu button (≡) and the sticky header/back button.
-    */
-    @media (max-width: 520px){
-      /* Modal: avoid being pushed off-screen */
-      .modal-overlay{ overflow-y: auto; align-items: flex-start; justify-content: center; padding: 16px 12px; }
-      .modal{ width: 100%; max-width: 100%; border-radius: 16px; max-height: calc(100vh - 32px); }
-      #selectorModal .modal{ height: auto !important; max-height: calc(100vh - 32px) !important; }
-
-      /* Sticky header: keep it below fixed top-left buttons */
-      .sticky-header{ top: 64px; }
-
-      /* Slightly tighten fixed buttons on small screens */
-      .global-menu-btn{ top: 12px; left: 12px; width: 38px; height: 38px; border-radius: 12px; }
-      .theme-btn{ top: 12px; left: 58px; width: 38px; height: 38px; border-radius: 12px; }
-      body.sidebar-active .global-menu-btn{ left: calc(var(--sidebar-width) + 12px); }
-      body.sidebar-active .theme-btn{ left: calc(var(--sidebar-width) + 58px); }
-      .dday-fixed{ top: 12px; right: 12px; }
-    }
-
 </style>
 </head>
 <body>
@@ -390,7 +369,7 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
       <h2 style="margin:0; font-size:1.3rem;">카드 선택</h2>
       <button class="btn btn-outline" onclick="closeSelectorModal()">✕</button>
     </div>
-    <div style="background:var(--bg); padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid var(--line);">
+    <div id="adhocBox" style="background:var(--bg); padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid var(--line);">
       <label style="font-size:0.8rem; font-weight:700; color:var(--text-sub); display:block; margin-bottom:4px;">직접 입력 추가 (Ad-hoc)</label>
       <div style="display:flex; gap:5px;">
         <input type="text" id="adhocInput" placeholder="예: 방 청소하기, 영단어 암기" style="flex:1; padding:8px; border:1px solid var(--line); border-radius:6px;">
@@ -417,6 +396,9 @@ const THEME_KEY = 'universal_planner_theme';
 const APP = document.getElementById('app');
 const ERR_SCREEN = document.getElementById('error-screen');
 let VIEW_DATE = null;
+let HOME_BADGE_FILTER = 'all';
+let selectorMode = 'add'; // 'add' | 'move_detail' | 'move_question'
+let moveState = null;
 let editState = null;
 let selectorState = { date: null, slotIdx: null, stack: [] };
 let ticker = null;
@@ -765,6 +747,11 @@ function getRoute() {
 
 function renderRouter(keepScroll = false) { router(keepScroll); }
 
+
+function getSubjectById(sid){
+  return (DATA.home && Array.isArray(DATA.home.subjects)) ? DATA.home.subjects.find(s=>s.id===sid) : null;
+}
+
 function router(keepScroll = false) {
   const route = getRoute();
   const savedScroll = window.scrollY;
@@ -772,7 +759,14 @@ function router(keepScroll = false) {
 
   try {
     if (route.page === 'detail' && route.id && !DATA.details[route.id]) {
-      DATA.details[route.id] = { id: route.id, title: "새 과목", subtitle: "", cards: [] };
+      const sub = getSubjectById(route.id);
+      DATA.details[route.id] = { id: route.id, title: (sub && sub.name) ? sub.name : "새 과목", subtitle: "", cards: [] };
+    } else if (route.page === 'detail' && route.id && DATA.details[route.id]) {
+      // Backward-compat: if a placeholder title was used earlier, sync it once to the subject name.
+      const sub = getSubjectById(route.id);
+      if (sub && sub.name && (!DATA.details[route.id].title || DATA.details[route.id].title === '새 과목')) {
+        DATA.details[route.id].title = sub.name;
+      }
     }
     if (route.page === 'module' && route.id && !DATA.modules[route.id]) {
       DATA.modules[route.id] = { id: route.id, title: "모듈", subtitle: "", backTo: "#/", tabs: [{ id: "t1", label: "이론", questions: [], time:0, done:false, isRunning:false }] };
@@ -927,6 +921,8 @@ function renderStickyHeader(label, pct, time) {
 function renderHome() {
   const totalStats = calcTotalStats();
   const ddays = DATA.home.dDays || [];
+  const homeBadges = [...new Set((DATA.home.subjects||[]).map(s=>String(s.badge||'').trim()).filter(b=>b))];
+  const homeFiltered = (HOME_BADGE_FILTER==='all') ? (DATA.home.subjects||[]) : (DATA.home.subjects||[]).filter(s=>badgeTags(s.badge).includes(HOME_BADGE_FILTER) || String(s.badge||'').trim()===HOME_BADGE_FILTER);
   APP.style.display = '';
   ERR_SCREEN.style.display = 'none';
 
@@ -947,12 +943,18 @@ function renderHome() {
 
     ${renderStickyHeader('전체 진행률', totalStats.pct, totalStats.timeStr)}
 
+    <div class="tabs" style="margin-top:10px; margin-bottom:10px;">
+      <button class="tab-btn ${HOME_BADGE_FILTER==='all'?'active':''}" onclick="setHomeBadgeFilter('all',this)">전체</button>
+      ${homeBadges.map(b=>`<button class="tab-btn ${HOME_BADGE_FILTER===b?'active':''}" onclick="setHomeBadgeFilter('${b}',this)">${b}</button>`).join('')}
+    </div>
+
     <div class="grid" id="homeGrid">
-      ${DATA.home.subjects.map((sub, idx) => {
+      ${homeFiltered.map((sub, idx) => {
+        const realIdx = (DATA.home.subjects||[]).findIndex(x=>x.id===sub.id);
         const dStats = calcSubjectStats(sub.id);
         const cards = DATA.details[sub.id] ? DATA.details[sub.id].cards : [];
         return `
-        <div class="card" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" data-index="${idx}">
+        <div class="card" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'home',null,${realIdx})" data-index="${realIdx}">
           <div class="card-top">
             <div style="display:flex; align-items:center; gap:8px;">
               <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" title="드래그하여 시간표로">⋮⋮</span>
@@ -960,9 +962,9 @@ function renderHome() {
             </div>
             <div class="card-actions">
 
-              <button class="btn btn-icon" onclick="duplicateSubject(${idx});event.stopPropagation()">📑</button>
-              <button class="btn btn-icon" onclick="openEditModal('subject','home',${idx});event.stopPropagation()">✏️</button>
-              <button class="btn btn-icon btn-danger" onclick="deleteCard('subject','home',${idx});event.stopPropagation()">🗑</button>
+              <button class="btn btn-icon" onclick="duplicateSubject(${realIdx});event.stopPropagation()">📑</button>
+              <button class="btn btn-icon" onclick="openEditModal('subject','home',${realIdx});event.stopPropagation()">✏️</button>
+              <button class="btn btn-icon btn-danger" onclick="deleteCard('subject','home',${realIdx});event.stopPropagation()">🗑</button>
             </div>
           </div>
           <h3 style="cursor:pointer;" onclick="location.hash='#/detail/${sub.id}'">${sub.name||'(제목 없음)'}</h3>
@@ -1000,6 +1002,11 @@ function renderHome() {
       <div class="card ghost-card flex-center" onclick="openAddModal('subject','home')"><div class="ghost-plus">+</div></div>
     </div>
   `;
+}
+
+function setHomeBadgeFilter(badge, btn){
+  HOME_BADGE_FILTER = badge || 'all';
+  renderHome();
 }
 
 function renderDetail(sid) {
@@ -1093,6 +1100,7 @@ function renderModule(mid) {
 function renderCardItem(item, level, pid, idx, tabId) {
   const isMod = level==='module';
   const sid = item.id || (level+'-'+pid+'-'+idx);
+  const tabSafe = tabId || '';
 
   const dragStartCode = isMod
     ? `handleDragStart(event, 'question', '${item.id}', '${pid}')`
@@ -1112,7 +1120,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
         <input type="checkbox" ${t.done?'checked':''}
           onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
           onchange="toggleSubItem('${item.module}','theory','${t.id}',null,this.checked)">
-        <span onclick="location.hash='#/module/${item.module}?focus=theory-${item.module}-${t.id}';event.stopPropagation()">${t.label} (이론)</span>
+        <span onclick="location.hash='#/module/${item.module}?focus=theory-${item.module}-${t.id}';event.stopPropagation()">📌 ${t.label}</span>
       </div>`;
 
       (t.questions||[]).forEach((q,qi) => {
@@ -1129,22 +1137,23 @@ function renderCardItem(item, level, pid, idx, tabId) {
   }
 
   return `
-    <div class="card ${!isMod&&item.module?'clickable':''}" draggable="true" ondragstart="${dragStartCode}" data-index="${idx}" id="card-${sid}">
+    <div class="card ${!isMod&&item.module?'clickable':''}" data-index="${idx}" id="card-${sid}" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'${level}','${pid}',${idx},'${tabSafe}')">
       <div class="card-top">
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="drag-handle" draggable="true" ondragstart="${dragStartCode}" title="드래그하여 시간표로">⋮⋮</span>
           <span class="badge">${isMod?(item.src||'문항'):(item.badge||'Topic')}</span>
         </div>
         <div class="card-actions">
+          ${level==='detail' ? `<button class="btn btn-icon" title="다른 과목으로 이동" onclick="openMoveDetailCard('${pid}',${idx});event.stopPropagation()">↪</button>` : ''}
+          ${isMod ? `<button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveQuestion('${pid}','${tabSafe}',${idx});event.stopPropagation()">↪</button>` : ''}
 
-          
           <button class="btn btn-icon" onclick="duplicateCard('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">📑</button>
           <button class="btn btn-icon" onclick="(('${level}'==='detail')?openEditModal('detail','${pid}',${idx}):openEditModal('module','${pid}',${idx},'${tabId}'));event.stopPropagation()">✏️</button>
           <button class="btn btn-icon btn-danger" onclick="(('${level}'==='detail')?deleteCard('detail','${pid}',${idx}):deleteCard('module','${pid}',${idx},'${tabId}'));event.stopPropagation()">🗑</button>
         </div>
       </div>
 
-      <div onclick="${!isMod&&item.module?`location.hash='#/module/${item.module}'`:''}">
+      <div onclick="${level==='detail' ? `onDetailCardClick('${pid}',${idx})` : (!isMod&&item.module?`location.hash='#/module/${item.module}'`:'')}">
         ${isMod
           ? `<div class="md-content" style="font-weight:600;font-size:1.05rem;">${marked.parse(item.text||'')}</div>`
           : `<h3>${item.title||'(무제)'}</h3><p>${item.scope||''}</p>`
@@ -1181,6 +1190,81 @@ function renderCardItem(item, level, pid, idx, tabId) {
         </div>
       </div>
     </div>`;
+}
+
+
+
+function onDetailCardClick(sid, idx){
+  try{
+    const d = DATA.details?.[sid];
+    if(!d || !Array.isArray(d.cards)) return;
+    const card = d.cards[idx];
+    if(!card) return;
+
+    // legacy field name
+    if(card.moduleId && !card.module) card.module = card.moduleId;
+
+    // create module on first click
+    if(!card.module){
+      const mid = uid('m');
+      const tid = uid('t');
+      DATA.modules[mid] = {
+        id: mid,
+        title: (card.title || d.title || '모듈'),
+        subtitle: '',
+        backTo: `#/detail/${sid}`,
+        activeTab: tid,
+        tabs: [{ id: tid, label: '이론', theoryNote: '', questions: [], time:0, done:false, isRunning:false }]
+      };
+      card.module = mid;
+      saveData();
+      rebuildIndex();
+    }
+
+    // safety: if module ref exists but module data missing
+    const mid = String(card.module);
+    if(!DATA.modules?.[mid]){
+      const tid = uid('t');
+      DATA.modules[mid] = {
+        id: mid,
+        title: (card.title || d.title || '모듈'),
+        subtitle: '',
+        backTo: `#/detail/${sid}`,
+        activeTab: tid,
+        tabs: [{ id: tid, label: '이론', theoryNote: '', questions: [], time:0, done:false, isRunning:false }]
+      };
+      saveData();
+      rebuildIndex();
+    }
+
+    // keep a correct back link
+    if(DATA.modules[mid]) DATA.modules[mid].backTo = `#/detail/${sid}`;
+
+    // If this module was just auto-created earlier with subject title, fix to card title (only when blank/new)
+    const mod = DATA.modules?.[mid];
+    const wantTitle = (card.title || '').trim();
+    if(mod && wantTitle){
+      const isBlank = (()=>{
+        try{
+          const tabs = mod.tabs||[];
+          if(tabs.length!==1) return false;
+          const t = tabs[0]||{};
+          const q = t.questions||[];
+          const note = (t.theoryNote||'').trim();
+          const time = Number(mod.time||0) + Number(t.time||0);
+          return q.length===0 && !note && time===0
+        }catch(e){ return false; }
+      })();
+      if(isBlank && (mod.title||'') === (d.title||'')) {
+        mod.title = wantTitle;
+        saveData();
+      }
+    }
+
+    location.hash = `#/module/${mid}`;
+  }catch(e){
+    console.error(e);
+  }
 }
 
 /* =========================
@@ -1481,15 +1565,99 @@ function handleDragStart(ev, type, id, pid) {
   const r = getRoute();
   const origin = { page: r.page || 'home', id: r.id || null };
   const originStr = encodeURIComponent(JSON.stringify(origin));
-  ev.dataTransfer.setData("application/json", JSON.stringify({
+
+  const cardEl = ev.target && ev.target.closest ? ev.target.closest('.card') : null;
+  const idx = (cardEl && cardEl.dataset && cardEl.dataset.index !== undefined) ? parseInt(cardEl.dataset.index, 10) : null;
+  let tabId = null;
+  if(origin.page === 'module'){
+    const mod = DATA.modules?.[origin.id];
+    tabId = mod?.activeTab || (mod?.tabs?.[0]?.id || null);
+  }
+
+  ev.dataTransfer.effectAllowed = 'move';
+  ev.dataTransfer.setData('application/json', JSON.stringify({
     source:'main', type, id, pid,
-    originStr
+    originStr,
+    reorder: { page: origin.page, pid: origin.id, idx, tabId }
   }));
 }
 
 function handleSidebarDragStart(ev, sIdx, cIdx) {
   ev.dataTransfer.setData("application/json", JSON.stringify({ source:'sidebar', sIdx, cIdx }));
 }
+
+
+function handleReorderOver(ev){
+  ev.preventDefault();
+  if(ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+}
+
+function __moveInArray(arr, fromIdx, toIdx){
+  if(!Array.isArray(arr)) return;
+  const n = arr.length;
+  if(fromIdx<0 || fromIdx>=n || toIdx<0 || toIdx>=n || fromIdx===toIdx) return;
+  const [it] = arr.splice(fromIdx, 1);
+  arr.splice(toIdx, 0, it);
+}
+
+function handleReorderDrop(ev, listType, pid, targetIdx, tabId){
+  ev.preventDefault();
+  ev.stopPropagation();
+
+  const raw = ev.dataTransfer.getData('application/json');
+  if(!raw) return;
+  let data;
+  try{ data = JSON.parse(raw); }catch(e){ return; }
+  if(!data || data.source !== 'main' || !data.reorder) return;
+
+  const fromIdx = data.reorder.idx;
+  const fromPage = data.reorder.page;
+  const fromPid = data.reorder.pid;
+  const fromTab = data.reorder.tabId || '';
+
+  // Home subjects reorder
+  if(listType==='home'){
+    if(data.type !== 'subject' || fromPage !== 'home') return;
+    const arr = DATA.home.subjects || [];
+    __moveInArray(arr, fromIdx, targetIdx);
+    saveData();
+    renderHome();
+    renderDailySidebar();
+    return;
+  }
+
+  // Detail cards reorder
+  if(listType==='detail'){
+    if(data.type !== 'detail' || fromPage !== 'detail') return;
+    if(String(fromPid) !== String(pid)) return;
+    const arr = DATA.details?.[pid]?.cards || [];
+    __moveInArray(arr, fromIdx, targetIdx);
+    saveData();
+    renderDetail(pid);
+    renderDailySidebar();
+    return;
+  }
+
+  // Module questions reorder (active tab only)
+  if(listType==='module'){
+    if(data.type !== 'question' || fromPage !== 'module') return;
+    if(String(data.pid) !== String(pid)) return;
+    const mod = DATA.modules?.[pid];
+    if(!mod) return;
+    const active = tabId || mod.activeTab || (mod.tabs[0] && mod.tabs[0].id);
+    if(String(fromTab) !== String(active)) return;
+    const tab = mod.tabs.find(t=>t.id===active) || mod.tabs[0];
+    const arr = tab.questions || [];
+    __moveInArray(arr, fromIdx, targetIdx);
+    saveData();
+    renderModule(pid);
+    renderDailySidebar();
+    return;
+  }
+}
+
+
+
 
 function dropOnCard(ev, date, targetSlotIdx, targetCardIdx){
   ev.preventDefault();
@@ -2844,12 +3012,14 @@ function exportAnki(mid){
    SELECTOR MODAL
 ========================= */
 function openSlotSelector(date, sIdx) {
+  selectorMode = 'add';
+  moveState = null;
   selectorState = { date, slotIdx: sIdx, stack: [{level:'root', id:null, title:'과목 선택'}] };
   document.getElementById('selectorModal').style.display = 'flex';
   document.getElementById('adhocInput').value = '';
   renderSelectorUI();
 }
-function closeSelectorModal() { document.getElementById('selectorModal').style.display = 'none'; }
+function closeSelectorModal() { document.getElementById('selectorModal').style.display = 'none'; selectorMode='add'; moveState=null; }
 function selectorGoBack() { if(selectorState.stack.length > 1) { selectorState.stack.pop(); renderSelectorUI(); } }
 function addAdhocCard() {
   const val = document.getElementById('adhocInput').value;
@@ -2863,28 +3033,59 @@ function renderSelectorUI() {
         crumbEl = document.getElementById('selBreadcrumb'),
         backBtn = document.getElementById('selBackBtn');
 
+  const adhocBox = document.getElementById('adhocBox');
+  if(adhocBox) adhocBox.style.display = (selectorMode === 'add') ? 'block' : 'none';
+
   listEl.innerHTML = '';
-  const current = selectorState.stack[selectorState.stack.length-1];
-  crumbEl.innerText = current.title;
+  const current = selectorState.stack[selectorState.stack.length-1] || { level:'root', id:null, title:'과목 선택' };
+  crumbEl.innerText = current.title || '';
   backBtn.style.display = selectorState.stack.length > 1 ? 'block' : 'none';
 
+  // === ROOT: choose subject ===
   if(current.level === 'root') {
-    (DATA.home.subjects||[]).forEach(sub => {
-      listEl.innerHTML += `
-        <li class="sel-item">
-          <span class="sel-label" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">${sub.name}</span>
-          <span class="sel-next" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">하위 보기 ></span>
-          <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorAdd(event,'subject','${sub.id}')">추가</button>
-        </li>`;
-    });
-    if((DATA.home.subjects||[]).length===0){
+    const subs = (DATA.home.subjects||[]);
+    if(subs.length===0){
       listEl.innerHTML = '<li style="padding:20px;text-align:center;">과목이 없습니다. 홈에서 과목을 먼저 추가하세요.</li>';
+      return;
     }
+
+    subs.forEach(sub => {
+      if(selectorMode === 'add'){
+        listEl.innerHTML += `
+          <li class="sel-item">
+            <span class="sel-label" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">${sub.name}</span>
+            <span class="sel-next" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">하위 보기 ></span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorAdd(event,'subject','${sub.id}')">추가</button>
+          </li>`;
+      }
+      else if(selectorMode === 'move_detail'){
+        listEl.innerHTML += `
+          <li class="sel-item">
+            <span class="sel-label" onclick="selectorMoveDetail('${sub.id}')">${sub.name}</span>
+            <span class="sel-next"></span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorMoveDetail('${sub.id}');event.stopPropagation()">이동</button>
+          </li>`;
+      }
+      else if(selectorMode === 'move_question'){
+        listEl.innerHTML += `
+          <li class="sel-item">
+            <span class="sel-label" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">${sub.name}</span>
+            <span class="sel-next" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">주제 선택 ></span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}');event.stopPropagation()">다음</button>
+          </li>`;
+      }
+    });
+    return;
   }
-  else if(current.level === 'subject') {
+
+  // === SUBJECT: choose detail card ===
+  if(current.level === 'subject') {
     const detail = DATA.details[current.id];
-    if(detail && (detail.cards||[]).length > 0) {
-      detail.cards.forEach(c => {
+    const cards = (detail && detail.cards) ? detail.cards : [];
+
+    if(selectorMode === 'add'){
+      if(cards.length===0){ listEl.innerHTML = '<li style="padding:20px;text-align:center;">비어있음</li>'; return; }
+      cards.forEach(c => {
         const hasMod = c.module && DATA.modules[c.module];
         listEl.innerHTML += `
           <li class="sel-item">
@@ -2893,13 +3094,36 @@ function renderSelectorUI() {
             <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorAdd(event,'detail','${c.id}','${current.id}')">추가</button>
           </li>`;
       });
-    } else {
-      listEl.innerHTML = '<li style="padding:20px;text-align:center;">비어있음</li>';
+      return;
     }
+
+    if(selectorMode === 'move_question'){
+      const movable = cards.filter(c => c.module && DATA.modules[c.module]);
+      if(movable.length===0){
+        listEl.innerHTML = '<li style="padding:20px;text-align:center;">이동 가능한 모듈(주제)이 없습니다.</li>';
+        return;
+      }
+      movable.forEach(c => {
+        listEl.innerHTML += `
+          <li class="sel-item">
+            <span class="sel-label" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}')">${c.title}</span>
+            <span class="sel-next" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}')">탭 선택 ></span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}');event.stopPropagation()">선택</button>
+          </li>`;
+      });
+      return;
+    }
+
+    listEl.innerHTML = '<li style="padding:20px;text-align:center;">지원되지 않는 동작입니다.</li>';
+    return;
   }
-  else if(current.level === 'detail') {
+
+  // === DETAIL: choose tab / question ===
+  if(current.level === 'detail') {
     const mod = DATA.modules[current.id];
-    if(mod) {
+    if(!mod){ listEl.innerHTML = '<li style="padding:20px;text-align:center;">모듈을 찾을 수 없습니다.</li>'; return; }
+
+    if(selectorMode === 'add'){
       mod.tabs.forEach(t => {
         listEl.innerHTML += `
           <li class="sel-item" style="background:rgba(255,255,0,0.1)">
@@ -2914,13 +3138,132 @@ function renderSelectorUI() {
             </li>`;
         });
       });
+      return;
     }
+
+    if(selectorMode === 'move_question'){
+      mod.tabs.forEach(t => {
+        listEl.innerHTML += `
+          <li class="sel-item" style="background:rgba(59,130,246,0.08)">
+            <span class="sel-label">📌 ${t.label}</span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorMoveQuestion('${mod.id}','${t.id}')">여기로 이동</button>
+          </li>`;
+      });
+      return;
+    }
+
+    listEl.innerHTML = '<li style="padding:20px;text-align:center;">지원되지 않는 동작입니다.</li>';
+    return;
   }
 }
 
 function selectorDrillDown(lvl, id, tit, extra) {
   selectorState.stack.push({ level: lvl, id: id, title: tit, pid: extra });
   renderSelectorUI();
+}
+
+
+function __updateDailyRefs(pred, mut){
+  const dh = DATA.dailyHistory || {};
+  for(const date of Object.keys(dh)){
+    const daily = dh[date];
+    if(!daily || !Array.isArray(daily.slots)) continue;
+    for(const slot of daily.slots){
+      if(!slot || !Array.isArray(slot.cardIds)) continue;
+      for(const ref of slot.cardIds){
+        if(ref && pred(ref)) mut(ref);
+      }
+    }
+  }
+}
+
+function openMoveDetailCard(fromSid, fromIdx){
+  selectorMode = 'move_detail';
+  moveState = { fromSid, fromIdx };
+  selectorState = { date: null, slotIdx: null, stack: [{level:'root', id:null, title:'이동할 과목 선택'}] };
+  document.getElementById('selectorModal').style.display = 'flex';
+  renderSelectorUI();
+}
+
+function selectorMoveDetail(targetSid){
+  if(!moveState || !moveState.fromSid || moveState.fromIdx == null) return;
+  const fromSid = moveState.fromSid;
+  const fromIdx = moveState.fromIdx;
+  if(String(targetSid) === String(fromSid)) return;
+
+  const fromDetail = DATA.details?.[fromSid];
+  if(!fromDetail || !Array.isArray(fromDetail.cards)) return;
+  const card = fromDetail.cards.splice(fromIdx, 1)[0];
+  if(!card) return;
+
+  if(!DATA.details[targetSid]) DATA.details[targetSid] = { id: targetSid, cards: [] };
+  if(!Array.isArray(DATA.details[targetSid].cards)) DATA.details[targetSid].cards = [];
+  DATA.details[targetSid].cards.push(card);
+
+  // Update module back reference if exists
+  if(card.module && DATA.modules?.[card.module]){
+    DATA.modules[card.module].backTo = `#/detail/${targetSid}`;
+  }
+
+  // Update timetable refs (detail)
+  __updateDailyRefs(
+    ref => (ref.type==='detail' && ref.id===card.id && String(ref.pid)===String(fromSid)),
+    ref => { ref.pid = targetSid; }
+  );
+
+  saveData();
+  closeSelectorModal();
+
+  const r = getRoute();
+  if(r.page==='detail') renderDetail(r.id);
+  else renderRouter(true);
+  renderDailySidebar();
+}
+
+function openMoveQuestion(fromMid, fromTabId, fromQIdx){
+  selectorMode = 'move_question';
+  moveState = { fromMid, fromTabId, fromQIdx };
+  selectorState = { date: null, slotIdx: null, stack: [{level:'root', id:null, title:'이동할 과목 선택'}] };
+  document.getElementById('selectorModal').style.display = 'flex';
+  renderSelectorUI();
+}
+
+function selectorMoveQuestion(destMid, destTabId){
+  if(!moveState || !moveState.fromMid) return;
+  const fromMid = moveState.fromMid;
+  const fromTabId = moveState.fromTabId;
+  const fromQIdx = moveState.fromQIdx;
+
+  if(String(destMid)===String(fromMid) && String(destTabId||'')===String(fromTabId||'')) return;
+
+  const srcMod = DATA.modules?.[fromMid];
+  const dstMod = DATA.modules?.[destMid];
+  if(!srcMod || !dstMod) return;
+
+  const srcTab = srcMod.tabs.find(t=>t.id===fromTabId) || srcMod.tabs[0];
+  const dstTab = dstMod.tabs.find(t=>t.id===destTabId) || dstMod.tabs[0];
+  if(!srcTab || !dstTab) return;
+
+  if(!Array.isArray(srcTab.questions)) srcTab.questions = [];
+  if(!Array.isArray(dstTab.questions)) dstTab.questions = [];
+
+  const q = srcTab.questions.splice(fromQIdx, 1)[0];
+  if(!q) return;
+  dstTab.questions.push(q);
+
+  // Update timetable refs (question)
+  __updateDailyRefs(
+    ref => (ref.type==='question' && ref.id===q.id && String(ref.pid)===String(fromMid)),
+    ref => { ref.pid = destMid; }
+  );
+
+  saveData();
+  closeSelectorModal();
+
+  const r = getRoute();
+  if(r.page==='module') renderModule(r.id);
+  else renderRouter(true);
+  renderDailySidebar();
 }
 
 
