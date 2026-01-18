@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Universal Master Planner V2.0 (Timetable)</title>
+  <title>Universal Master Planner V2.6 (Stable & Clean)</title>
 
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -277,6 +277,27 @@
 
   
 textarea.autogrow{ resize: vertical; overflow:hidden; }
+
+    /* === Mobile UI fixes ===
+       - Keep modals within viewport.
+       - Avoid overlap between the fixed menu button (≡) and the sticky header/back button.
+    */
+    @media (max-width: 520px){
+      /* Modal: avoid being pushed off-screen */
+      .modal-overlay{ overflow-y: auto; align-items: flex-start; justify-content: center; padding: 16px 12px; }
+      .modal{ width: 100%; max-width: 100%; border-radius: 16px; max-height: calc(100vh - 32px); }
+      #selectorModal .modal{ height: auto !important; max-height: calc(100vh - 32px) !important; }
+
+      /* Sticky header: keep it below fixed top-left buttons */
+      .sticky-header{ top: 64px; }
+
+      /* Slightly tighten fixed buttons on small screens */
+      .global-menu-btn{ top: 12px; left: 12px; width: 38px; height: 38px; border-radius: 12px; }
+      .theme-btn{ top: 12px; left: 58px; width: 38px; height: 38px; border-radius: 12px; }
+      body.sidebar-active .global-menu-btn{ left: calc(var(--sidebar-width) + 12px); }
+      body.sidebar-active .theme-btn{ left: calc(var(--sidebar-width) + 58px); }
+      .dday-fixed{ top: 12px; right: 12px; }
+    }
 
 </style>
 </head>
