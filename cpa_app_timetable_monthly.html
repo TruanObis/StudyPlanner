@@ -1,0 +1,3496 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Universal Master Planner V2.0 (Timetable)</title>
+
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+  <style>
+    :root {
+      --primary: #2563eb; --accent: #f59e0b;
+      --bg: #f8fafc; --card-bg: #ffffff;
+      --text: #1e293b; --text-sub: #64748b;
+      --line: #e2e8f0; --input-bg: #ffffff;
+      --success: #16a34a; --danger: #ef4444;
+      --header-bg: rgba(255,255,255,0.95);
+      --shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+      --radius: 16px;
+      --sidebar-width: 420px;
+    }
+
+    [data-theme="dark"] {
+      --primary: #3b82f6; --accent: #fbbf24;
+      --bg: #0f172a; --card-bg: #1e293b;
+      --text: #f1f5f9; --text-sub: #94a3b8;
+      --line: #334155; --input-bg: #020617;
+      --success: #22c55e; --danger: #f87171;
+      --header-bg: rgba(30, 41, 59, 0.95);
+      --shadow: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -1px rgba(0,0,0,0.2);
+    }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    [data-theme="dark"] ::-webkit-scrollbar-thumb { background: #475569; }
+    [data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Pretendard', sans-serif; background: var(--bg); color: var(--text);
+      margin: 0; padding: 0; line-height: 1.6;
+      transition: background 0.3s, color 0.3s, padding-left 0.3s ease;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px 20px 100px 20px; }
+
+    #error-screen {
+      position: fixed; inset: 0; background: var(--bg); z-index: 9999;
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      padding: 20px; text-align: center; color: var(--danger);
+    }
+
+    .hidden { display: none !important; }
+    .flex-center { display: flex; align-items: center; justify-content: center; }
+    .flex-between { display: flex; align-items: center; justify-content: space-between; }
+
+    .btn { cursor: pointer; border: none; border-radius: 6px; font-weight: 700; transition: 0.2s; padding: 6px 12px; font-size: 0.85rem;}
+    .btn:hover { opacity: 0.8; transform: translateY(-1px); }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-outline { background: var(--card-bg); border: 1px solid var(--line); color: var(--text); }
+    .btn-icon { background: transparent; padding: 4px; font-size: 1.1rem; color: var(--text-sub); }
+    .btn-icon:hover { color: var(--primary); background: rgba(128,128,128,0.1); border-radius: 4px; }
+    .btn-danger:hover { color: var(--danger); background: rgba(239, 68, 68, 0.1); }
+
+    .global-menu-btn {
+      position: fixed; top: 20px; left: 20px; z-index: 900;
+      width: 40px; height: 40px; border-radius: 12px;
+      background: var(--card-bg); border: 1px solid var(--line);
+      font-size: 1.5rem; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; box-shadow: var(--shadow); color: var(--text);
+      transition: 0.2s;
+    }
+    .global-menu-btn:hover { background: var(--primary); color: white; border-color: var(--primary); }
+    body.sidebar-active .global-menu-btn { left: calc(var(--sidebar-width) + 20px); }
+
+    .theme-btn {
+      position: fixed; top: 20px; left: 72px; z-index: 900;
+      width: 40px; height: 40px; border-radius: 12px;
+      background: var(--card-bg); border: 1px solid var(--line);
+      font-size: 1.2rem; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; box-shadow: var(--shadow); color: var(--text);
+      transition: 0.2s;
+    }
+    .theme-btn:hover { background: var(--primary); color: white; border-color: var(--primary); }
+    body.sidebar-active .theme-btn { left: calc(var(--sidebar-width) + 72px); }
+
+    .dday-wrapper { position: absolute; top: 0; right: 0; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; z-index: 10; }
+    .dday-badge {
+      background: #1e293b; color: white; padding: 6px 12px; border-radius: 20px;
+      font-size: 0.85rem; font-weight: 700; box-shadow: var(--shadow);
+      cursor: pointer; transition: 0.2s; display: flex; gap: 8px; align-items: center;
+    }
+    .dday-badge:hover { transform: translateY(-2px); background: var(--primary); }
+    .dday-count { color: var(--accent); font-weight: 800; }
+
+    .sticky-header {
+      position: sticky; top: 10px; z-index: 100;
+      background: var(--header-bg); backdrop-filter: blur(8px);
+      border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 12px 20px; margin-bottom: 24px; box-shadow: var(--shadow);
+      display: flex; gap: 15px; flex-wrap: wrap; align-items: center;
+    }
+    .prog-wrap { flex: 1; min-width: 200px; }
+    .prog-bar { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; margin-bottom: 4px;}
+    .prog-fill { height: 100%; background: var(--success); width: 0%; transition: width 0.3s ease; }
+    .prog-text { font-size: 0.85rem; color: var(--text-sub); font-weight: 600; display: flex; justify-content: space-between; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
+    .card {
+      background: var(--card-bg); border-radius: var(--radius); border: 1px solid var(--line);
+      padding: 20px; box-shadow: var(--shadow); position: relative;
+      display: flex; flex-direction: column; transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+    .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; min-height: 32px; }
+    .card-actions { display: flex; gap: 2px; opacity: 0; transition: opacity 0.2s; }
+    .card:hover .card-actions { opacity: 1; }
+    .badge { background: rgba(37, 99, 235, 0.1); color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; }
+    h3 { margin: 0 0 5px 0; font-size: 1.25rem; color: var(--text); display:flex; align-items:center; gap:8px; }
+    .editable:hover { text-decoration: underline; text-decoration-style: dashed; text-underline-offset: 4px; cursor: pointer; color: var(--primary); }
+
+    .sub-list { margin-top: 15px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 0.9rem; color: var(--text-sub); }
+    .sub-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .sub-item input { accent-color: var(--success); cursor: pointer; transform: scale(1.1); position: relative; z-index: 2; }
+    .sub-item span { cursor: pointer; transition:0.2s; }
+    .sub-item span:hover { color: var(--primary); text-decoration: underline; }
+
+    .timer-box { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+    .timer-display { font-family: 'Courier New', monospace; font-weight: 800; font-size: 1.1rem; color: var(--text); min-width:90px; text-align:center;}
+    .chk-wrap { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 0.9rem; color: var(--text-sub); cursor: pointer; }
+    .chk-wrap input { width: 18px; height: 18px; accent-color: var(--success); cursor: pointer; position: relative; z-index: 2; }
+
+    .ghost-card { border: 2px dashed var(--line); background: transparent; box-shadow: none; min-height: 150px; cursor: pointer; color: var(--text-sub); transition: 0.2s; }
+    .ghost-card:hover { border-color: var(--primary); color: var(--primary); background: rgba(37, 99, 235, 0.05); }
+    .ghost-plus { font-size: 2.5rem; margin-bottom: 10px; }
+
+    .note-area-wrap { margin-top: 15px; border-top: 1px dashed var(--line); padding-top: 10px; }
+    .note-label-small { font-size: 0.8rem; font-weight: 700; color: var(--text-sub); margin-bottom: 4px; display: block; }
+    .note-view { min-height: 60px; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 0.95rem; color: var(--text); border: 1px solid transparent; background: rgba(128,128,128,0.05); user-select:none; -webkit-user-select:none; }
+    .note-view:hover { background: rgba(128,128,128,0.1); outline: 1px dashed var(--line); }
+    .note-view[data-empty="true"]::before { content: "클릭하여 노트/오답 메모 작성 (Markdown)"; color: var(--text-sub); font-size: 0.9rem; }
+    .note-edit { display: none; width: 100%; margin-top: 5px; }
+    .note-textarea { width: 100%; min-height: 100px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; font-family: 'Consolas', monospace; resize: vertical; background: var(--input-bg); color: var(--text); line-height: 1.5; }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: none; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+    .modal { background: var(--card-bg); padding: 24px; border-radius: 20px; width: 450px; max-width: 90%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); border: 1px solid var(--line); display: flex; flex-direction: column; max-height: 80vh; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; margin-bottom: 6px; font-weight: 700; font-size: 0.9rem; color: var(--text); }
+    .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--input-bg); color: var(--text); }
+
+    .highlighted { animation: highlight 1.5s ease-out; }
+    @keyframes highlight {
+      0% { box-shadow: 0 0 0 0 rgba(37,99,235,0.4); border-color:var(--primary); }
+      50% { box-shadow: 0 0 0 6px rgba(37,99,235,0.2); }
+      100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); }
+    }
+
+    .tabs { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 20px; padding-bottom: 5px; flex-wrap: wrap; }
+    .tab-btn { flex: 0 0 auto; padding: 8px 16px; border-radius: 20px; border: 1px solid var(--line); background: var(--card-bg); color: var(--text-sub); font-weight: 700; cursor:pointer; transition:0.2s; }
+    .tab-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .tab-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+    /* --- SIDEBAR STYLES --- */
+    #daily-sidebar { position: fixed; top: 0; left: calc(var(--sidebar-width) * -1); width: var(--sidebar-width); height: 100vh; background: var(--card-bg); border-right: 1px solid var(--line); box-shadow: 4px 0 15px rgba(0,0,0,0.1); z-index: 500; transition: left 0.3s ease-in-out; display: flex; flex-direction: column; }
+    #daily-sidebar.open { left: 0; }
+    body.sidebar-active { padding-left: var(--sidebar-width); }
+
+    .sidebar-header { padding: 20px; border-bottom: 1px solid var(--line); background: var(--card-bg); position: relative; }
+    .sidebar-content { flex: 1; overflow-y: scroll; padding: 15px; }
+    .sidebar-footer { padding: 15px; border-top: 1px solid var(--line); background: var(--card-bg); }
+
+    .clock-display { position: absolute; top: 15px; right: 20px; text-align: right; line-height: 1.2; }
+    .clock-time { font-size: 1.1rem; font-weight: 800; color: var(--text); font-family: monospace;}
+    .clock-date { font-size: 0.8rem; color: var(--text-sub); }
+
+    .goal-wrapper { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 5px; cursor: pointer; }
+    .goal-input { width: 80px; padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px; text-align: center; font-family: 'Courier New', monospace; font-size: 0.9rem; }
+    .goal-display-text { font-family: 'Courier New', monospace; font-weight: 700; color: var(--text-sub); text-decoration:none; }
+    .goal-wrapper:hover .goal-display-text { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+    .goal-display-text.achieved { color: #84cc16; }
+
+    .nav-row { display: flex; align-items: center; justify-content: space-between; margin: 15px 0 10px 0; padding: 4px 0; background: var(--input-bg); border-radius: 8px; border: 1px solid var(--line); }
+    .nav-btn { background:none; border:none; font-size:1.1rem; cursor:pointer; color:var(--text-sub); padding:0 10px; }
+    .nav-btn:hover { color:var(--primary); }
+    .nav-date { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+    /* 날짜 클릭 기능은 유지하되, 점선 밑줄은 '호버'에서만 표시 */
+    .nav-date.jumpable { text-decoration: none; }
+    .nav-date.jumpable:hover { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+
+    .nav-today {
+      background: var(--card-bg);
+      border: 1px solid var(--line);
+      color: var(--text-sub);
+      font-weight: 800;
+      font-size: 0.75rem;
+      padding: 4px 8px;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+    .nav-today:hover { border-color: var(--primary); color: var(--primary); }
+
+    .time-slot { background: var(--input-bg); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; padding: 10px; transition: 0.2s; cursor: pointer; }
+    .time-slot:hover { border-color: var(--primary); background: rgba(37, 99, 235, 0.02); }
+    .time-slot.drag-over { border-color: var(--primary); background: rgba(37,99,235,0.05); transform: scale(1.02); }
+
+    .sb-card { background: var(--card-bg); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: grab; display:flex; flex-direction:column; }
+    .sb-card:active { cursor: grabbing; }
+
+    .sb-card-head { padding: 8px; display: flex; align-items: center; gap: 6px; font-size: 0.9rem; font-weight: 600; min-height:40px; cursor: pointer; }
+    .sb-card-head:hover { background: rgba(0,0,0,0.02); }
+    .sb-card.done .sb-card-head .sb-title { opacity: 0.6; text-decoration: line-through; }
+
+    /* Layout: X | ▼ | Name | Time | Play | Check */
+    .sb-btn-del { order: 1; color: var(--text-sub); font-size: 0.9rem; padding: 4px; }
+    .sb-btn-exp {
+      order: 2;
+      color: var(--text-sub);
+      font-size: 0.8rem;
+      padding: 0;
+      width: 24px;
+      height: 24px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .sb-title   { order: 3; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin: 0 4px; }
+    .sb-time    { order: 4; font-family: monospace; font-size: 0.8rem; color: var(--primary); font-weight:700; min-width:70px; text-align:right;}
+    .sb-btn-play{ order: 5; font-size: 0.9rem; margin: 0 4px; }
+    .sb-check   { order: 6; width:18px; height:18px; accent-color:var(--success); cursor:pointer; }
+
+    .sb-drag-handle { cursor: grab; user-select: none; color: var(--text-sub); padding: 0 4px; }
+    .sb-drag-handle:active { cursor: grabbing; }
+
+    .nav-date-btn { background:none; border:none; cursor:pointer; padding:0; }
+    .nav-date-btn:hover { color: var(--primary); }
+
+    .sb-body { background: var(--bg); padding: 8px; border-top: 1px solid var(--line); font-size: 0.85rem; display: none; }
+    .sb-body.expanded { display: block; }
+    .sb-child { display: flex; align-items: center; gap: 6px; padding: 4px 0; color: var(--text-sub); }
+    .sb-child input { accent-color: var(--success); cursor:pointer; }
+    .sb-child span { cursor: pointer; transition:0.2s; }
+    .sb-child span:hover { color: var(--primary); text-decoration: underline; }
+
+    .add-btn-small { width: 100%; padding: 8px; margin-top: 5px; border: 1px dashed var(--line); border-radius: 6px; color: var(--text-sub); background: transparent; cursor: pointer; font-size: 0.8rem; }
+    .add-btn-small:hover { border-color: var(--primary); color: var(--primary); background: rgba(37,99,235,0.05); }
+
+    .sel-list { list-style:none; padding:0; margin:0; flex:1; overflow-y:auto; border:1px solid var(--line); border-radius:8px; background:var(--bg); }
+    .sel-item { padding: 10px 12px; border-bottom: 1px solid var(--line); display:flex; justify-content:space-between; align-items:center; cursor:pointer; background: var(--card-bg); transition: 0.2s; }
+    .sel-item:hover { background: rgba(37, 99, 235, 0.05); }
+    .sel-item:last-child { border-bottom:none; }
+    .sel-label { font-weight:600; color:var(--text); flex:1; }
+    .sel-next { font-size:0.8rem; color:var(--text-sub); margin-right:10px; }
+    .md-content { font-size: 0.95rem; }
+    .clickable { cursor: pointer; }
+
+    .dday-fixed { position: fixed; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; z-index: 950; }
+    body.sidebar-active .dday-fixed { right: 20px; }
+
+    .drag-handle{
+      display:inline-flex; align-items:center; justify-content:center;
+      width:26px; height:26px;
+      border-radius:10px;
+      border:1px solid var(--line);
+      background: var(--card-bg);
+      color: var(--text-sub);
+      cursor: grab;
+      user-select:none;
+      font-size: 0.9rem;
+      margin-right: 6px;
+    }
+    .drag-handle:hover{ border-color: var(--primary); color: var(--primary); }
+    .drag-handle:active{ cursor: grabbing; }
+
+  
+textarea.autogrow{ resize: vertical; overflow:hidden; }
+
+
+
+    /* === Calendar modal (Timetable date picker) === */
+    .calendar-modal{ width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 32px); overflow:auto; }
+    .cal-top{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+    .cal-meta{ font-size:0.85rem; color: var(--text-sub); margin-top:2px; }
+    .cal-week{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-bottom:8px; }
+    .cal-week div{ text-align:center; font-size:0.8rem; color:var(--text-sub); font-weight:800; }
+    .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+    .cal-cell{ border:1px solid var(--line); border-radius:12px; padding:10px 8px; background:var(--card-bg); cursor:pointer; min-height:64px; display:flex; flex-direction:column; justify-content:space-between; }
+    .cal-cell:hover{ border-color: var(--primary); }
+    .cal-cell.muted{ opacity:0.35; cursor:default; }
+    .cal-cell .d{ font-weight:900; }
+    .cal-cell .t{ font-family:monospace; font-size:0.8rem; color:var(--text-sub); }
+    .cal-cell.has{ box-shadow: 0 0 0 2px rgba(37,99,235,0.12) inset; }
+    .cal-cell.today{ border-color: var(--accent); }
+    .cal-cell.selected{ border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37,99,235,0.20) inset; }
+    .cal-bottom{ margin-top:14px; padding-top:12px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:10px; }
+    .cal-daytotal{ display:flex; justify-content:space-between; align-items:center; gap:12px; font-family:monospace; font-weight:900; }
+    .cal-daytotal #calSelectedLabel{ font-family:inherit; font-weight:700; color:var(--text-sub); margin-right:auto; }
+
+    @media (max-width:520px){
+      .calendar-modal{ width: calc(100vw - 24px); }
+      .cal-cell{ min-height:56px; padding:8px 6px; }
+      .cal-cell .t{ font-size:0.75rem; }
+    }
+</style>
+</head>
+<body>
+
+<button class="global-menu-btn" onclick="toggleSidebar()" title="시간표 열기">≡</button>
+
+<div id="ddayPanel" class="dday-fixed"></div>
+
+<div id="error-screen">
+  <h2 style="font-size:2rem; margin-bottom:10px;">데이터/스크립트 오류</h2>
+  <p>불러온 데이터(JSON) 또는 스크립트에 문제가 있어 앱을 실행할 수 없습니다.</p>
+  <p id="err-msg" style="background:var(--line); padding:10px; border-radius:8px; font-family:monospace; margin:20px 0; color:var(--text)"></p>
+  <button class="btn btn-outline" style="padding:15px 30px; font-size:1.1rem;" onclick="hardReset()">데이터 강제 초기화 (복구)</button>
+</div>
+
+<div id="app" class="container"></div>
+
+<div id="daily-sidebar">
+  <div class="sidebar-header" id="sidebarHeader">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+      <button class="btn btn-icon" onclick="toggleSidebar()">✕</button>
+      <h3 style="margin:0; font-size:1.2rem;">일일 계획</h3>
+    </div>
+    <div class="clock-display">
+      <div id="clockTime" class="clock-time">00:00:00</div>
+      <div id="clockDate" class="clock-date">2026.01.01 (월)</div>
+    </div>
+    <div style="margin-top:20px; padding:10px; background:var(--input-bg); border-radius:8px; border:1px solid var(--line); text-align:center;">
+      <div class="goal-wrapper" onclick="toggleGoalMode()">
+        <span>목표:</span><div id="goalDisplay" class="goal-display-text">00:00:00</div>
+        <div id="goalInputWrap" style="display:none; align-items:center; gap:4px;">
+          <input type="text" id="dailyGoal" class="goal-input" placeholder="00:00:00">
+          <button class="btn btn-primary" style="padding:2px 6px; font-size:0.7rem;" onclick="saveDailyGoal(event)">저장</button>
+        </div>
+      </div>
+      <div id="todayTotal" style="font-size:1.6rem; font-weight:800; color:var(--primary); font-family:monospace; line-height:1;">00:00:00</div>
+    </div>
+
+    <div class="nav-row">
+      <button class="nav-btn" onclick="changeSidebarDate(-1)">❮</button>
+
+      <span class="nav-date jumpable" id="navDateDisplay"
+        onclick="openCalendarModal(event)"
+        title="클릭하여 날짜 입력으로 이동 (YYYY-MM-DD)">
+        2026-01-01
+      </span>
+
+      <div style="display:flex; align-items:center; gap:6px;">
+        <button class="nav-today" onclick="goToday(); event.stopPropagation();" title="오늘(논리적 오늘)로 이동">오늘로</button>
+        <button class="nav-btn" onclick="changeSidebarDate(1)">❯</button>
+      </div>
+    </div>
+
+    <div class="flex-between" style="font-size:0.9rem;"><span style="font-size:0.8rem; color:var(--text-sub);">진행률</span><span id="dailyPct" style="color:var(--accent); font-weight:700;">0%</span></div>
+    <div style="height:6px; background:var(--line); border-radius:3px; overflow:hidden; margin-top:5px;"><div id="dailyProg" style="width:0%; height:100%; background:var(--accent); transition:0.3s;"></div></div>
+  </div>
+  <div id="dailySlots" class="sidebar-content"></div>
+  <div class="sidebar-footer">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:0.9rem; font-weight:700; color:var(--text-sub);">
+      <span>남은 할 일</span><span id="remainCount" style="color:var(--danger);">0</span>
+    </div>
+    <div style="display:flex; gap:5px; margin-bottom:5px;">
+      <button class="btn btn-outline" style="flex:1" onclick="addDailySlot()">+ 시간 블록</button>
+      <button class="btn btn-outline" style="flex:1" onclick="copyDailyPlan()" title="복사">텍스트 복사</button>
+    </div>
+    <button class="btn btn-icon" style="margin-top:5px; width:100%;" onclick="resetDailyToday()" title="초기화">현재 날짜 초기화</button>
+  </div>
+</div>
+
+<div id="editModal" class="modal-overlay">
+  <div class="modal">
+    <h2 id="modalTitle">편집</h2>
+    <div class="form-group" id="grpTitleInput"><label id="lblTitle">제목</label><input type="text" id="editTitle"></div>
+    <div class="form-group" id="grpTitleTA" style="display:none;"><label id="lblTitle2">제목</label><textarea id="editTitleTA" rows="8" class="autogrow"></textarea></div>
+    <div class="form-group"><label id="lblDesc">내용</label><textarea id="editDesc" rows="3"></textarea></div>
+    <div class="form-group" id="grpQBox"><label>팁 (Markdown)</label><textarea id="editQBox" rows="2" style="background:var(--input-bg); font-size:0.9rem;"></textarea></div>
+    <div class="form-group" id="grpBadge"><label>배지</label><input type="text" id="editBadge"></div>
+    <div style="display:flex; justify-content:flex-end; gap:10px;">
+      <button id="modalDeleteBtn" class="btn btn-outline" style="display:none; border-color:var(--danger); color:var(--danger);" onclick="modalDeleteAction()">삭제</button>
+      <button class="btn btn-outline" onclick="closeModal()">취소</button>
+      <button class="btn btn-primary" onclick="saveCardChange()">저장</button>
+    </div>
+  </div>
+</div>
+
+<div id="selectorModal" class="modal-overlay">
+  <div class="modal" style="height: 650px;">
+    <div class="flex-between" style="margin-bottom:15px;">
+      <h2 style="margin:0; font-size:1.3rem;">카드 선택</h2>
+      <button class="btn btn-outline" onclick="closeSelectorModal()">✕</button>
+    </div>
+    <div id="adhocBox" style="background:var(--bg); padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid var(--line);">
+      <label style="font-size:0.8rem; font-weight:700; color:var(--text-sub); display:block; margin-bottom:4px;">직접 입력 추가 (Ad-hoc)</label>
+      <div style="display:flex; gap:5px;">
+        <input type="text" id="adhocInput" placeholder="예: 방 청소하기, 영단어 암기" style="flex:1; padding:8px; border:1px solid var(--line); border-radius:6px;">
+        <button class="btn btn-primary" onclick="addAdhocCard()">추가</button>
+      </div>
+    </div>
+    <div class="flex-between" style="margin-bottom:10px;">
+      <button id="selBackBtn" class="btn btn-outline" style="font-size:0.8rem;" onclick="selectorGoBack()">← 뒤로</button>
+      <span id="selBreadcrumb" style="font-size:0.85rem; color:var(--text-sub); font-weight:600;">과목 선택</span>
+    </div>
+    <ul id="selectorList" class="sel-list"></ul>
+  </div>
+</div>
+
+<div id="calendarModal" class="modal-overlay">
+  <div class="modal calendar-modal">
+    <div class="flex-between" style="margin-bottom:12px;">
+      <h2 style="margin:0; font-size:1.3rem;">날짜 선택</h2>
+      <button class="btn btn-outline" onclick="closeCalendarModal()">✕</button>
+    </div>
+
+    <div class="cal-top">
+      <button class="btn btn-outline" onclick="calMoveMonth(-1)">❮</button>
+      <div style="flex:1; text-align:center;">
+        <div id="calMonthLabel" style="font-weight:900; font-size:1.1rem;">2026-01</div>
+        <div class="cal-meta">월간 합계: <span id="calMonthTotal">00:00:00</span> · 평균: <span id="calMonthAvg">00:00:00</span></div>
+      </div>
+      <button class="btn btn-outline" onclick="calMoveMonth(1)">❯</button>
+    </div>
+
+    <div class="cal-week" id="calWeekHeader"></div>
+    <div class="cal-grid" id="calGrid"></div>
+
+    <div class="cal-bottom">
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input type="date" id="calDatePicker" style="flex:1; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--card-bg); color:var(--text);" />
+        <button class="btn btn-primary" onclick="calJumpToPicked()">이동</button>
+      </div>
+      <div class="cal-daytotal">선택일: <span id="calSelectedLabel">-</span><span id="calDayTotal">00:00:00</span></div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept=".json" style="display:none" onchange="loadJsonFile(event)">
+
+<script>
+/* =========================
+   DATA / STATE
+========================= */
+let DATA = null;
+const STORAGE_KEY = 'universal_planner_v28_data';
+const THEME_KEY = 'universal_planner_theme';
+const APP = document.getElementById('app');
+const ERR_SCREEN = document.getElementById('error-screen');
+let VIEW_DATE = null;
+let HOME_BADGE_FILTER = 'all';
+let selectorMode = 'add'; // 'add' | 'move_detail' | 'move_question'
+let moveState = null;
+let editState = null;
+let selectorState = { date: null, slotIdx: null, stack: [] };
+let ticker = null;
+
+// Prevent accidental drag from interactive controls (checkbox/button/etc.)
+let __dragFromInteractive = false;
+let __tmpDragDisabledCard = null;
+
+function __isInteractiveTarget(t){
+  return !!(t && t.closest && t.closest('input,button,textarea,select,label,a'));
+}
+
+// If the user interacts with a control inside a draggable card, temporarily disable draggable
+// so checkbox clicks are never hijacked by HTML drag behavior.
+document.addEventListener('pointerdown', (e)=>{
+  __dragFromInteractive = __isInteractiveTarget(e.target);
+  if(__dragFromInteractive){
+    const card = e.target.closest && e.target.closest('.card');
+    if(card && card.draggable){
+      __tmpDragDisabledCard = card;
+      card.dataset.__wasDraggable = '1';
+      card.draggable = false;
+    }
+  }
+}, true);
+
+function __restoreTmpDraggable(){
+  if(__tmpDragDisabledCard && __tmpDragDisabledCard.dataset.__wasDraggable){
+    __tmpDragDisabledCard.draggable = true;
+    delete __tmpDragDisabledCard.dataset.__wasDraggable;
+  }
+  __tmpDragDisabledCard = null;
+  __dragFromInteractive = false;
+}
+
+document.addEventListener('pointerup', __restoreTmpDraggable, true);
+document.addEventListener('pointercancel', __restoreTmpDraggable, true);
+
+/* =========================
+   CORE UTILITIES
+========================= */
+function uid(prefix){ return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`; }
+
+function toYMDLocal(dt){
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth()+1).padStart(2,'0');
+  const d = String(dt.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
+
+function getLogicalDate() {
+  const n = new Date();
+  if (n.getHours() < 4) n.setDate(n.getDate() - 1);
+  return toYMDLocal(n);
+}
+
+function updateClock() {
+  const n = new Date();
+  const timeEl = document.getElementById('clockTime');
+  const dateEl = document.getElementById('clockDate');
+  if (timeEl) timeEl.innerText = n.toTimeString().split(' ')[0];
+  if (dateEl) {
+    const days = ['일','월','화','수','목','금','토'];
+    dateEl.innerText = `${n.getFullYear()}.${n.getMonth()+1}.${n.getDate()} (${days[n.getDay()]})`;
+  }
+  return n;
+}
+
+function ensureDailyHistoryBase(){
+  if(!DATA.dailyHistory) DATA.dailyHistory = {};
+  if(!DATA.dailyHistory[getLogicalDate()]) ensureDailyData(getLogicalDate());
+}
+
+function ensureDailyData(date) {
+  if (!DATA.dailyHistory) DATA.dailyHistory = {};
+  if (!DATA.dailyHistory[date]) {
+    DATA.dailyHistory[date] = {
+      totalSeconds: 0,
+      slots: [
+        { id: 's1', label: '오전 (09-12)', cardIds: [] },
+        { id: 's2', label: '오후 (13-18)', cardIds: [] }
+      ],
+      goalStr: "00:00:00"
+    };
+  }
+  return DATA.dailyHistory[date];
+}
+
+function formatTime(s) {
+  s = Math.max(0, Number(s)||0);
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sc=s%60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}`;
+}
+
+function badgeTags(raw){
+  const s = (raw ?? "").toString().trim();
+  if(!s) return [];
+  return s.split(",").map(x => x.trim()).filter(Boolean);
+}
+
+/* =========================
+   D-DAY (TOP RIGHT, MAX 3)
+========================= */
+function calcDDayLabel(dateStr){
+  const target = new Date(dateStr + 'T00:00:00');
+  const base = new Date(getLogicalDate() + 'T00:00:00');
+  if(Number.isNaN(target.getTime())) return 'D-?';
+  const diff = Math.round((target.getTime() - base.getTime()) / 86400000);
+  if(diff > 0) return `D-${diff}`;
+  if(diff === 0) return 'D-Day';
+  return `D+${Math.abs(diff)}`;
+}
+
+function updateDDayPanel(){
+  const el = document.getElementById('ddayPanel');
+  if(!el || !DATA || !DATA.home) return;
+
+  const ddays = Array.isArray(DATA.home.dDays) ? DATA.home.dDays.slice(0,3) : [];
+  const items = ddays.map((d, i) => {
+    const label = (d && d.label) ? d.label : '(D-Day)';
+    const date  = (d && d.date) ? d.date : '';
+    const cnt = date ? calcDDayLabel(date) : 'D-?';
+    return `<div class="dday-badge" onclick="editDDay(${i}); event.stopPropagation();" title="클릭하여 편집">
+      <span>${label}</span>
+      <span class="dday-count">${cnt}</span>
+    </div>`;
+  }).join('');
+
+  const addBtn = (ddays.length < 3)
+    ? `<div class="dday-badge" style="background:var(--card-bg); color:var(--text); border:1px dashed var(--line);" onclick="addDDay(); event.stopPropagation();" title="D-Day 추가">
+        <span>+ D-Day</span><span class="dday-count">최대 3</span>
+      </div>`
+    : '';
+
+  el.innerHTML = items + addBtn;
+}
+
+
+function addDDay(){
+  if(!DATA.home.dDays) DATA.home.dDays = [];
+  if(DATA.home.dDays.length >= 3) return alert('D-Day는 최대 3개까지 가능합니다.');
+  openEditModal('dday', null, undefined);
+}
+
+function editDDay(i){
+  openEditModal('dday', null, i);
+}
+
+/* =========================
+   ERROR HANDLING
+========================= */
+window.onerror = function(msg, url, line, col, err) {
+  console.error('WindowError:', msg, 'line', line, 'col', col, err);
+  showErrorScreen(`Script Error: ${msg} (Line ${line})`);
+  return false;
+};
+
+function showErrorScreen(msg) {
+  APP.style.display = 'none';
+  ERR_SCREEN.style.display = 'flex';
+  document.getElementById('err-msg').innerText = msg;
+}
+
+/* =========================
+   THEME
+========================= */
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem(THEME_KEY, theme);
+}
+function toggleDarkMode(){
+  const cur = localStorage.getItem(THEME_KEY) || 'light';
+  applyTheme(cur === 'dark' ? 'light' : 'dark');
+}
+
+/* =========================
+   STORAGE / IMPORT EXPORT
+========================= */
+function saveData(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }catch(e){}
+  try{ rebuildIndex(); }catch(e){}
+}
+
+function triggerImport() { document.getElementById('fileInput').click(); }
+
+function exportData() {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(DATA, null, 2)], { type: "application/json" }));
+  a.download = `planner_backup_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+
+window.loadJsonFile = function(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = function(evt) {
+    try {
+      DATA = JSON.parse(evt.target.result);
+      normalizeData();
+      saveData();
+      renderRouter();
+      renderDailySidebar();
+      alert("성공");
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+  r.readAsText(f);
+  e.target.value = '';
+};
+
+async function hardReset(){
+  if(!confirm('모든 데이터를 삭제하고 초기화하시겠습니까? (복구 불가)')) return;
+  localStorage.removeItem(STORAGE_KEY);
+
+  DATA = baseData();
+
+  try {
+    const res = await fetch('cpa_content_v2.json');
+    if(res.ok) {
+      const json = await res.json();
+      DATA = {...DATA, ...json};
+    }
+  } catch (e) {}
+
+  normalizeData();
+  saveData();
+  location.hash = '#/';
+  location.reload();
+}
+window.hardReset = hardReset;
+window.resetData = hardReset;
+
+function baseData(){
+  return {
+    meta: { version: "2.6" },
+    home: {
+      title: "2026 CPA 합격 플래너",
+      subtitle: "과목별 진도와 시간을 체계적으로 관리하세요",
+      subjects: [],
+      dDays: [{label:"1차 시험", date:"2026-02-28"}]
+    },
+    details: {},
+    modules: {},
+    dailyHistory: {}
+  };
+}
+
+function normalizeData(){
+  if(!DATA || typeof DATA !== 'object') DATA = baseData();
+  if(!DATA.meta) DATA.meta = {version:"2.6"};
+  if(!DATA.home) DATA.home = baseData().home;
+  if(!Array.isArray(DATA.home.subjects)) DATA.home.subjects = [];
+  if(!Array.isArray(DATA.home.dDays)) DATA.home.dDays = [];
+  if(!DATA.details) DATA.details = {};
+  if(!DATA.modules) DATA.modules = {};
+  if(!DATA.dailyHistory) DATA.dailyHistory = {};
+  DATA.home.subjects.forEach(s=>{
+    if(!DATA.details[s.id]) DATA.details[s.id] = { id:s.id, title:s.name||"새 과목", subtitle:"", cards:[] };
+  });
+  rebuildIndex();
+}
+
+// ---- Indexes for fast parent/child lookup (used for Today time rollups) ----
+let INDEX = { moduleToSubjects: {}, moduleToDetailCards: {} };
+
+function rebuildIndex(){
+  INDEX = { moduleToSubjects: {}, moduleToDetailCards: {} };
+  const subjSetByModule = {};
+  (DATA.home?.subjects||[]).forEach(s=>{
+    const sid = s.id;
+    const detail = DATA.details?.[sid];
+    (detail?.cards||[]).forEach(c=>{
+      if(!c || !c.module) return;
+      const mid = String(c.module);
+      if(!subjSetByModule[mid]) subjSetByModule[mid] = new Set();
+      subjSetByModule[mid].add(sid);
+      if(c.id){
+        if(!INDEX.moduleToDetailCards[mid]) INDEX.moduleToDetailCards[mid] = [];
+        // avoid duplicates
+        if(!INDEX.moduleToDetailCards[mid].some(x=>x.sid===sid && String(x.cardId)===String(c.id))){
+          INDEX.moduleToDetailCards[mid].push({sid, cardId: c.id});
+        }
+      }
+    });
+  });
+  Object.keys(subjSetByModule).forEach(mid=>{
+    INDEX.moduleToSubjects[mid] = Array.from(subjSetByModule[mid]);
+  });
+}
+
+function incrementDailyRefTime(daily, type, id, pid, delta){
+  if(!daily || !daily.slots) return;
+  (daily.slots||[]).forEach(slot=>{
+    (slot.cardIds||[]).forEach(ref=>{
+      if(!ref) return;
+      if(ref.type !== type) return;
+      if(String(ref.id) !== String(id)) return;
+      if(pid != null && ref.pid != null && String(ref.pid) !== String(pid)) return;
+      ref.time = (ref.time||0) + (delta||1);
+    });
+  });
+}
+
+function incrementDailyRefTimeIfNotRunning(daily, type, id, pid, delta){
+  if(!daily || !daily.slots) return;
+  (daily.slots||[]).forEach(slot=>{
+    (slot.cardIds||[]).forEach(ref=>{
+      if(!ref) return;
+      if(ref.isRunning) return;
+      if(ref.type !== type) return;
+      if(String(ref.id) !== String(id)) return;
+      if(pid != null && ref.pid != null && String(ref.pid) !== String(pid)) return;
+      ref.time = (ref.time||0) + (delta||1);
+    });
+  });
+}
+
+function getParentRefsForRunning(r){
+  const out = [];
+  if(!r) return out;
+  if(r.type === 'detail'){
+    if(r.pid) out.push({type:'subject', id:r.pid, pid:null});
+  } else if(r.type === 'theory' || r.type === 'question'){
+    const mid = r.pid != null ? String(r.pid) : null;
+    if(mid){
+      const subs = INDEX.moduleToSubjects?.[mid] || [];
+      subs.forEach(sid=> out.push({type:'subject', id:sid, pid:null}));
+      const dcs = INDEX.moduleToDetailCards?.[mid] || [];
+      dcs.forEach(x=> out.push({type:'detail', id:x.cardId, pid:x.sid}));
+    }
+  }
+  return out;
+}
+
+
+/* =========================
+   ROUTING
+========================= */
+function getRoute() {
+  const h = window.location.hash || '#/';
+  const [p, q] = h.replace(/^#/, '').split('?');
+  const pts = p.split('/').filter(Boolean);
+  return { page: pts[0] || 'home', id: pts[1], focus: new URLSearchParams(q).get('focus') };
+}
+
+function renderRouter(keepScroll = false) { router(keepScroll); }
+
+
+function getSubjectById(sid){
+  return (DATA.home && Array.isArray(DATA.home.subjects)) ? DATA.home.subjects.find(s=>s.id===sid) : null;
+}
+
+function router(keepScroll = false) {
+  const route = getRoute();
+  const savedScroll = window.scrollY;
+  if (keepScroll) document.body.style.minHeight = document.body.scrollHeight + 'px';
+
+  try {
+    if (route.page === 'detail' && route.id && !DATA.details[route.id]) {
+      const sub = getSubjectById(route.id);
+      DATA.details[route.id] = { id: route.id, title: (sub && sub.name) ? sub.name : "새 과목", subtitle: "", cards: [] };
+    } else if (route.page === 'detail' && route.id && DATA.details[route.id]) {
+      // Backward-compat: if a placeholder title was used earlier, sync it once to the subject name.
+      const sub = getSubjectById(route.id);
+      if (sub && sub.name && (!DATA.details[route.id].title || DATA.details[route.id].title === '새 과목')) {
+        DATA.details[route.id].title = sub.name;
+      }
+    }
+    if (route.page === 'module' && route.id && !DATA.modules[route.id]) {
+      DATA.modules[route.id] = { id: route.id, title: "모듈", subtitle: "", backTo: "#/", tabs: [{ id: "t1", label: "이론", questions: [], time:0, done:false, isRunning:false }] };
+    }
+
+    if (route.page === 'home') renderHome();
+    else if (route.page === 'detail') renderDetail(route.id);
+    else if (route.page === 'module') renderModule(route.id);
+
+    setTimeout(() => {
+      applyMath();
+
+      if (route.focus) {
+        const el = document.getElementById(`card-${route.focus}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('highlighted');
+          setTimeout(() => el.classList.remove('highlighted'), 1500);
+        }
+      } else if (keepScroll) {
+        window.scrollTo(0, savedScroll);
+      } else {
+        window.scrollTo(0, 0);
+      }
+
+      if (keepScroll) setTimeout(() => { document.body.style.minHeight = ''; }, 50);
+    }, 50);
+
+  } catch(e) {
+    showErrorScreen(e.message);
+    document.body.style.minHeight = '';
+  }
+}
+
+/* =========================
+   MATH
+========================= */
+function ensureKatexLoaded(){
+  if(window.renderMathInElement) return;
+  if(window.__katexLoading) return;
+  window.__katexLoading = true;
+
+  // CSS
+  if(!document.querySelector('link[data-katex-css]')){
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css';
+    link.setAttribute('data-katex-css','1');
+    document.head.appendChild(link);
+  }
+
+  // JS (katex + auto-render)
+  function addScript(src, cb){
+    const s = document.createElement('script');
+    s.src = src;
+    s.defer = true;
+    s.onload = cb;
+    document.head.appendChild(s);
+  }
+
+  addScript('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js', ()=>{
+    addScript('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js', ()=>{
+      window.__katexLoading = false;
+      applyMath();
+    });
+  });
+}
+
+function applyMath() {
+  // If KaTeX auto-render isn't ready, attempt a lazy load once.
+  if (!window.renderMathInElement) {
+    ensureKatexLoaded();
+    return;
+  }
+  try {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "$", right: "$", display: false}
+      ],
+      throwOnError: false
+    });
+  } catch(e) {
+    console.warn('KaTeX render error', e);
+  }
+}
+
+/* =========================
+   STATS
+========================= */
+function calcCardStats(c) {
+  let t=c.time||0;
+  if(c.module && DATA.modules[c.module]) {
+    const m=calcModuleStats(c.module);
+    return { isComplete:m.isComplete, time:t+m.rawTime };
+  }
+  return { isComplete:!!c.done, time:t };
+}
+function calcModuleStats(mid) {
+  let t=0, d=0, tm=0;
+  if(DATA.modules[mid]){
+    DATA.modules[mid].tabs.forEach(tab=>{
+      t++; if(tab.done)d++; tm+=tab.time||0;
+      (tab.questions||[]).forEach(q=>{
+        t++; if(q.done)d++; tm+=q.time||0;
+      });
+    });
+  }
+  return { pct:t?Math.round((d/t)*100):0, timeStr:formatTime(tm), rawTime:tm, isComplete:(t>0&&t===d), total:t };
+}
+function calcSubjectStats(sid) {
+  const s=DATA.home.subjects.find(x=>x.id===sid);
+  let tm=(s?s.time:0)||0;
+  const cArr=DATA.details[sid]?DATA.details[sid].cards:[];
+  let d=0;
+  cArr.forEach(c=>{
+    const st=calcCardStats(c);
+    tm+=st.time;
+    if(st.isComplete)d++;
+  });
+  return { pct:cArr.length?Math.round((d/cArr.length)*100):0, timeStr:formatTime(tm), rawTime:tm };
+}
+function calcTotalStats() {
+  let t=0,d=0,tm=0;
+  DATA.home.subjects.forEach(s=>tm+=calcSubjectStats(s.id).rawTime);
+  if(DATA.details) {
+    Object.values(DATA.details).forEach(x=>{
+      t+=x.cards.length;
+      x.cards.forEach(c=>{ if(calcCardStats(c).isComplete)d++; });
+    });
+  }
+  return { pct:t?Math.round((d/t)*100):0, timeStr:formatTime(tm) };
+}
+
+/* =========================
+   RENDER HELPERS
+========================= */
+function renderStickyHeader(label, pct, time) {
+  return `
+  <div class="sticky-header">
+    <div class="prog-wrap">
+      <div class="prog-text"><span>${label}</span><span style="color:var(--primary)">${pct||0}%</span></div>
+      <div class="prog-bar"><div class="prog-fill" style="width:${pct||0}%"></div></div>
+    </div>
+    <div style="background:#1e293b; color:white; padding:6px 12px; border-radius:99px; font-family:monospace; font-weight:700;">⏱ ${time || "00:00:00"}</div>
+  </div>`;
+}
+
+/* =========================
+   MAIN RENDERERS
+========================= */
+function renderHome() {
+  const totalStats = calcTotalStats();
+  const ddays = DATA.home.dDays || [];
+  const homeBadges = [...new Set((DATA.home.subjects||[]).map(s=>String(s.badge||'').trim()).filter(b=>b))];
+  const homeFiltered = (HOME_BADGE_FILTER==='all') ? (DATA.home.subjects||[]) : (DATA.home.subjects||[]).filter(s=>badgeTags(s.badge).includes(HOME_BADGE_FILTER) || String(s.badge||'').trim()===HOME_BADGE_FILTER);
+  APP.style.display = '';
+  ERR_SCREEN.style.display = 'none';
+
+  APP.innerHTML = `
+    <header style="text-align:center; margin-bottom:30px; position:relative; padding-top:20px;">
+      <div class="left-tools">
+        <button class="theme-btn" onclick="toggleDarkMode()">🌙</button>
+      </div>
+
+      <h1 class="editable" onclick="openEditModal('app_info','home')">${DATA.home.title}</h1>
+      <p class="editable" onclick="openEditModal('app_info','home')" style="color:var(--text-sub)">${DATA.home.subtitle}</p>
+      <div style="margin-top:10px;">
+        <button class="btn btn-outline" onclick="triggerImport()">📂</button>
+        <button class="btn btn-outline" onclick="exportData()">💾</button>
+        <button class="btn btn-outline" style="color:#ef4444;" onclick="hardReset()">🗑</button>
+      </div>
+    </header>
+
+    ${renderStickyHeader('전체 진행률', totalStats.pct, totalStats.timeStr)}
+
+    <div class="tabs" style="margin-top:10px; margin-bottom:10px;">
+      <button class="tab-btn ${HOME_BADGE_FILTER==='all'?'active':''}" onclick="setHomeBadgeFilter('all',this)">전체</button>
+      ${homeBadges.map(b=>`<button class="tab-btn ${HOME_BADGE_FILTER===b?'active':''}" onclick="setHomeBadgeFilter('${b}',this)">${b}</button>`).join('')}
+    </div>
+
+    <div class="grid" id="homeGrid">
+      ${homeFiltered.map((sub, idx) => {
+        const realIdx = (DATA.home.subjects||[]).findIndex(x=>x.id===sub.id);
+        const dStats = calcSubjectStats(sub.id);
+        const cards = DATA.details[sub.id] ? DATA.details[sub.id].cards : [];
+        return `
+        <div class="card" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'home',null,${realIdx})" data-index="${realIdx}">
+          <div class="card-top">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" title="드래그하여 시간표로">⋮⋮</span>
+              <span class="badge">${sub.badge||''}</span>
+            </div>
+            <div class="card-actions">
+
+              <button class="btn btn-icon" onclick="duplicateSubject(${realIdx});event.stopPropagation()">📑</button>
+              <button class="btn btn-icon" onclick="openEditModal('subject','home',${realIdx});event.stopPropagation()">✏️</button>
+              <button class="btn btn-icon btn-danger" onclick="deleteCard('subject','home',${realIdx});event.stopPropagation()">🗑</button>
+            </div>
+          </div>
+          <h3 style="cursor:pointer;" onclick="location.hash='#/detail/${sub.id}'">${sub.name||'(제목 없음)'}</h3>
+          <p style="color:var(--text-sub); font-size:0.9rem;">${sub.examInfo||''}</p>
+
+          <div class="sub-list">
+            ${cards.map((c, i) => {
+              const st = calcCardStats(c);
+              return `<div class="sub-item">
+                <input type="checkbox" ${st.isComplete?'checked':''}
+                  draggable="false" ondragstart="return false"
+                  onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
+                  onchange="toggleDetailCardStatus('${sub.id}',${i},this.checked)">
+                <span onclick="location.hash='#/detail/${sub.id}?focus=${c.id}'" style="${st.isComplete?'text-decoration:line-through;color:#aaa':''}">${c.title||'(무제)'}</span>
+              </div>`;
+            }).join('')}
+            ${cards.length===0?'<span style="color:#ccc;">(비어있음)</span>':''}
+          </div>
+
+          <div class="timer-box" onclick="event.stopPropagation()">
+            <label class="chk-wrap">
+              <input type="checkbox" draggable="false" ondragstart="return false" onchange="toggleCheckAll('subject','${sub.id}',this.checked);" ${dStats.pct===100?'checked':''}
+                onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
+              <span>완료</span>
+            </label>
+            <div class="flex-center" style="gap:5px;">
+              <button class="btn btn-icon" onclick="editTime('subject',null,${idx});event.stopPropagation()">✏️</button>
+              <div class="timer-display" id="time-disp-subject-${sub.id}">${dStats.timeStr}</div>
+              <button class="btn btn-outline" style="${sub.isRunning?'color:red':''}" onclick="toggleTimer('subject',null,${idx});event.stopPropagation()">${sub.isRunning?'❚❚':'▶'}</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+
+      <div class="card ghost-card flex-center" onclick="openAddModal('subject','home')"><div class="ghost-plus">+</div></div>
+    </div>
+  `;
+}
+
+function setHomeBadgeFilter(badge, btn){
+  HOME_BADGE_FILTER = badge || 'all';
+  renderHome();
+}
+
+function renderDetail(sid) {
+  const detail = DATA.details[sid];
+  const stats = calcSubjectStats(sid);
+  const badgeList = [...new Set((detail.cards||[]).map(c=>badgeTags(c.badge)).flat())];
+
+  APP.innerHTML = `
+    <div style="margin-bottom:20px;"><button class="btn btn-outline" onclick="location.hash='#/'">← 홈</button></div>
+    <div style="margin-bottom:20px;">
+      <h1 class="editable" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.title||'(제목 없음)'}</h1>
+      <p class="editable" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.subtitle||''}</p>
+    </div>
+    ${renderStickyHeader('진행률', stats.pct, stats.timeStr)}
+    <div class="tabs">
+      <button class="tab-btn active" onclick="filterCards('all',this,'${sid}')">전체</button>
+      ${badgeList.map(b=>`<button class="tab-btn" onclick="filterCards('${b}',this,'${sid}')">${b}</button>`).join('')}
+    </div>
+    <div class="grid" id="cardGrid">
+      ${(detail.cards||[]).map((c, i) => renderCardItem(c, 'detail', sid, i)).join('')}
+      <div class="card ghost-card flex-center" onclick="openAddModal('detail','${sid}')"><div class="ghost-plus">+</div></div>
+    </div>`;
+}
+
+function renderModule(mid) {
+  const mod = DATA.modules[mid];
+  const tid = mod.activeTab||mod.tabs[0].id;
+  const tab = mod.tabs.find(t=>t.id===tid)||mod.tabs[0];
+  const stats = calcModuleStats(mid);
+  const theoryId = `theory-${mid}-${tid}`;
+
+  APP.innerHTML = `
+    <div class="flex-between" style="margin-bottom:20px;">
+      <button class="btn btn-outline" onclick="location.hash='${mod.backTo||'#/'}'">← 뒤로</button>
+      <div>
+        <button class="btn btn-primary" onclick="exportAnki('${mid}')">Anki</button>
+        <button class="btn btn-outline" onclick="location.hash='#/'">🏠</button>
+      </div>
+    </div>
+
+    <h1 class="editable" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.title||'(모듈)'}</h1>
+    <p class="editable" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.subtitle||''}</p>
+
+    ${renderStickyHeader('모듈 진행률', stats.pct, stats.timeStr)}
+
+    <div class="tabs">
+      ${mod.tabs.map(t=>`<button class="tab-btn ${t.id===tid?'active':''}" onclick="switchTab('${mid}','${t.id}')">${t.label}</button>`).join('')}
+      <button class="tab-btn" onclick="openEditModal('tab_add','${mid}');event.stopPropagation()">+</button>
+    </div>
+
+    <div class="card" draggable="true" ondragstart="handleDragStart(event, 'theory', '${tid}', '${mid}')" id="card-${theoryId}" style="margin-bottom:30px;">
+      <div class="card-top">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'theory', '${tid}', '${mid}')" title="드래그하여 시간표로">⋮⋮</span>
+        <h3 class="editable" onclick="openEditModal('tab_rename','${mid}',undefined,'${tid}');event.stopPropagation()">📌 ${tab.label}</h3>
+        </div>
+        <div class="card-actions" style="opacity:1;">
+          <button class="btn btn-icon btn-danger" onclick="deleteTab('${mid}','${tid}');event.stopPropagation()">🗑</button>
+        </div>
+      </div>
+
+      <div id="view-theory-${tid}" class="note-view md-content" data-empty="${!tab.theoryNote}" onclick="toggleNoteView('theory-${tid}')">${marked.parse(tab.theoryNote||"")}</div>
+      <div id="edit-theory-${tid}" class="note-edit">
+        <textarea id="ta-theory-${tid}" class="note-textarea">${tab.theoryNote||''}</textarea>
+        <div style="text-align:right;margin-top:5px;">
+          <button class="btn btn-primary" onclick="saveNoteText('theory','${mid}',null,'${tid}','theory-${tid}')">저장</button>
+        </div>
+      </div>
+
+      <div class="timer-box" onclick="event.stopPropagation()">
+        <label class="chk-wrap">
+          <input type="checkbox" ${tab.done?'checked':''} draggable="false" ondragstart="return false"
+            onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
+            onchange="toggleCheck(this,'theory','${mid}',0,'${tid}')">
+          <span>완료</span>
+        </label>
+        <div class="flex-center" style="gap:5px;">
+          <button class="btn btn-icon" onclick="editTime('theory','${mid}',0,'${tid}');event.stopPropagation()">✏️</button>
+          <div class="timer-display" id="time-disp-theory-${mid}-${tid}">${formatTime(tab.time||0)}</div>
+          <button class="btn btn-outline" style="${tab.isRunning?'color:red':''}" onclick="toggleTimer('theory','${mid}',0,'${tid}');event.stopPropagation()">${tab.isRunning?'❚❚':'▶'}</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid" id="questionGrid">
+      ${(tab.questions||[]).map((q, i) => renderCardItem(q, 'module', mid, i, tid)).join('')}
+      <div class="card ghost-card flex-center" onclick="openAddModal('module','${mid}','${tid}');event.stopPropagation()"><div class="ghost-plus">+</div></div>
+    </div>`;
+}
+
+function renderCardItem(item, level, pid, idx, tabId) {
+  const isMod = level==='module';
+  const sid = item.id || (level+'-'+pid+'-'+idx);
+  const tabSafe = tabId || '';
+
+  const dragStartCode = isMod
+    ? `handleDragStart(event, 'question', '${item.id}', '${pid}')`
+    : `handleDragStart(event,'${level}','${sid}','${pid}')`;
+
+  let subHtml = '';
+  let isDone = !!item.done;
+  let totalTime = item.time||0;
+
+  if (!isMod && item.module && DATA.modules[item.module]) {
+    const ms = calcModuleStats(item.module);
+    totalTime += ms.rawTime;
+    if(ms.total>0) isDone = ms.isComplete;
+
+    DATA.modules[item.module].tabs.forEach(t => {
+      subHtml += `<div class="sub-item">
+        <input type="checkbox" ${t.done?'checked':''}
+          onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
+          onchange="toggleSubItem('${item.module}','theory','${t.id}',null,this.checked)">
+        <span onclick="location.hash='#/module/${item.module}?focus=theory-${item.module}-${t.id}';event.stopPropagation()">📌 ${t.label}</span>
+      </div>`;
+
+      (t.questions||[]).forEach((q,qi) => {
+        subHtml += `<div class="sub-item">
+          <input type="checkbox" ${q.done?'checked':''}
+            onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
+            onchange="toggleSubItem('${item.module}','question','${t.id}',${qi},this.checked)">
+          <span onclick="location.hash='#/module/${item.module}?focus=${q.id}';event.stopPropagation()">${(((q.src||'')|| (q.text||''))).substring(0,15)}</span>
+        </div>`;
+      });
+    });
+
+    subHtml = `<div class="sub-list">${subHtml}</div>`;
+  }
+
+  return `
+    <div class="card ${!isMod&&item.module?'clickable':''}" data-index="${idx}" id="card-${sid}" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'${level}','${pid}',${idx},'${tabSafe}')">
+      <div class="card-top">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="drag-handle" draggable="true" ondragstart="${dragStartCode}" title="드래그하여 시간표로">⋮⋮</span>
+          <span class="badge">${isMod?(item.src||'문항'):(item.badge||'Topic')}</span>
+        </div>
+        <div class="card-actions">
+          ${level==='detail' ? `<button class="btn btn-icon" title="다른 과목으로 이동" onclick="openMoveDetailCard('${pid}',${idx});event.stopPropagation()">↪</button>` : ''}
+          ${isMod ? `<button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveQuestion('${pid}','${tabSafe}',${idx});event.stopPropagation()">↪</button>` : ''}
+
+          <button class="btn btn-icon" onclick="duplicateCard('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">📑</button>
+          <button class="btn btn-icon" onclick="(('${level}'==='detail')?openEditModal('detail','${pid}',${idx}):openEditModal('module','${pid}',${idx},'${tabId}'));event.stopPropagation()">✏️</button>
+          <button class="btn btn-icon btn-danger" onclick="(('${level}'==='detail')?deleteCard('detail','${pid}',${idx}):deleteCard('module','${pid}',${idx},'${tabId}'));event.stopPropagation()">🗑</button>
+        </div>
+      </div>
+
+      <div onclick="${level==='detail' ? `onDetailCardClick('${pid}',${idx})` : (!isMod&&item.module?`location.hash='#/module/${item.module}'`:'')}">
+        ${isMod
+          ? `<div class="md-content" style="font-weight:600;font-size:1.05rem;">${marked.parse(item.text||'')}</div>`
+          : `<h3>${item.title||'(무제)'}</h3><p>${item.scope||''}</p>`
+        }
+        ${item.qbox?`<div class="md-content" style="background:var(--bg);padding:10px;border-radius:8px;margin-top:10px;font-size:0.9rem;">💡 ${marked.parse(item.qbox)}</div>`:''}
+      </div>
+
+      ${subHtml}
+
+      ${isMod?`
+        <div class="note-area-wrap">
+          <span class="note-label-small">📝 오답 노트</span>
+          <div id="view-${sid}" class="note-view md-content" data-empty="${!item.userNote}" onclick="toggleNoteView('${sid}')">${marked.parse(item.userNote||"")}</div>
+          <div id="edit-${sid}" class="note-edit">
+            <textarea id="ta-${sid}" class="note-textarea">${item.userNote||''}</textarea>
+            <div style="text-align:right;margin-top:5px;">
+              <button class="btn btn-primary" onclick="saveNoteText('card','${pid}',${idx},'${tabId}','${sid}')">저장</button>
+            </div>
+          </div>
+        </div>` : ''
+      }
+
+      <div class="timer-box" onclick="event.stopPropagation()">
+        <label class="chk-wrap">
+          <input type="checkbox" ${isDone?'checked':''} draggable="false" ondragstart="return false"
+            onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
+            onchange="toggleCheck(this,'${level}','${pid}',${idx},'${tabId}')">
+          <span>완료</span>
+        </label>
+        <div class="flex-center" style="gap:5px;">
+          <button class="btn btn-icon" onclick="editTime('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">✏️</button>
+          <div class="timer-display" id="time-disp-${sid}">${formatTime(totalTime)}</div>
+          <button class="btn btn-outline" style="${item.isRunning?'color:red':''}" onclick="toggleTimer('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">${item.isRunning?'❚❚':'▶'}</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+
+
+function onDetailCardClick(sid, idx){
+  try{
+    const d = DATA.details?.[sid];
+    if(!d || !Array.isArray(d.cards)) return;
+    const card = d.cards[idx];
+    if(!card) return;
+
+    // legacy field name
+    if(card.moduleId && !card.module) card.module = card.moduleId;
+
+    // create module on first click
+    if(!card.module){
+      const mid = uid('m');
+      const tid = uid('t');
+      DATA.modules[mid] = {
+        id: mid,
+        title: (card.title || d.title || '모듈'),
+        subtitle: '',
+        backTo: `#/detail/${sid}`,
+        activeTab: tid,
+        tabs: [{ id: tid, label: '이론', theoryNote: '', questions: [], time:0, done:false, isRunning:false }]
+      };
+      card.module = mid;
+      saveData();
+      rebuildIndex();
+    }
+
+    // safety: if module ref exists but module data missing
+    const mid = String(card.module);
+    if(!DATA.modules?.[mid]){
+      const tid = uid('t');
+      DATA.modules[mid] = {
+        id: mid,
+        title: (card.title || d.title || '모듈'),
+        subtitle: '',
+        backTo: `#/detail/${sid}`,
+        activeTab: tid,
+        tabs: [{ id: tid, label: '이론', theoryNote: '', questions: [], time:0, done:false, isRunning:false }]
+      };
+      saveData();
+      rebuildIndex();
+    }
+
+    // keep a correct back link
+    if(DATA.modules[mid]) DATA.modules[mid].backTo = `#/detail/${sid}`;
+
+    // If this module was just auto-created earlier with subject title, fix to card title (only when blank/new)
+    const mod = DATA.modules?.[mid];
+    const wantTitle = (card.title || '').trim();
+    if(mod && wantTitle){
+      const isBlank = (()=>{
+        try{
+          const tabs = mod.tabs||[];
+          if(tabs.length!==1) return false;
+          const t = tabs[0]||{};
+          const q = t.questions||[];
+          const note = (t.theoryNote||'').trim();
+          const time = Number(mod.time||0) + Number(t.time||0);
+          return q.length===0 && !note && time===0
+        }catch(e){ return false; }
+      })();
+      if(isBlank && (mod.title||'') === (d.title||'')) {
+        mod.title = wantTitle;
+        saveData();
+      }
+    }
+
+    location.hash = `#/module/${mid}`;
+  }catch(e){
+    console.error(e);
+  }
+}
+
+/* =========================
+   DETAIL FILTER
+========================= */
+function filterCards(tag, btn, sid){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+
+  const detail = DATA.details[sid];
+  if(!detail) return;
+
+  (detail.cards||[]).forEach((c)=>{
+    const el = document.getElementById(`card-${c.id}`);
+    if(!el) return;
+    if(tag==='all') { el.style.display=''; return; }
+    const tags = badgeTags(c.badge);
+    el.style.display = tags.includes(tag) ? '' : 'none';
+  });
+}
+
+/* =========================
+   DAILY SIDEBAR: getCardInfo / render
+========================= */
+function getCardInfo(ref){
+  const out = { title: '(unknown)', done: !!ref.done, isRunning: !!ref.isRunning, totalStr: '', children: null };
+
+  if(ref.type === 'adhoc'){
+    out.title = ref.title || '(adhoc)';
+    out.totalStr = '';
+    return out;
+  }
+
+  if(ref.type === 'subject'){
+    const s = DATA.home.subjects.find(x=>x.id===ref.id);
+    out.title = s ? (s.name||'(과목)') : '(과목)';
+    const ss = calcSubjectStats(ref.id);
+    out.done = !!s && (ss.pct===100);
+    out.isRunning = !!s && !!s.isRunning;
+    out.totalStr = ss.timeStr;
+
+    const cards = DATA.details?.[ref.id]?.cards || [];
+    out.children = cards.map(c => ({
+      type: 'detail',
+      id: c.id,
+      pid: ref.id,
+      done: calcCardStats(c).isComplete,
+      text: c.title || '(무제)'
+    }));
+    return out;
+  }
+
+  if(ref.type === 'detail'){
+    const list = DATA.details?.[ref.pid]?.cards || [];
+    const c = list.find(x=>x.id===ref.id);
+
+    out.title = c ? (c.title||'(토픽)') : '(토픽)';
+    const st = c ? calcCardStats(c) : {isComplete:false,time:0};
+    out.done = st.isComplete;
+    out.isRunning = !!c && !!c.isRunning;
+    out.totalStr = formatTime(st.time);
+
+    if(c && c.module && DATA.modules[c.module]){
+      const mod = DATA.modules[c.module];
+      const children = [];
+
+      mod.tabs.forEach(t=>{
+        children.push({
+          type: 'theory',
+          id: t.id,
+          pid: mod.id,
+          done: !!t.done,
+          text: `📌 ${t.label}`
+        });
+        (t.questions||[]).forEach(q=>{
+          children.push({
+            type: 'question',
+            id: q.id,
+            pid: mod.id,
+            done: !!q.done,
+            text: ((q.src||'').toString().trim()) || (q.text||'').replace(/\n/g,' ').slice(0,40) || '(문항)'
+          });
+        });
+      });
+
+      out.children = children;
+    }
+    return out;
+  }
+
+  if(ref.type === 'theory'){
+    const mod = DATA.modules?.[ref.pid];
+    if(mod){
+      const t = mod.tabs.find(x=>x.id===ref.id);
+      out.title = t ? `${mod.title} / 📌 ${t.label}` : '(이론)';
+      out.done = !!t && !!t.done;
+      out.isRunning = !!t && !!t.isRunning;
+      out.totalStr = formatTime((t && t.time)||0);
+    } else out.title='(이론)';
+    return out;
+  }
+
+  if(ref.type === 'question'){
+    const mod = DATA.modules?.[ref.pid];
+    if(mod){
+      let qObj=null;
+      mod.tabs.forEach(t=>{
+        const q = (t.questions||[]).find(x=>x.id===ref.id);
+        if(q) qObj=q;
+      });
+      out.title = qObj ? (((qObj.src||'').toString().trim()) || (qObj.text||'(문항)').replace(/\n/g,' ').slice(0,40)) : '(문항)';
+      out.done = !!qObj && !!qObj.done;
+      out.isRunning = !!qObj && !!qObj.isRunning;
+      out.totalStr = formatTime((qObj && qObj.time)||0);
+    } else out.title='(문항)';
+    return out;
+  }
+
+  return out;
+}
+
+function renderDailySidebar() {
+  const daily = ensureDailyData(VIEW_DATE);
+
+  const navDateDisplay = document.getElementById('navDateDisplay');
+  if(navDateDisplay) navDateDisplay.innerText = VIEW_DATE;
+
+  document.getElementById('todayTotal').innerText = formatTime(daily.totalSeconds || 0);
+
+  const gStr = daily.goalStr || "00:00:00";
+  document.getElementById('dailyGoal').value = gStr;
+  document.getElementById('goalDisplay').innerText = gStr;
+  document.getElementById('goalDisplay').style.display = 'block';
+  document.getElementById('goalInputWrap').style.display = 'none';
+  checkGoalColor(daily.totalSeconds, gStr);
+
+  if(navDateDisplay){
+    if(VIEW_DATE !== getLogicalDate()) {
+      navDateDisplay.style.color = 'var(--primary)';
+      navDateDisplay.style.fontWeight='900';
+    } else {
+      navDateDisplay.style.color = 'var(--text)';
+      navDateDisplay.style.fontWeight='700';
+    }
+  }
+
+  let total=0, done=0;
+  const container = document.getElementById('dailySlots');
+
+  container.innerHTML = (daily.slots||[]).map((slot, sIdx) => `
+    <div class="time-slot" ondragover="allowDrop(event)" ondrop="dropOnSlot(event, '${VIEW_DATE}', ${sIdx})">
+      <div class="flex-between" style="font-size:0.85rem; font-weight:700; color:var(--text-sub); margin-bottom:8px;">
+        <span>${slot.label}</span>
+        <button class="btn btn-icon" style="font-size:0.7rem;" onclick="removeSlot('${VIEW_DATE}', ${sIdx}); event.stopPropagation();">🗑</button>
+      </div>
+      <div class="ts-content" style="min-height:30px;">
+        ${(slot.cardIds||[]).map((ref, cIdx) => renderSidebarCard(ref, VIEW_DATE, sIdx, cIdx)).join('')}
+        <button class="add-btn-small" onclick="openSlotSelector('${VIEW_DATE}', ${sIdx}); event.stopPropagation();">+ 카드 추가</button>
+      </div>
+    </div>`).join('');
+
+  (daily.slots||[]).forEach(s => (s.cardIds||[]).forEach(ref => {
+    const i = getCardInfo(ref);
+    total++;
+    if(i.done) done++;
+  }));
+
+  const pct = (total?Math.round((done/total)*100):0);
+  document.getElementById('dailyPct').innerText = pct + '%';
+  document.getElementById('dailyProg').style.width = pct + '%';
+  document.getElementById('remainCount').innerText = (total - done);
+}
+
+
+/* =========================
+   SIDEBAR OPEN/CLOSE
+========================= */
+function toggleSidebar() {
+  const b=document.body, s=document.getElementById('daily-sidebar');
+  if(!s) return;
+  if(s.classList.contains('open')){
+    s.classList.remove('open'); b.classList.remove('sidebar-active');
+  } else {
+    s.classList.add('open'); b.classList.add('sidebar-active');
+    renderDailySidebar();
+  }
+}
+
+function changeSidebarDate(offset) {
+  const dt = new Date(VIEW_DATE);
+  dt.setDate(dt.getDate() + offset);
+  VIEW_DATE = dt.toISOString().split('T')[0];
+  ensureDailyData(VIEW_DATE);
+  renderDailySidebar();
+}
+
+function goSidebarToday(e){ if(e) e.stopPropagation(); VIEW_DATE = getLogicalDate(); ensureDailyData(VIEW_DATE); renderDailySidebar(); }
+
+function promptSidebarDate(e){
+  if(e) e.stopPropagation();
+  const v = prompt('이동할 날짜 (YYYY-MM-DD)', VIEW_DATE);
+  if(!v) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(v)) { alert('형식: YYYY-MM-DD'); return; }
+  VIEW_DATE = v;
+  ensureDailyData(VIEW_DATE);
+  saveData();
+  renderDailySidebar();
+}
+
+/* 오늘로 버튼 */
+function goToday(){
+  VIEW_DATE = getLogicalDate();
+  ensureDailyData(VIEW_DATE);
+  renderDailySidebar();
+}
+
+/* 날짜 클릭 입력 점프 */
+function jumpSidebarDate(){
+  const cur = VIEW_DATE;
+  const val = prompt('이동할 날짜를 입력하세요 (YYYY-MM-DD)', cur);
+  if(val == null) return;
+
+  const s = val.trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return alert('형식이 올바르지 않습니다. 예: 2026-01-16');
+
+  const d = new Date(s + 'T00:00:00');
+  if(Number.isNaN(d.getTime())) return alert('유효하지 않은 날짜입니다.');
+
+  VIEW_DATE = s;
+  ensureDailyData(VIEW_DATE);
+  renderDailySidebar();
+}
+
+
+
+/* =========================
+   CALENDAR (Timetable date picker)
+========================= */
+let __calState = { year: 0, month: 0, selected: null };
+
+function openCalendarModal(e){
+  if(e) e.stopPropagation();
+  const base = new Date((VIEW_DATE || getLogicalDate()) + 'T00:00:00');
+  __calState.year = base.getFullYear();
+  __calState.month = base.getMonth();
+  __calState.selected = VIEW_DATE || getLogicalDate();
+  const picker = document.getElementById('calDatePicker');
+  if(picker) picker.value = __calState.selected;
+  renderCalendarModal();
+  const m = document.getElementById('calendarModal');
+  if(m) m.style.display = 'flex';
+}
+
+function closeCalendarModal(){
+  const m = document.getElementById('calendarModal');
+  if(m) m.style.display = 'none';
+}
+
+function calMoveMonth(delta){
+  let y = __calState.year;
+  let m = __calState.month + delta;
+  if(m < 0){ y -= 1; m = 11; }
+  if(m > 11){ y += 1; m = 0; }
+  __calState.year = y;
+  __calState.month = m;
+  renderCalendarModal();
+}
+
+function calJumpToPicked(){
+  const picker = document.getElementById('calDatePicker');
+  if(!picker || !picker.value) return;
+  const s = picker.value;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return;
+  calSelectDate(s, true);
+}
+
+function calSelectDate(dateStr, closeAfter){
+  __calState.selected = dateStr;
+  VIEW_DATE = dateStr;
+  ensureDailyData(VIEW_DATE);
+  renderDailySidebar();
+  saveData();
+  if(closeAfter) closeCalendarModal();
+  else renderCalendarModal();
+}
+
+function renderCalendarModal(){
+  const week = ['일','월','화','수','목','금','토'];
+  const wh = document.getElementById('calWeekHeader');
+  if(wh) wh.innerHTML = week.map(d=>`<div>${d}</div>`).join('');
+
+  const y = __calState.year;
+  const m = __calState.month;
+  const first = new Date(y, m, 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(y, m+1, 0).getDate();
+
+  const pad2 = (n)=>String(n).padStart(2,'0');
+  const monthLabel = document.getElementById('calMonthLabel');
+  if(monthLabel) monthLabel.innerText = `${y}-${pad2(m+1)}`;
+
+  // Month aggregation
+  let monthTotal = 0;
+  const dayTotals = {};
+  for(let d=1; d<=daysInMonth; d++){
+    const key = `${y}-${pad2(m+1)}-${pad2(d)}`;
+    const tot = (DATA?.dailyHistory?.[key]?.totalSeconds) || 0;
+    dayTotals[key] = tot;
+    monthTotal += tot;
+  }
+  const nonzeroDays = Object.values(dayTotals).filter(v=>v>0).length || 0;
+  const avg = nonzeroDays ? Math.round(monthTotal / nonzeroDays) : 0;
+
+  const mt = document.getElementById('calMonthTotal');
+  if(mt) mt.innerText = formatTime(monthTotal);
+  const ma = document.getElementById('calMonthAvg');
+  if(ma) ma.innerText = formatTime(avg);
+
+  const selected = __calState.selected || (VIEW_DATE || getLogicalDate());
+  const sd = document.getElementById('calSelectedLabel');
+  if(sd) sd.innerText = selected;
+  const sdt = document.getElementById('calDayTotal');
+  if(sdt) sdt.innerText = formatTime((DATA?.dailyHistory?.[selected]?.totalSeconds) || 0);
+
+  const grid = document.getElementById('calGrid');
+  if(!grid) return;
+
+  const cells = [];
+  const totalCells = 42; // 6 weeks
+  for(let i=0; i<totalCells; i++){
+    const dayNum = i - startDow + 1;
+    if(dayNum < 1 || dayNum > daysInMonth){
+      cells.push('<div class="cal-cell muted"></div>');
+      continue;
+    }
+    const key = `${y}-${pad2(m+1)}-${pad2(dayNum)}`;
+    const tot = dayTotals[key] || 0;
+    const cls = ['cal-cell'];
+    if(tot > 0) cls.push('has');
+    if(key == getLogicalDate()) cls.push('today');
+    if(key == selected) cls.push('selected');
+
+    const safeTot = formatTime(tot);
+    cells.push(`<div class="${cls.join(' ')}" onclick="calSelectDate('${key}', true)"><div class="d">${dayNum}</div><div class="t">${safeTot}</div></div>`);
+  }
+  grid.innerHTML = cells.join('');
+}
+
+// Close calendar when clicking outside
+(function(){
+  const m = document.getElementById('calendarModal');
+  if(m){
+    m.addEventListener('click', (e)=>{ if(e.target === m) closeCalendarModal(); });
+  }
+})();
+/* =========================
+   GOAL
+========================= */
+function saveDailyGoal(e) {
+  e.stopPropagation();
+  const val = document.getElementById('dailyGoal').value;
+  ensureDailyData(VIEW_DATE).goalStr = val;
+  saveData();
+  renderDailySidebar();
+}
+function toggleGoalMode() {
+  const disp = document.getElementById('goalDisplay'), wrap = document.getElementById('goalInputWrap');
+  if(wrap.style.display === 'none') {
+    disp.style.display = 'none';
+    wrap.style.display = 'flex';
+    document.getElementById('dailyGoal').focus();
+  }
+}
+function checkGoalColor(currentSec, goalStr) {
+  if(!goalStr) return;
+  const gParts = goalStr.split(':').map(Number);
+  if(gParts.length!==3) return;
+  const gSec = gParts[0]*3600 + gParts[1]*60 + gParts[2];
+  const disp = document.getElementById('goalDisplay');
+  if(disp) {
+    if(gSec > 0 && currentSec >= gSec) disp.classList.add('achieved');
+    else disp.classList.remove('achieved');
+  }
+}
+
+/* =========================
+   DRAG / DROP
+========================= */
+function allowDrop(ev) {
+  ev.preventDefault();
+  const el = ev.currentTarget;
+  if(el && el.classList && el.classList.contains('time-slot')){
+    el.classList.add('drag-over');
+  }
+}
+
+/* origin 포함 */
+
+/* =========================
+   ORIGIN ENCODE/DECODE + SIDEBAR CLICK
+========================= */
+function decodeOriginStr(originStr){
+  if(!originStr) return null;
+  try { return JSON.parse(decodeURIComponent(originStr)); }
+  catch(e){ return null; }
+}
+
+function sbCardClick(ev, type, id, pid, originStr){
+  // input/button 등 클릭이면 카드 이동 금지
+  if(ev && ev.target && ev.target.closest('input,button,textarea,select,label')) return;
+  const origin = decodeOriginStr(originStr);
+  navigateToCard(type, id, pid, origin);
+}
+
+/* =========================
+   DRAG / DROP (PATCHED: originStr)
+========================= */
+function handleDragStart(ev, type, id, pid) {
+  if(__dragFromInteractive){ ev.preventDefault(); return false; }
+  const r = getRoute();
+  const origin = { page: r.page || 'home', id: r.id || null };
+  const originStr = encodeURIComponent(JSON.stringify(origin));
+
+  const cardEl = ev.target && ev.target.closest ? ev.target.closest('.card') : null;
+  const idx = (cardEl && cardEl.dataset && cardEl.dataset.index !== undefined) ? parseInt(cardEl.dataset.index, 10) : null;
+  let tabId = null;
+  if(origin.page === 'module'){
+    const mod = DATA.modules?.[origin.id];
+    tabId = mod?.activeTab || (mod?.tabs?.[0]?.id || null);
+  }
+
+  ev.dataTransfer.effectAllowed = 'move';
+  ev.dataTransfer.setData('application/json', JSON.stringify({
+    source:'main', type, id, pid,
+    originStr,
+    reorder: { page: origin.page, pid: origin.id, idx, tabId }
+  }));
+}
+
+function handleSidebarDragStart(ev, sIdx, cIdx) {
+  ev.dataTransfer.setData("application/json", JSON.stringify({ source:'sidebar', sIdx, cIdx }));
+}
+
+
+function handleReorderOver(ev){
+  ev.preventDefault();
+  if(ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+}
+
+function __moveInArray(arr, fromIdx, toIdx){
+  if(!Array.isArray(arr)) return;
+  const n = arr.length;
+  if(fromIdx<0 || fromIdx>=n || toIdx<0 || toIdx>=n || fromIdx===toIdx) return;
+  const [it] = arr.splice(fromIdx, 1);
+  arr.splice(toIdx, 0, it);
+}
+
+function handleReorderDrop(ev, listType, pid, targetIdx, tabId){
+  ev.preventDefault();
+  ev.stopPropagation();
+
+  const raw = ev.dataTransfer.getData('application/json');
+  if(!raw) return;
+  let data;
+  try{ data = JSON.parse(raw); }catch(e){ return; }
+  if(!data || data.source !== 'main' || !data.reorder) return;
+
+  const fromIdx = data.reorder.idx;
+  const fromPage = data.reorder.page;
+  const fromPid = data.reorder.pid;
+  const fromTab = data.reorder.tabId || '';
+
+  // Home subjects reorder
+  if(listType==='home'){
+    if(data.type !== 'subject' || fromPage !== 'home') return;
+    const arr = DATA.home.subjects || [];
+    __moveInArray(arr, fromIdx, targetIdx);
+    saveData();
+    renderHome();
+    renderDailySidebar();
+    return;
+  }
+
+  // Detail cards reorder
+  if(listType==='detail'){
+    if(data.type !== 'detail' || fromPage !== 'detail') return;
+    if(String(fromPid) !== String(pid)) return;
+    const arr = DATA.details?.[pid]?.cards || [];
+    __moveInArray(arr, fromIdx, targetIdx);
+    saveData();
+    renderDetail(pid);
+    renderDailySidebar();
+    return;
+  }
+
+  // Module questions reorder (active tab only)
+  if(listType==='module'){
+    if(data.type !== 'question' || fromPage !== 'module') return;
+    if(String(data.pid) !== String(pid)) return;
+    const mod = DATA.modules?.[pid];
+    if(!mod) return;
+    const active = tabId || mod.activeTab || (mod.tabs[0] && mod.tabs[0].id);
+    if(String(fromTab) !== String(active)) return;
+    const tab = mod.tabs.find(t=>t.id===active) || mod.tabs[0];
+    const arr = tab.questions || [];
+    __moveInArray(arr, fromIdx, targetIdx);
+    saveData();
+    renderModule(pid);
+    renderDailySidebar();
+    return;
+  }
+}
+
+
+
+
+function dropOnCard(ev, date, targetSlotIdx, targetCardIdx){
+  ev.preventDefault();
+  ev.stopPropagation();
+
+  const slotEl = ev.currentTarget.closest('.time-slot');
+  if(slotEl) slotEl.classList.remove('drag-over');
+
+  const raw = ev.dataTransfer.getData("application/json");
+  if(!raw) return;
+
+  let data;
+  try { data = JSON.parse(raw); } catch(e){ return; }
+
+  // sidebar -> sidebar: same-slot reorder + slot move (insert)
+  if(data.source === 'sidebar'){
+    const daily = DATA.dailyHistory?.[date];
+    if(!daily) return;
+
+    const fromSlotIdx = data.sIdx;
+    const fromCardIdx = data.cIdx;
+
+    if(fromSlotIdx === targetSlotIdx && fromCardIdx === targetCardIdx) return;
+
+    const fromSlot = daily.slots?.[fromSlotIdx];
+    const toSlot   = daily.slots?.[targetSlotIdx];
+    if(!fromSlot || !toSlot) return;
+
+    const [item] = fromSlot.cardIds.splice(fromCardIdx, 1);
+    if(!item) return;
+
+    let insertIdx = targetCardIdx;
+    if(fromSlotIdx === targetSlotIdx && fromCardIdx < targetCardIdx) insertIdx -= 1;
+
+    toSlot.cardIds.splice(Math.max(0, insertIdx), 0, item);
+
+    saveData();
+    renderDailySidebar();
+    return;
+  }
+
+  // main -> sidebar: insert before target card
+  if(data.source === 'main'){
+    const ref = {
+      type: data.type, id: data.id, pid: data.pid,
+      time:0, isRunning:false, done:false,
+      originStr: data.originStr || ''
+    };
+
+    const daily = ensureDailyData(date);
+    const slot = daily.slots?.[targetSlotIdx];
+    if(!slot) return;
+
+    // 중복 방지 (adhoc 제외)
+    if(ref.type !== 'adhoc' && slot.cardIds.some(x => x.type===ref.type && x.id===ref.id)) return;
+
+    slot.cardIds.splice(Math.max(0, targetCardIdx), 0, ref);
+
+    saveData();
+    renderDailySidebar();
+  }
+}
+
+function dropOnSlot(ev, date, sIdx) {
+  ev.preventDefault();
+  if(ev.currentTarget && ev.currentTarget.classList) ev.currentTarget.classList.remove('drag-over');
+
+  try {
+    const raw = ev.dataTransfer.getData("application/json");
+    if(!raw) return;
+    const data = JSON.parse(raw);
+
+    if(data.source === 'sidebar') {
+      const daily = DATA.dailyHistory?.[date];
+      if(!daily) return;
+      const srcSlot = daily.slots?.[data.sIdx];
+      const dstSlot = daily.slots?.[sIdx];
+      if(!srcSlot || !dstSlot) return;
+
+      const item = srcSlot.cardIds.splice(data.cIdx, 1)[0];
+      if(!item) return;
+
+      dstSlot.cardIds.push(item);
+      saveData();
+      renderDailySidebar();
+    } else if(data.source === 'main') {
+      addToSlot(date, sIdx, {
+        type: data.type, id: data.id, pid: data.pid,
+        time:0, isRunning:false, done:false,
+        originStr: data.originStr || ''
+      });
+    }
+  } catch(e){}
+}
+
+/* =========================
+   SELECTOR ADD (PATCHED: originStr)
+========================= */
+function selectorAdd(ev, type, id, pid) {
+  if(ev) ev.stopPropagation();
+
+  const r = getRoute();
+  const origin = { page: r.page || 'home', id: r.id || null };
+  const originStr = encodeURIComponent(JSON.stringify(origin));
+
+  addToSlot(selectorState.date, selectorState.slotIdx, {
+    type, id, pid: pid || id,
+    time:0, isRunning:false, done:false,
+    originStr
+  });
+
+  const btn = ev?.target;
+  if(btn){
+    btn.innerText="완료";
+    btn.style.background="var(--success)";
+    setTimeout(()=>{btn.innerText="추가";btn.style.background="";},800);
+  }
+}
+
+/* =========================
+   NAV (PATCHED: origin-aware + safe)
+========================= */
+function navigateToCard(type, id, pid, originStr) {
+  // Always navigate to the actual card location.
+  // originStr is kept only for optional back actions.
+  try { window.__lastOrigin = originStr ? JSON.parse(originStr) : null; } catch(e){ window.__lastOrigin = null; }
+
+  // Helper: find missing pid by scanning data
+  function findModuleByTab(tabId){
+    for(const [mid, mod] of Object.entries(DATA.modules||{})){
+      if((mod.tabs||[]).some(t=>t.id===tabId)) return mid;
+    }
+    return null;
+  }
+  function findModuleByQuestion(qid){
+    for(const [mid, mod] of Object.entries(DATA.modules||{})){
+      for(const t of (mod.tabs||[])){
+        if((t.questions||[]).some(q=>q.id===qid)) return mid;
+      }
+    }
+    return null;
+  }
+  function findDetailPidByCardId(cardId){
+    for(const [sid, det] of Object.entries(DATA.details||{})){
+      if((det.cards||[]).some(c=>c.id===cardId)) return sid;
+    }
+    return null;
+  }
+
+  if(type === 'subject') {
+    // Subject cards in timetable should go to Home.
+    location.hash = '#/';
+    return;
+  }
+
+  if(type === 'detail'){
+    const resolvedPid = pid || findDetailPidByCardId(id);
+    if(resolvedPid) location.hash = `#/detail/${resolvedPid}?focus=${id}`;
+    return;
+  }
+
+  if(type === 'theory'){
+    const resolvedPid = pid || findModuleByTab(id);
+    if(resolvedPid) location.hash = `#/module/${resolvedPid}?focus=theory-${resolvedPid}-${id}`;
+    return;
+  }
+
+  if(type === 'question'){
+    const resolvedPid = pid || findModuleByQuestion(id);
+    if(resolvedPid) location.hash = `#/module/${resolvedPid}?focus=${id}`;
+    return;
+  }
+}
+
+/* =========================
+   SIDEBAR CARD RENDER (PATCHED)
+   - onclick: sbCardClick(...)
+   - checkbox/button: pointerdown/mousedown/click stop + drag disable
+========================= */
+function renderSidebarCard(ref, date, sIdx, cIdx) {
+  const info = getCardInfo(ref);
+  const unique = `sb-${date}-${sIdx}-${cIdx}`;
+  const isAdhoc = (ref.type === 'adhoc');
+
+  const children = Array.isArray(info.children) ? info.children : null;
+  const hasChildren = !!(children && children.length);
+
+  const childrenHtml = hasChildren
+    ? children.map(ch => `
+      <div class="sb-child" onclick="sbCardClick(event,'${ch.type}','${ch.id}','${ch.pid}',''); event.stopPropagation();">
+        <input type="checkbox" ${ch.done?'checked':''}
+          draggable="false"
+          onpointerdown="event.stopPropagation()"
+          onmousedown="event.stopPropagation()"
+          onclick="event.stopPropagation()"
+          ondragstart="return false" onchange="event.stopPropagation(); toggleChildDone('${ch.type}','${ch.id}','${ch.pid}', this.checked)">
+        <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${ch.text}</span>
+      </div>
+    `).join('')
+    : '';
+
+  const titleExtra = isAdhoc ? `<span style="color:var(--accent);">✏️</span> ` : '';
+  const titleOnclick = isAdhoc ? `event.stopPropagation(); editAdhocTitle('${date}',${sIdx},${cIdx});` : '';
+
+  const titleAttr = isAdhoc ? ('onpointerdown=\"event.stopPropagation()\" onmousedown=\"event.stopPropagation()\" onclick=\"' + titleOnclick + ' event.stopPropagation();\"') : '';
+
+  return `
+    <div class="sb-card ${info.done?'done':''}"
+      id="${unique}"
+      ondragover="allowDrop(event)"
+      ondrop="dropOnCard(event, '${date}', ${sIdx}, ${cIdx})"
+      onclick="sbCardClick(event, '${ref.type}', '${ref.id}', '${ref.pid}', '${ref.originStr||''}')">
+
+      <div class="sb-card-head" onclick="sbCardClick(event, '${ref.type}', '${ref.id}', '${ref.pid}', '${ref.originStr||''}')">
+        <span class="sb-drag-handle"
+          draggable="true"
+          ondragstart="handleSidebarDragStart(event, ${sIdx}, ${cIdx})"
+          onpointerdown="event.stopPropagation()"
+          onmousedown="event.stopPropagation()"
+          title="드래그로 이동">⋮⋮</span>
+
+        <button class="btn btn-icon sb-btn-del"
+          onpointerdown="event.stopPropagation()"
+          onmousedown="event.stopPropagation()"
+          onclick="event.stopPropagation(); removeDailyCard(event,'${date}',${sIdx},${cIdx})">×</button>
+
+        <button class="btn btn-icon sb-btn-exp"
+          style="${hasChildren ? '' : 'visibility:hidden'}"
+          onpointerdown="event.stopPropagation()"
+          onmousedown="event.stopPropagation()"
+          onclick="event.stopPropagation(); toggleSidebarExpand('${date}', ${sIdx}, ${cIdx})">
+          ${ref.expanded ? '▲' : '▼'}
+        </button>
+
+        <span class="sb-title" title="${info.title}" ${titleAttr}>${titleExtra}${info.title}</span>
+
+        <span class="sb-time" id="sb-time-${date}-${sIdx}-${cIdx}" title="Today / Total">
+          ${formatTime(ref.time||0)}<br><span style="color:var(--text-sub);font-size:0.7rem;">${info.totalStr||''}</span>
+        </span>
+
+        <button class="btn btn-icon sb-btn-play" style="${info.isRunning?'color:red':''}"
+          onpointerdown="event.stopPropagation()"
+          onmousedown="event.stopPropagation()"
+          onclick="event.stopPropagation(); toggleTimerFromSidebar('${ref.type}', '${ref.id}', '${ref.pid}', ${sIdx}, ${cIdx})">${info.isRunning?'❚❚':'▶'}</button>
+
+        <input type="checkbox" class="sb-check" ${info.done?'checked':''}
+          draggable="false"
+          onpointerdown="event.stopPropagation()"
+          onmousedown="event.stopPropagation()"
+          onclick="event.stopPropagation()"
+          ondragstart="return false"
+          onchange="event.stopPropagation(); toggleCheckFromSidebar('${ref.type}', '${ref.id}', '${ref.pid}', this.checked, ${sIdx}, ${cIdx})">
+      </div>
+
+      ${hasChildren ? `<div class="sb-body ${ref.expanded?'expanded':''}">${childrenHtml}</div>` : ''}
+
+    </div>`;
+}
+
+
+function handleSidebarDragStart(ev, sIdx, cIdx) {
+  ev.dataTransfer.setData("application/json", JSON.stringify({ source:'sidebar', sIdx, cIdx }));
+}
+
+
+
+function addToSlot(date, sIdx, ref) {
+  const slot = DATA.dailyHistory[date].slots[sIdx];
+  if(ref.type==='adhoc' || !slot.cardIds.some(x => x.id === ref.id && x.type === ref.type)) {
+    slot.cardIds.push(ref);
+    saveData(); renderDailySidebar();
+  }
+}
+
+/* =========================
+   SIDEBAR EXPAND / CHILD TOGGLE
+========================= */
+function toggleSidebarExpand(date, sIdx, cIdx){
+  const daily = DATA.dailyHistory?.[date];
+  const ref = daily?.slots?.[sIdx]?.cardIds?.[cIdx];
+  if(!ref) return;
+  ref.expanded = !ref.expanded;
+  saveData();
+  renderDailySidebar();
+}
+
+function toggleChildDone(type, id, pid, checked){
+  const v = !!checked;
+
+  if(type === 'detail'){
+    const c = (DATA.details?.[pid]?.cards || []).find(x=>x.id===id);
+    if(c) c.done = v;
+  } else if(type === 'theory'){
+    const t = DATA.modules?.[pid]?.tabs?.find(x=>x.id===id);
+    if(t) t.done = v;
+  } else if(type === 'question'){
+    const mod = DATA.modules?.[pid];
+    if(mod){
+      for(const t of (mod.tabs||[])){
+        const q = (t.questions||[]).find(x=>x.id===id);
+        if(q){ q.done = v; break; }
+      }
+    }
+  } else if(type === 'subject'){
+    toggleCheckAllSubject(id, v);
+  }
+
+  saveData();
+  renderDailySidebar();
+  renderRouter(true);
+}
+
+/* =========================
+   SIDEBAR EDIT / REMOVE
+========================= */
+function editAdhocTitle(date, sIdx, cIdx) {
+  const newTitle = prompt("수정할 이름을 입력하세요:", DATA.dailyHistory[date].slots[sIdx].cardIds[cIdx].title || '');
+  if(newTitle) {
+    DATA.dailyHistory[date].slots[sIdx].cardIds[cIdx].title = newTitle;
+    saveData(); renderDailySidebar();
+  }
+}
+
+function removeDailyCard(ev,d,s,c) {
+  ev.stopPropagation();
+  DATA.dailyHistory[d].slots[s].cardIds.splice(c,1);
+  saveData();
+  renderDailySidebar();
+}
+
+function addDailySlot() {
+  const l=prompt("블록 이름");
+  if(l){
+    ensureDailyData(VIEW_DATE).slots.push({id:uid('slot'), label:l, cardIds:[]});
+    saveData(); renderDailySidebar();
+  }
+}
+function removeSlot(d,i) {
+  if(confirm('삭제?')){
+    DATA.dailyHistory[d].slots.splice(i,1);
+    saveData(); renderDailySidebar();
+  }
+}
+function resetDailyToday() {
+  if(confirm(`[${VIEW_DATE}] 계획을 초기화하시겠습니까?`)){
+    delete DATA.dailyHistory[VIEW_DATE];
+    ensureDailyData(VIEW_DATE);
+    saveData(); renderDailySidebar();
+  }
+}
+
+function copyDailyPlan() {
+  const daily = DATA.dailyHistory[VIEW_DATE];
+  if(!daily) { alert("계획이 없습니다."); return; }
+  let txt = `📅 [${VIEW_DATE}] 일일 계획\n\n`;
+  daily.slots.forEach(s => {
+    txt += `■ ${s.label}\n`;
+    (s.cardIds||[]).forEach(c => {
+      const info = getCardInfo(c);
+      txt += `  - [${info.done?'v':' '}] ${info.title} (${formatTime(c.time||0)})\n`;
+    });
+    txt += `\n`;
+  });
+  txt += `⏱ Total: ${formatTime(daily.totalSeconds||0)} / Goal: ${daily.goalStr||"00:00:00"}`;
+  navigator.clipboard.writeText(txt).then(() => alert("복사 완료!"));
+}
+
+/* =========================
+   TIMER CORE
+========================= */
+function tickOneSecond(){
+  const today = getLogicalDate();
+  ensureDailyData(today);
+
+  // 1) Increment MAIN timers (these are the canonical '전체' times)
+  let anyRunningMain = false;
+  const runningRefs = []; // {type,id,pid}
+
+  (DATA.home.subjects||[]).forEach(s=>{
+    if(s.isRunning){
+      s.time = (s.time||0)+1;
+      anyRunningMain = true;
+      runningRefs.push({type:'subject', id:s.id, pid:null});
+    }
+  });
+
+  Object.entries(DATA.details||{}).forEach(([sid, d])=>{
+    (d.cards||[]).forEach(c=>{
+      if(c.isRunning){
+        c.time = (c.time||0)+1;
+        anyRunningMain = true;
+        runningRefs.push({type:'detail', id:c.id, pid:sid});
+      }
+    });
+  });
+
+  Object.entries(DATA.modules||{}).forEach(([mid, m])=>{
+    (m.tabs||[]).forEach(t=>{
+      if(t.isRunning){
+        t.time = (t.time||0)+1;
+        anyRunningMain = true;
+        runningRefs.push({type:'theory', id:t.id, pid:mid});
+      }
+      (t.questions||[]).forEach(q=>{
+        if(q.isRunning){
+          q.time = (q.time||0)+1;
+          anyRunningMain = true;
+          runningRefs.push({type:'question', id:q.id, pid:mid});
+        }
+      });
+    });
+  });
+
+  function matchRef(ref, r){
+    if(!ref || !r) return false;
+    if(ref.type !== r.type) return false;
+    if(String(ref.id) !== String(r.id)) return false;
+    // pid is relevant for detail/theory/question; tolerate missing pid by matching on type+id
+    if(r.pid != null && ref.pid != null) return String(ref.pid) === String(r.pid);
+    return true;
+  }
+
+  // Precompute TODAY roll-up targets from running MAIN timers (wall-clock, no double-count).
+  const parentsToBump = new Map();
+  if(runningRefs.length){
+    runningRefs.forEach(r=>{
+      const parents = getParentRefsForRunning(r);
+      parents.forEach(p=>{
+        const key = `${p.type}|${p.id}|${p.pid==null?'':p.pid}`;
+        if(!parentsToBump.has(key)) parentsToBump.set(key, p);
+      });
+    });
+  }
+
+  // 2) Increment Daily history timers
+  //    - All dates: increment refs that are running in that date, and that date's totalSeconds
+  //    - Today: also increment per-card time for refs matching running MAIN timers even if ref.isRunning is false
+  let todayTotalAdvancedByRunningRef = false;
+
+  if(DATA.dailyHistory){
+    Object.entries(DATA.dailyHistory).forEach(([dateKey, daily])=>{
+      let anyRunningRef = false;
+
+      (daily.slots||[]).forEach(slot=>{
+        (slot.cardIds||[]).forEach(ref=>{
+          if(ref.isRunning){
+            ref.time = (ref.time||0)+1;
+            anyRunningRef = true;
+          }
+        });
+      });
+
+      // Today: sync main-running timers into today's per-card time for matching refs (only if not already running via ref)
+      if(dateKey === today && runningRefs.length){
+        (daily.slots||[]).forEach(slot=>{
+          (slot.cardIds||[]).forEach(ref=>{
+            if(ref.isRunning) return;
+            const r = runningRefs.find(rr => matchRef(ref, rr));
+            if(!r) return;
+            ref.time = (ref.time||0)+1;
+          });
+        });
+      }
+
+      if(anyRunningRef){
+        daily.totalSeconds = (daily.totalSeconds||0)+1;
+        if(dateKey === today) todayTotalAdvancedByRunningRef = true;
+      }
+    });
+  }
+
+  // 2.5) Apply TODAY roll-up bumps to parent refs if those refs exist in today's timetable.
+  if(runningRefs.length){
+    const dToday = ensureDailyData(today);
+    parentsToBump.forEach(p=>{
+      incrementDailyRefTimeIfNotRunning(dToday, p.type, p.id, p.pid, 1);
+    });
+  }
+
+  // 3) Ensure TODAY totalSeconds increases if any MAIN timer runs.
+  //    - Must not affect other dates.
+  //    - Must not double count if today's refs already advanced the total this second.
+  if(anyRunningMain && !todayTotalAdvancedByRunningRef){
+    const dToday = ensureDailyData(today);
+    dToday.totalSeconds = (dToday.totalSeconds||0)+1;
+  }
+
+  // Persist periodically (avoid excessive writes)
+  const dToday = DATA.dailyHistory?.[today];
+  if(dToday && (dToday.totalSeconds||0) % 5 === 0){
+    saveData();
+  }
+
+  updateTimerDOM();
+  updateSidebarTimerDOM();
+
+  if(document.getElementById('daily-sidebar')?.classList.contains('open')){
+    const dailyView = ensureDailyData(VIEW_DATE);
+    const tEl = document.getElementById('todayTotal');
+    if(tEl) tEl.innerText = formatTime(dailyView.totalSeconds || 0);
+    checkGoalColor(dailyView.totalSeconds || 0, dailyView.goalStr || "00:00:00");
+  }
+}
+
+function updateTimerDOM(){
+  (DATA.home.subjects||[]).forEach(s=>{
+    const st = calcSubjectStats(s.id);
+    const el = document.getElementById(`time-disp-subject-${s.id}`);
+    if(el) el.innerText = st.timeStr;
+  });
+  Object.values(DATA.details||{}).forEach(d=>{
+    (d.cards||[]).forEach(c=>{
+      const el = document.getElementById(`time-disp-${c.id}`);
+      if(el) el.innerText = formatTime(calcCardStats(c).time);
+    });
+  });
+  Object.entries(DATA.modules||{}).forEach(([mid, m])=>{
+    (m.tabs||[]).forEach(t=>{
+      const el = document.getElementById(`time-disp-theory-${mid}-${t.id}`);
+      if(el) el.innerText = formatTime(t.time||0);
+      (t.questions||[]).forEach(q=>{
+        const qEl = document.getElementById(`time-disp-${q.id}`);
+        if(qEl) qEl.innerText = formatTime(q.time||0);
+      });
+    });
+  });
+}
+
+function updateSidebarTimerDOM(){
+  const daily = DATA?.dailyHistory?.[VIEW_DATE];
+  if(!daily) return;
+
+  (daily.slots||[]).forEach((slot, sIdx)=>{
+    (slot.cardIds||[]).forEach((ref, cIdx)=>{
+      const el = document.getElementById(`sb-time-${VIEW_DATE}-${sIdx}-${cIdx}`);
+      if(!el) return;
+      const info = getCardInfo(ref);
+      el.innerHTML = `${formatTime(ref.time||0)}<br><span style="color:var(--text-sub);font-size:0.7rem;">${info.totalStr||''}</span>`;
+    });
+  });
+}
+
+/* =========================
+   TOGGLE TIMER / CHECK
+========================= */
+function toggleTimer(level, pid, idx, tabId){
+  if(level==='subject'){
+    const s = DATA.home.subjects[idx];
+    if(!s) return;
+    s.isRunning = !s.isRunning;
+  } else if(level==='detail'){
+    const list = DATA.details?.[pid]?.cards || [];
+    const c = list[idx];
+    if(!c) return;
+    c.isRunning = !c.isRunning;
+  } else if(level==='theory'){
+    const mod = DATA.modules?.[pid];
+    if(!mod) return;
+    const t = mod.tabs.find(x=>x.id===tabId);
+    if(!t) return;
+    t.isRunning = !t.isRunning;
+  } else if(level==='module'){
+    const mod = DATA.modules?.[pid];
+    if(!mod) return;
+    const tab = mod.tabs.find(x=>x.id===tabId) || mod.tabs[0];
+    const q = (tab.questions||[])[idx];
+    if(!q) return;
+    q.isRunning = !q.isRunning;
+  }
+  saveData();
+  renderRouter(true);
+  renderDailySidebar();
+}
+
+function toggleTimerFromSidebar(type, id, pid, sIdx, cIdx){
+  const daily = ensureDailyData(VIEW_DATE);
+  const ref = daily.slots?.[sIdx]?.cardIds?.[cIdx];
+  if(!ref) return;
+
+  ref.isRunning = !ref.isRunning;
+
+  if(type==='subject'){
+    const s = DATA.home.subjects.find(x=>x.id===id);
+    if(s) s.isRunning = ref.isRunning;
+  } else if(type==='detail'){
+    const c = (DATA.details?.[pid]?.cards||[]).find(x=>x.id===id);
+    if(c) c.isRunning = ref.isRunning;
+  } else if(type==='theory'){
+    const mod = DATA.modules?.[pid];
+    const t = mod?.tabs?.find(x=>x.id===id);
+    if(t) t.isRunning = ref.isRunning;
+  } else if(type==='question'){
+    const mod = DATA.modules?.[pid];
+    if(mod){
+      mod.tabs.forEach(t=>{
+        const q = (t.questions||[]).find(x=>x.id===id);
+        if(q) q.isRunning = ref.isRunning;
+      });
+    }
+  }
+
+  saveData();
+  renderDailySidebar();
+  renderRouter(true);
+}
+
+function toggleCheck(el, level, pid, idx, tabId){
+  const checked = !!el.checked;
+
+  if(level==='detail'){
+    // Detail cards can be backed by a module; the UI '완료' checkbox must complete the module too.
+    toggleDetailCardStatus(pid, idx, checked);
+  } else if(level==='theory'){
+    const t = DATA.modules?.[pid]?.tabs?.find(x=>x.id===tabId);
+    if(t) t.done = checked;
+  } else if(level==='module'){
+    const tab = DATA.modules?.[pid]?.tabs?.find(x=>x.id===tabId) || DATA.modules?.[pid]?.tabs?.[0];
+    const q = tab?.questions?.[idx];
+    if(q) q.done = checked;
+  }
+
+  saveData();
+  renderRouter(true);
+  renderDailySidebar();
+}
+
+function toggleCheckFromSidebar(type, id, pid, checked, sIdx, cIdx){
+  const daily = ensureDailyData(VIEW_DATE);
+  const ref = daily.slots?.[sIdx]?.cardIds?.[cIdx];
+  if(ref) ref.done = !!checked;
+
+  if(type==='detail'){
+    const list = (DATA.details?.[pid]?.cards||[]);
+    const idx = list.findIndex(x=>x.id===id);
+    if(idx>=0) toggleDetailCardStatus(pid, idx, !!checked);
+  } else if(type==='theory'){
+    const t = DATA.modules?.[pid]?.tabs?.find(x=>x.id===id);
+    if(t) t.done = !!checked;
+  } else if(type==='question'){
+    const mod = DATA.modules?.[pid];
+    if(mod){
+      mod.tabs.forEach(t=>{
+        const q = (t.questions||[]).find(x=>x.id===id);
+        if(q) q.done = !!checked;
+      });
+    }
+  } else if(type==='subject'){
+    toggleCheckAllSubject(id, !!checked);
+  }
+
+  saveData();
+  renderDailySidebar();
+  renderRouter(true);
+}
+
+function toggleDetailCardStatus(pid, idx, status){
+  if(!DATA.details?.[pid]) return;
+  const card = DATA.details[pid].cards?.[idx];
+  if(!card) return;
+
+  const v = !!status;
+
+  // 1) Update card
+  card.done = v;
+  if(v) card.isRunning = false;
+
+  // 2) Propagate to module (so computed completion matches UI)
+  if(card.module && DATA.modules?.[card.module]){
+    const mod = DATA.modules[card.module];
+    (mod.tabs||[]).forEach(t=>{
+      t.done = v;
+      if(v) t.isRunning = false;
+      (t.questions||[]).forEach(q=>{
+        q.done = v;
+        if(v) q.isRunning = false;
+      });
+    });
+  }
+
+  // 3) If subject now complete, stop subject timer
+  if(v){
+    const stats = calcSubjectStats(pid);
+    if(stats.pct === 100){
+      const subj = DATA.home?.subjects?.find(s=>s.id===pid);
+      if(subj) subj.isRunning = false;
+    }
+  }
+
+  saveData();
+  renderRouter(true);
+  renderDailySidebar();
+}
+
+function toggleCheckAll(type, id, checked){
+  if(type==='subject') return toggleCheckAllSubject(id, !!checked);
+  return;
+}
+
+function toggleCheckAllSubject(sid, checked){
+  if(!DATA.details?.[sid]) return;
+  const v = !!checked;
+  const cards = DATA.details[sid].cards || [];
+
+  cards.forEach(card=>{
+    card.done = v;
+    if(v) card.isRunning = false;
+
+    if(card.module && DATA.modules?.[card.module]){
+      const mod = DATA.modules[card.module];
+      (mod.tabs||[]).forEach(t=>{
+        t.done = v;
+        if(v) t.isRunning = false;
+        (t.questions||[]).forEach(q=>{
+          q.done = v;
+          if(v) q.isRunning = false;
+        });
+      });
+    }
+  });
+
+  if(v){
+    const subj = DATA.home?.subjects?.find(s=>s.id===sid);
+    if(subj) subj.isRunning = false;
+  }
+
+  saveData();
+  renderRouter(true);
+  renderDailySidebar();
+}
+
+function toggleSubItem(moduleId, type, pid, idx, checked){
+  const mod = DATA.modules?.[moduleId];
+  if(!mod) return;
+  if(type==='theory'){
+    const t = mod.tabs.find(x=>x.id===pid);
+    if(t) t.done = !!checked;
+  } else if(type==='question'){
+    const t = mod.tabs.find(x=>x.id===pid);
+    const q = t?.questions?.[idx];
+    if(q) q.done = !!checked;
+  }
+  saveData(); renderRouter(true); renderDailySidebar();
+}
+
+function editTime(level, pid, idx, tabId){
+  let cur = 0, target = null, label = '';
+  if(level==='subject'){
+    target = DATA.home.subjects[idx]; label='과목'; cur = target?.time||0;
+  } else if(level==='detail'){
+    target = (DATA.details?.[pid]?.cards||[])[idx]; label='카드'; cur = target?.time||0;
+  } else if(level==='theory'){
+    target = DATA.modules?.[pid]?.tabs?.find(x=>x.id===tabId); label='이론'; cur = target?.time||0;
+  } else if(level==='module'){
+    const tab = DATA.modules?.[pid]?.tabs?.find(x=>x.id===tabId) || DATA.modules?.[pid]?.tabs?.[0];
+    target = tab?.questions?.[idx]; label='문항'; cur = target?.time||0;
+  }
+  if(!target) return;
+  const val = prompt(`${label} 시간(초) 또는 HH:MM:SS 입력`, formatTime(cur));
+  if(val==null) return;
+  let sec = null;
+  if(/^\d+$/.test(val.trim())){
+    sec = Number(val.trim());
+  } else {
+    const parts = val.split(':').map(x=>Number(x));
+    if(parts.length===3 && parts.every(n=>Number.isFinite(n))){
+      sec = parts[0]*3600 + parts[1]*60 + parts[2];
+    }
+  }
+  if(sec==null || !Number.isFinite(sec) || sec<0) return alert('형식이 올바르지 않습니다.');
+  target.time = sec;
+  saveData(); renderRouter(true); renderDailySidebar();
+}
+
+/* =========================
+   NOTES
+========================= */
+function toggleNoteView(id){
+  const view = document.getElementById(`view-${id}`);
+  const edit = document.getElementById(`edit-${id}`);
+  if(!view || !edit) return;
+  const isEditing = edit.style.display === 'block';
+  edit.style.display = isEditing ? 'none' : 'block';
+  view.style.display = isEditing ? 'block' : 'none';
+}
+
+function saveNoteText(kind, mid, idx, tid, sid){
+  try{
+    if(kind==='theory'){
+      const tab = DATA.modules?.[mid]?.tabs?.find(x=>x.id===tid);
+      if(!tab) return;
+      tab.theoryNote = document.getElementById(`ta-theory-${tid}`).value || '';
+      saveData();
+      renderModule(mid);
+      renderDailySidebar();
+      return;
+    }
+    if(kind==='card'){
+      const tab = DATA.modules?.[mid]?.tabs?.find(x=>x.id===tid) || DATA.modules?.[mid]?.tabs?.[0];
+      const q = tab?.questions?.[idx];
+      if(!q) return;
+      q.userNote = document.getElementById(`ta-${sid}`).value || '';
+      saveData();
+      renderModule(mid);
+      renderDailySidebar();
+      return;
+    }
+  } catch(e){}
+}
+
+/* =========================
+   EDIT MODAL CRUD (RESTORED)
+========================= */
+function openAddModal(mode, pid, tabId, pageId){
+  openEditModal(mode, pid, undefined, tabId, pageId);
+}
+
+
+function openEditModal(mode, pid, idx, tabId, pageId){
+  editState = { mode, pid, idx, tabId, pageId };
+  const modal = document.getElementById('editModal');
+  modal.style.display = 'flex';
+
+  // elements
+  const titleInputWrap = document.getElementById('grpTitleInput');
+  const titleTAWrap    = document.getElementById('grpTitleTA');
+  const titleInput = document.getElementById('editTitle');
+  const titleTA    = document.getElementById('editTitleTA');
+
+  const descWrap = document.getElementById('editDesc').parentElement;
+  const descEl   = document.getElementById('editDesc');
+
+  const badgeWrap = document.getElementById('grpBadge');
+  const badgeEl   = document.getElementById('editBadge');
+
+  const qboxWrap = document.getElementById('grpQBox');
+  const qboxEl   = document.getElementById('editQBox');
+
+  const delBtn = document.getElementById('modalDeleteBtn');
+  if(delBtn) delBtn.style.display = 'none';
+
+  // reset visibility
+  if(titleInputWrap) titleInputWrap.style.display = 'block';
+  if(titleTAWrap)    titleTAWrap.style.display = 'none';
+  descWrap.style.display = 'block';
+  badgeWrap.style.display = 'block';
+  qboxWrap.style.display = 'none';
+
+  // labels
+  const lblTitle  = document.getElementById('lblTitle');
+  const lblTitle2 = document.getElementById('lblTitle2');
+  const lblDesc   = document.getElementById('lblDesc');
+
+  function setLabels(t, d){
+    if(lblTitle)  lblTitle.innerText = t;
+    if(lblTitle2) lblTitle2.innerText = t;
+    if(lblDesc)   lblDesc.innerText  = d;
+  }
+
+  function useTitleTextarea(on){
+    if(!titleInputWrap || !titleTAWrap) return;
+    if(on){
+      titleInputWrap.style.display = 'none';
+      titleTAWrap.style.display = 'block';
+    }else{
+      titleInputWrap.style.display = 'block';
+      titleTAWrap.style.display = 'none';
+    }
+  }
+
+  // populate
+  if(mode === 'app_info'){
+    document.getElementById('modalTitle').innerText = '앱 정보';
+    setLabels('제목', '부제');
+    useTitleTextarea(false);
+    titleInput.value = DATA.home.title || '';
+    descEl.value  = DATA.home.subtitle || '';
+    badgeWrap.style.display = 'none';
+  }
+  else if(mode === 'page_info'){
+    document.getElementById('modalTitle').innerText = '페이지 정보';
+    setLabels('제목', '부제');
+    useTitleTextarea(false);
+    const id = pageId;
+    const d = (DATA.details && DATA.details[id]) ? DATA.details[id] : (DATA.modules ? DATA.modules[id] : null);
+    titleInput.value = d?.title || '';
+    descEl.value  = d?.subtitle || '';
+    badgeWrap.style.display = 'none';
+  }
+  else if(mode === 'tab_rename'){
+    document.getElementById('modalTitle').innerText = '탭 이름 변경';
+    setLabels('탭 이름', '');
+    useTitleTextarea(false);
+    const t = DATA.modules?.[pid]?.tabs?.find(x=>x.id===tabId);
+    titleInput.value = t?.label || '';
+    descWrap.style.display = 'none';
+    badgeWrap.style.display = 'none';
+  }
+  else if(mode === 'tab_add'){
+    document.getElementById('modalTitle').innerText = '탭 추가';
+    setLabels('탭 이름', '');
+    useTitleTextarea(false);
+    titleInput.value = '';
+    descWrap.style.display = 'none';
+    badgeWrap.style.display = 'none';
+  }
+  else if(mode === 'subject'){
+    document.getElementById('modalTitle').innerText = (idx===undefined) ? '새 과목' : '과목 편집';
+    setLabels('과목명', '시험/메모');
+    useTitleTextarea(false);
+    const s = (idx===undefined) ? null : DATA.home.subjects[idx];
+    titleInput.value = s?.name || '';
+    descEl.value  = s?.examInfo || '';
+    badgeEl.value = s?.badge || '';
+    qboxWrap.style.display = 'none';
+  }
+  else if(mode === 'detail'){
+    document.getElementById('modalTitle').innerText = (idx===undefined) ? '새 카드' : '카드 편집';
+    setLabels('제목', '내용/범위');
+    useTitleTextarea(false);
+    qboxWrap.style.display = 'block';
+    const c = (idx===undefined) ? null : (DATA.details?.[pid]?.cards||[])[idx];
+    titleInput.value = c?.title || '';
+    descEl.value  = c?.scope || '';
+    badgeEl.value = c?.badge || '';
+    qboxEl.value  = c?.qbox || '';
+  }
+  else if(mode === 'module'){
+    document.getElementById('modalTitle').innerText = (idx===undefined) ? '새 문항' : '문항 편집';
+    setLabels('문항', '출처');
+    badgeWrap.style.display = 'none';
+    qboxWrap.style.display = 'none';
+
+    // module 문항은 텍스트가 길어지므로 textarea로 편집
+    useTitleTextarea(true);
+
+    const mod = DATA.modules?.[pid];
+    const tab = mod?.tabs?.find(x=>x.id===tabId) || mod?.tabs?.[0];
+    const q = (idx===undefined) ? null : (tab?.questions||[])[idx];
+
+    titleTA.value = q?.text || '';
+    descEl.value  = q?.src || '';
+
+    // UX: 문항은 크게, 출처는 작게
+    titleTA.rows = 10;
+    descEl.rows = 2;
+
+    autoGrowTextarea(titleTA, 200);
+  }
+  else if(mode === 'dday'){
+    const isNew = (idx===undefined);
+    document.getElementById('modalTitle').innerText = isNew ? 'D-Day 추가' : 'D-Day 편집';
+    setLabels('D-Day 이름', '날짜 (YYYY-MM-DD)');
+    useTitleTextarea(false);
+    badgeWrap.style.display = 'none';
+    qboxWrap.style.display = 'none';
+
+    if(!DATA.home.dDays) DATA.home.dDays = [];
+    const dday = isNew ? null : (DATA.home.dDays[idx] || null);
+
+    titleInput.value = dday?.label || 'D-Day';
+    descEl.value     = dday?.date  || getLogicalDate();
+    descEl.rows = 2;
+
+    if(delBtn && !isNew){
+      delBtn.style.display = 'inline-flex';
+    }
+  }
+
+  // focus
+  setTimeout(()=>{
+    const useTA = (titleTAWrap && titleTAWrap.style.display !== 'none');
+    (useTA ? titleTA : titleInput)?.focus?.();
+    if(useTA) autoGrowTextarea(titleTA, 200);
+  }, 0);
+}
+
+function closeModal(){
+  document.getElementById('editModal').style.display='none';
+  // restore description field if it was hidden
+  const descWrap = document.getElementById('editDesc').parentElement;
+  descWrap.style.display='block';
+}
+
+
+
+function autoGrowTextarea(el, minHeightPx){
+  if(!el) return;
+  const minH = (typeof minHeightPx==='number') ? minHeightPx : 0;
+  const resize = ()=>{
+    el.style.height = 'auto';
+    const h = Math.max(el.scrollHeight, minH);
+    el.style.height = h + 'px';
+  };
+  // avoid duplicate listeners
+  if(!el.__autogrowBound){
+    el.addEventListener('input', resize);
+    el.__autogrowBound = true;
+  }
+  resize();
+}
+
+function purgeDailyRefs(predicate){
+  if(!DATA.dailyHistory) return;
+  Object.keys(DATA.dailyHistory).forEach(date=>{
+    const day = DATA.dailyHistory[date];
+    (day.slots||[]).forEach(slot=>{
+      if(!Array.isArray(slot.cardIds)) return;
+      slot.cardIds = slot.cardIds.filter(ref=>!predicate(ref));
+    });
+  });
+}
+
+
+function saveCardChange(){
+  const titleTAWrap = document.getElementById('grpTitleTA');
+  const usingTA = (titleTAWrap && titleTAWrap.style.display !== 'none');
+  const t = (usingTA ? document.getElementById('editTitleTA').value : document.getElementById('editTitle').value) || '';
+  const d = document.getElementById('editDesc').value || '';
+  const b = document.getElementById('editBadge').value || '';
+  const q = document.getElementById('editQBox').value || '';
+  const { mode, pid, idx, tabId, pageId } = editState || {};
+
+  if(mode === 'app_info'){
+    DATA.home.title = t;
+    DATA.home.subtitle = d;
+  }
+  else if(mode === 'page_info'){
+    const id = pageId;
+    if(DATA.details?.[id]){ DATA.details[id].title = t; DATA.details[id].subtitle = d; }
+    else if(DATA.modules?.[id]){ DATA.modules[id].title = t; DATA.modules[id].subtitle = d; }
+  }
+  else if(mode === 'tab_rename'){
+    const tab = DATA.modules?.[pid]?.tabs?.find(x=>x.id===tabId);
+    if(tab) tab.label = t;
+  }
+  else if(mode === 'tab_add'){
+    const mod = DATA.modules?.[pid];
+    if(mod){
+      const label = t.trim() || '새 탭';
+      mod.tabs = mod.tabs || [];
+      mod.tabs.push({ id: uid('tab'), label, questions: [] });
+    }
+  }
+  else if(mode === 'subject'){
+    if(idx===undefined){
+      DATA.home.subjects.push({ id: uid('s'), name: t.trim()||'새 과목', examInfo: d, badge: b, done:false, time:0, today:0 });
+    }else{
+      const s = DATA.home.subjects[idx];
+      if(s){ s.name = t.trim()||s.name||'과목'; s.examInfo = d; s.badge = b; }
+    }
+  }
+  else if(mode === 'detail'){
+    const deck = DATA.details?.[pid];
+    if(deck){
+      deck.cards = deck.cards || [];
+      if(idx===undefined){
+        deck.cards.push({ id: uid('c'), title: t.trim()||'새 카드', scope: d, badge: b, qbox: q, moduleId:null, time:0, done:false, isRunning:false });
+      }else{
+        const c = deck.cards[idx];
+        if(c){ c.title = t.trim()||c.title; c.scope = d; c.badge = b; c.qbox = q; }
+      }
+    }
+  }
+  else if(mode === 'module'){
+    const mod = DATA.modules?.[pid];
+    const tab = mod?.tabs?.find(x=>x.id===tabId) || mod?.tabs?.[0];
+    if(tab){
+      const txt = t.trim();
+      const src = d.trim();
+      if(!txt){ alert('문항을 입력하세요.'); return; }
+      tab.questions = tab.questions || [];
+      if(idx===undefined){
+        tab.questions.push({ id: uid('q'), src, text: txt, userNote:'', time:0, done:false, isRunning:false });
+      }else{
+        const qq = tab.questions[idx];
+        if(qq){ qq.text = txt; qq.src = src; }
+      }
+    }
+  }
+  else if(mode === 'dday'){
+    if(!DATA.home.dDays) DATA.home.dDays = [];
+    const label = (t.trim() || 'D-Day');
+    const date = d.trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)) return alert('형식: YYYY-MM-DD');
+
+    if(idx===undefined){
+      if(DATA.home.dDays.length >= 3) return alert('D-Day는 최대 3개까지 가능합니다.');
+      DATA.home.dDays.push({ label, date });
+    }else{
+      const item = DATA.home.dDays[idx];
+      if(item){ item.label = label; item.date = date; }
+    }
+    saveData();
+    updateDDayPanel();
+    renderRouter(true);
+    closeModal();
+    return;
+  }
+
+  saveData();
+  closeModal();
+  renderRouter(true);
+  updateDDayPanel();
+}
+
+function modalDeleteAction(){
+  const { mode, idx } = editState || {};
+  if(mode !== 'dday') return;
+  if(!DATA.home.dDays) DATA.home.dDays = [];
+  const item = DATA.home.dDays[idx];
+  if(!item) return;
+  if(!confirm('삭제하시겠습니까?')) return;
+  DATA.home.dDays.splice(idx, 1);
+  saveData();
+  updateDDayPanel();
+  renderRouter(true);
+  closeModal();
+}
+
+function deleteCard(mode, pid, idx, tabId){
+  if(!confirm('삭제하시겠습니까? (연결된 하위 데이터도 함께 삭제될 수 있습니다)')) return;
+
+  if(mode === 'subject'){
+    const s = DATA.home.subjects[idx];
+    if(!s) return;
+    const sid = s.id;
+    // delete linked modules
+    const d = DATA.details?.[sid];
+    if(d){
+      (d.cards||[]).forEach(c=>{ if(c.module && DATA.modules?.[c.module]) delete DATA.modules[c.module]; });
+      delete DATA.details[sid];
+    }
+    DATA.home.subjects.splice(idx,1);
+    purgeDailyRefs(ref=> (ref.type==='subject' && ref.id===sid) || (ref.pid===sid));
+  }
+  else if(mode === 'detail'){
+    const list = DATA.details?.[pid]?.cards || [];
+    const c = list[idx];
+    if(!c) return;
+    if(c.module && DATA.modules?.[c.module]) delete DATA.modules[c.module];
+    list.splice(idx,1);
+    purgeDailyRefs(ref=> (ref.type==='detail' && ref.id===c.id && ref.pid===pid));
+  }
+  else if(mode === 'module'){
+    const mod = DATA.modules?.[pid];
+    const tab = mod?.tabs?.find(x=>x.id===tabId) || mod?.tabs?.[0];
+    const q = (tab?.questions||[])[idx];
+    if(!q) return;
+    tab.questions.splice(idx,1);
+    purgeDailyRefs(ref=> (ref.type==='question' && ref.id===q.id && ref.pid===pid));
+  }
+
+  saveData();
+  renderRouter(true);
+  renderDailySidebar();
+}
+
+// Convenience wrappers (kept for existing onclick references)
+function openEditHome(){ openEditModal('app_info','home'); }
+function addSubject(){ openAddModal('subject','home'); }
+function editSubject(idx){ openEditModal('subject','home',idx); }
+function deleteSubject(idx){ deleteCard('subject','home',idx); }
+
+// Duplicate a subject (and its linked detail page + modules)
+function duplicateSubject(idx){
+  const src = (DATA.home?.subjects||[])[idx];
+  if(!src) return;
+
+  // 1) Duplicate subject row
+  const newSid = uid('s');
+  const ns = JSON.parse(JSON.stringify(src));
+  ns.id = newSid;
+  ns.name = (ns.name || '새 과목') + ' (복제)';
+  ns.time = 0; ns.done = false; ns.isRunning = false;
+  (DATA.home.subjects||[]).splice(idx+1, 0, ns);
+
+  // 2) Duplicate detail page
+  const srcDetail = DATA.details?.[src.id] || { id: src.id, title: src.name||'새 과목', subtitle: '', cards: [] };
+  const nd = JSON.parse(JSON.stringify(srcDetail));
+  nd.id = newSid;
+  nd.title = ns.name || nd.title;
+  nd.cards = Array.isArray(nd.cards) ? nd.cards : [];
+
+  // 3) Duplicate linked modules and rewire card.module
+  const modMap = {};
+  nd.cards.forEach(card => {
+    card.id = uid('card');
+    card.time = 0; card.done = false; card.isRunning = false;
+
+    if(card.module && DATA.modules?.[card.module]){
+      const oldMid = card.module;
+      if(!modMap[oldMid]){
+        const newMid = uid('m');
+        modMap[oldMid] = newMid;
+        const nm = JSON.parse(JSON.stringify(DATA.modules[oldMid]));
+        nm.id = newMid;
+        nm.backTo = `#/detail/${newSid}`;
+        nm.time = 0; nm.done = false; nm.isRunning = false;
+        nm.tabs = Array.isArray(nm.tabs) ? nm.tabs : [{ id: 't1', label: '이론', questions: [] }];
+
+        nm.tabs.forEach(tab => {
+          // keep tab.id as-is is OK, but regenerate to avoid collisions in focus/hash usage
+          tab.id = uid('t');
+          tab.time = 0; tab.done = false; tab.isRunning = false;
+          tab.questions = Array.isArray(tab.questions) ? tab.questions : [];
+          tab.questions.forEach(q => {
+            q.id = uid('q');
+            q.time = 0; q.done = false; q.isRunning = false;
+          });
+        });
+        nm.activeTab = nm.tabs?.[0]?.id || 't1';
+        DATA.modules[newMid] = nm;
+      }
+      card.module = modMap[oldMid];
+    } else {
+      // If the old module doesn't exist, drop linkage
+      card.module = card.module && !DATA.modules?.[card.module] ? null : card.module;
+    }
+  });
+
+  DATA.details[newSid] = nd;
+
+  saveData();
+  renderHome();
+  renderDailySidebar();
+}
+function editDetailTitle(sid){ openEditModal('page_info',sid,undefined,undefined,sid); }
+function addDetailCard(sid){ openAddModal('detail',sid); }
+function editCard(level, pid, idx, tabId){
+  if(level==='detail') openEditModal('detail',pid,idx);
+  else if(level==='module') openEditModal('module',pid,idx,tabId);
+}
+function editModuleTitle(mid){ openEditModal('page_info',mid,undefined,undefined,mid); }
+function addTab(mid){ openEditModal('tab_add',mid); }
+function renameTab(mid, tid){ openEditModal('tab_rename',mid,undefined,tid); }
+function addQuestion(mid, tid){ openAddModal('module',mid,tid); }
+function duplicateCard(level, pid, idx, tabId){
+  if(level==='detail'){
+    const list = DATA.details?.[pid]?.cards||[];
+    const c = list[idx]; if(!c) return;
+    const nc = JSON.parse(JSON.stringify(c));
+    nc.id = uid('card'); nc.time=0; nc.done=false; nc.isRunning=false;
+    nc.title = (nc.title||'') + ' (복제)';
+
+    // If this detail card is linked to a module, duplicate the module too
+    if(nc.module && DATA.modules?.[nc.module]){
+      const oldMid = nc.module;
+      const newMid = uid('m');
+      const nm = JSON.parse(JSON.stringify(DATA.modules[oldMid]));
+      nm.id = newMid;
+      nm.backTo = `#/detail/${pid}`;
+      nm.time = 0; nm.done = false; nm.isRunning = false;
+      nm.tabs = Array.isArray(nm.tabs) ? nm.tabs : [{ id: uid('t'), label: '이론', questions: [] }];
+      nm.tabs.forEach(tab => {
+        tab.id = uid('t');
+        tab.time = 0; tab.done = false; tab.isRunning = false;
+        tab.questions = Array.isArray(tab.questions) ? tab.questions : [];
+        tab.questions.forEach(q => {
+          q.id = uid('q');
+          q.time = 0; q.done = false; q.isRunning = false;
+        });
+      });
+      nm.activeTab = (nm.tabs && nm.tabs[0] ? nm.tabs[0].id : 't1');
+      DATA.modules[newMid] = nm;
+      nc.module = newMid;
+    }
+
+    list.splice(idx+1,0,nc);
+    saveData(); renderDetail(pid); renderDailySidebar();
+  } else if(level==='module'){
+    const mod = DATA.modules?.[pid]; if(!mod) return;
+    const tab = mod.tabs.find(x=>x.id===tabId) || mod.tabs[0];
+    const q = tab?.questions?.[idx]; if(!q) return;
+    const nq = JSON.parse(JSON.stringify(q));
+    nq.id = uid('q'); nq.time=0; nq.done=false; nq.isRunning=false;
+    tab.questions.splice(idx+1,0,nq);
+    saveData(); renderModule(pid); renderDailySidebar();
+  }
+}
+
+function editModuleTitle(mid){
+  const m = DATA.modules[mid]; if(!m) return;
+  const t = prompt('모듈 제목', m.title||''); if(t!=null) m.title=t;
+  const s = prompt('모듈 부제', m.subtitle||''); if(s!=null) m.subtitle=s;
+  saveData(); renderModule(mid); renderDailySidebar();
+}
+
+function switchTab(mid, tid){
+  DATA.modules[mid].activeTab = tid;
+  saveData();
+  renderModule(mid);
+  renderDailySidebar();
+}
+
+function addTab(mid){
+  const m = DATA.modules[mid]; if(!m) return;
+  const label = prompt('탭 이름'); if(!label) return;
+  m.tabs.push({ id: uid('t'), label, theoryNote:'', time:0, done:false, isRunning:false, questions:[] });
+  m.activeTab = m.tabs[m.tabs.length-1].id;
+  saveData(); renderModule(mid); renderDailySidebar();
+}
+
+function renameTab(mid, tid){
+  const m = DATA.modules[mid]; if(!m) return;
+  const t = m.tabs.find(x=>x.id===tid); if(!t) return;
+  const label = prompt('탭 이름', t.label||''); if(label!=null) t.label=label;
+  saveData(); renderModule(mid); renderDailySidebar();
+}
+
+function deleteTab(mid, tid){
+  const m = DATA.modules[mid]; if(!m) return;
+  if(m.tabs.length<=1) return alert('탭은 최소 1개가 필요합니다.');
+  const idx = m.tabs.findIndex(x=>x.id===tid);
+  if(idx<0) return;
+  if(!confirm('탭 삭제?')) return;
+  m.tabs.splice(idx,1);
+  m.activeTab = m.tabs[0].id;
+  saveData(); renderModule(mid); renderDailySidebar();
+}
+
+function addQuestion(mid, tid){
+  const m = DATA.modules[mid]; if(!m) return;
+  const tab = m.tabs.find(x=>x.id===tid) || m.tabs[0];
+  const src = prompt('출처(예: 기출/교재)', '') || '';
+  const txt = prompt('문항 텍스트', '') || '';
+  if(!txt) return;
+  tab.questions.push({ id: uid('q'), src, text: txt, userNote:'', time:0, done:false, isRunning:false });
+  saveData(); renderModule(mid); renderDailySidebar();
+}
+
+function exportAnki(mid){
+  const mod = DATA.modules[mid];
+  if(!mod) return alert('모듈을 찾을 수 없습니다.');
+  const rows = [];
+  mod.tabs.forEach(t=>{
+    (t.questions||[]).forEach(q=>{
+      const front = (q.src || t.label || 'Question').toString().replace(/\t|\n/g,' ').trim();
+      const back  = (q.text || '').toString().replace(/\t/g,'    ').trim();
+      const note  = (q.userNote || '').toString().replace(/\t/g,'    ').trim();
+      rows.push([front, back, note].join('\t'));
+    });
+  });
+  const blob = new Blob([rows.join('\n')], {type:'text/tab-separated-values;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `anki_${mid}_${new Date().toISOString().slice(0,10)}.tsv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* =========================
+   SELECTOR MODAL
+========================= */
+function openSlotSelector(date, sIdx) {
+  selectorMode = 'add';
+  moveState = null;
+  selectorState = { date, slotIdx: sIdx, stack: [{level:'root', id:null, title:'과목 선택'}] };
+  document.getElementById('selectorModal').style.display = 'flex';
+  document.getElementById('adhocInput').value = '';
+  renderSelectorUI();
+}
+function closeSelectorModal() { document.getElementById('selectorModal').style.display = 'none'; selectorMode='add'; moveState=null; }
+function selectorGoBack() { if(selectorState.stack.length > 1) { selectorState.stack.pop(); renderSelectorUI(); } }
+function addAdhocCard() {
+  const val = document.getElementById('adhocInput').value;
+  if(!val) return;
+  addToSlot(selectorState.date, selectorState.slotIdx, { type: 'adhoc', id: uid('adhoc'), title: val, done: false, time: 0, isRunning: false, origin: { page: 'daily', id: null } });
+  document.getElementById('adhocInput').value = '';
+}
+
+function renderSelectorUI() {
+  const listEl = document.getElementById('selectorList'),
+        crumbEl = document.getElementById('selBreadcrumb'),
+        backBtn = document.getElementById('selBackBtn');
+
+  const adhocBox = document.getElementById('adhocBox');
+  if(adhocBox) adhocBox.style.display = (selectorMode === 'add') ? 'block' : 'none';
+
+  listEl.innerHTML = '';
+  const current = selectorState.stack[selectorState.stack.length-1] || { level:'root', id:null, title:'과목 선택' };
+  crumbEl.innerText = current.title || '';
+  backBtn.style.display = selectorState.stack.length > 1 ? 'block' : 'none';
+
+  // === ROOT: choose subject ===
+  if(current.level === 'root') {
+    const subs = (DATA.home.subjects||[]);
+    if(subs.length===0){
+      listEl.innerHTML = '<li style="padding:20px;text-align:center;">과목이 없습니다. 홈에서 과목을 먼저 추가하세요.</li>';
+      return;
+    }
+
+    subs.forEach(sub => {
+      if(selectorMode === 'add'){
+        listEl.innerHTML += `
+          <li class="sel-item">
+            <span class="sel-label" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">${sub.name}</span>
+            <span class="sel-next" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">하위 보기 ></span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorAdd(event,'subject','${sub.id}')">추가</button>
+          </li>`;
+      }
+      else if(selectorMode === 'move_detail'){
+        listEl.innerHTML += `
+          <li class="sel-item">
+            <span class="sel-label" onclick="selectorMoveDetail('${sub.id}')">${sub.name}</span>
+            <span class="sel-next"></span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorMoveDetail('${sub.id}');event.stopPropagation()">이동</button>
+          </li>`;
+      }
+      else if(selectorMode === 'move_question'){
+        listEl.innerHTML += `
+          <li class="sel-item">
+            <span class="sel-label" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">${sub.name}</span>
+            <span class="sel-next" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">주제 선택 ></span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}');event.stopPropagation()">다음</button>
+          </li>`;
+      }
+    });
+    return;
+  }
+
+  // === SUBJECT: choose detail card ===
+  if(current.level === 'subject') {
+    const detail = DATA.details[current.id];
+    const cards = (detail && detail.cards) ? detail.cards : [];
+
+    if(selectorMode === 'add'){
+      if(cards.length===0){ listEl.innerHTML = '<li style="padding:20px;text-align:center;">비어있음</li>'; return; }
+      cards.forEach(c => {
+        const hasMod = c.module && DATA.modules[c.module];
+        listEl.innerHTML += `
+          <li class="sel-item">
+            <span class="sel-label" onclick="${hasMod ? `selectorDrillDown('detail','${c.module}','${c.title}','${current.id}')` : ''}">${c.title}</span>
+            ${hasMod ? `<span class="sel-next" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}')">상세 ></span>` : `<span class="sel-next"></span>`}
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorAdd(event,'detail','${c.id}','${current.id}')">추가</button>
+          </li>`;
+      });
+      return;
+    }
+
+    if(selectorMode === 'move_question'){
+      const movable = cards.filter(c => c.module && DATA.modules[c.module]);
+      if(movable.length===0){
+        listEl.innerHTML = '<li style="padding:20px;text-align:center;">이동 가능한 모듈(주제)이 없습니다.</li>';
+        return;
+      }
+      movable.forEach(c => {
+        listEl.innerHTML += `
+          <li class="sel-item">
+            <span class="sel-label" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}')">${c.title}</span>
+            <span class="sel-next" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}')">탭 선택 ></span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}');event.stopPropagation()">선택</button>
+          </li>`;
+      });
+      return;
+    }
+
+    listEl.innerHTML = '<li style="padding:20px;text-align:center;">지원되지 않는 동작입니다.</li>';
+    return;
+  }
+
+  // === DETAIL: choose tab / question ===
+  if(current.level === 'detail') {
+    const mod = DATA.modules[current.id];
+    if(!mod){ listEl.innerHTML = '<li style="padding:20px;text-align:center;">모듈을 찾을 수 없습니다.</li>'; return; }
+
+    if(selectorMode === 'add'){
+      mod.tabs.forEach(t => {
+        listEl.innerHTML += `
+          <li class="sel-item" style="background:rgba(255,255,0,0.1)">
+            <span class="sel-label">📖 ${t.label}</span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorAdd(event,'theory','${t.id}','${mod.id}')">추가</button>
+          </li>`;
+        (t.questions||[]).forEach(q => {
+          listEl.innerHTML += `
+            <li class="sel-item">
+              <span class="sel-label">${(q.text||'').substring(0,30)}</span>
+              <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorAdd(event,'question','${q.id}','${mod.id}')">추가</button>
+            </li>`;
+        });
+      });
+      return;
+    }
+
+    if(selectorMode === 'move_question'){
+      mod.tabs.forEach(t => {
+        listEl.innerHTML += `
+          <li class="sel-item" style="background:rgba(59,130,246,0.08)">
+            <span class="sel-label">📌 ${t.label}</span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorMoveQuestion('${mod.id}','${t.id}')">여기로 이동</button>
+          </li>`;
+      });
+      return;
+    }
+
+    listEl.innerHTML = '<li style="padding:20px;text-align:center;">지원되지 않는 동작입니다.</li>';
+    return;
+  }
+}
+
+function selectorDrillDown(lvl, id, tit, extra) {
+  selectorState.stack.push({ level: lvl, id: id, title: tit, pid: extra });
+  renderSelectorUI();
+}
+
+
+function __updateDailyRefs(pred, mut){
+  const dh = DATA.dailyHistory || {};
+  for(const date of Object.keys(dh)){
+    const daily = dh[date];
+    if(!daily || !Array.isArray(daily.slots)) continue;
+    for(const slot of daily.slots){
+      if(!slot || !Array.isArray(slot.cardIds)) continue;
+      for(const ref of slot.cardIds){
+        if(ref && pred(ref)) mut(ref);
+      }
+    }
+  }
+}
+
+function openMoveDetailCard(fromSid, fromIdx){
+  selectorMode = 'move_detail';
+  moveState = { fromSid, fromIdx };
+  selectorState = { date: null, slotIdx: null, stack: [{level:'root', id:null, title:'이동할 과목 선택'}] };
+  document.getElementById('selectorModal').style.display = 'flex';
+  renderSelectorUI();
+}
+
+function selectorMoveDetail(targetSid){
+  if(!moveState || !moveState.fromSid || moveState.fromIdx == null) return;
+  const fromSid = moveState.fromSid;
+  const fromIdx = moveState.fromIdx;
+  if(String(targetSid) === String(fromSid)) return;
+
+  const fromDetail = DATA.details?.[fromSid];
+  if(!fromDetail || !Array.isArray(fromDetail.cards)) return;
+  const card = fromDetail.cards.splice(fromIdx, 1)[0];
+  if(!card) return;
+
+  if(!DATA.details[targetSid]) DATA.details[targetSid] = { id: targetSid, cards: [] };
+  if(!Array.isArray(DATA.details[targetSid].cards)) DATA.details[targetSid].cards = [];
+  DATA.details[targetSid].cards.push(card);
+
+  // Update module back reference if exists
+  if(card.module && DATA.modules?.[card.module]){
+    DATA.modules[card.module].backTo = `#/detail/${targetSid}`;
+  }
+
+  // Update timetable refs (detail)
+  __updateDailyRefs(
+    ref => (ref.type==='detail' && ref.id===card.id && String(ref.pid)===String(fromSid)),
+    ref => { ref.pid = targetSid; }
+  );
+
+  saveData();
+  closeSelectorModal();
+
+  const r = getRoute();
+  if(r.page==='detail') renderDetail(r.id);
+  else renderRouter(true);
+  renderDailySidebar();
+}
+
+function openMoveQuestion(fromMid, fromTabId, fromQIdx){
+  selectorMode = 'move_question';
+  moveState = { fromMid, fromTabId, fromQIdx };
+  selectorState = { date: null, slotIdx: null, stack: [{level:'root', id:null, title:'이동할 과목 선택'}] };
+  document.getElementById('selectorModal').style.display = 'flex';
+  renderSelectorUI();
+}
+
+function selectorMoveQuestion(destMid, destTabId){
+  if(!moveState || !moveState.fromMid) return;
+  const fromMid = moveState.fromMid;
+  const fromTabId = moveState.fromTabId;
+  const fromQIdx = moveState.fromQIdx;
+
+  if(String(destMid)===String(fromMid) && String(destTabId||'')===String(fromTabId||'')) return;
+
+  const srcMod = DATA.modules?.[fromMid];
+  const dstMod = DATA.modules?.[destMid];
+  if(!srcMod || !dstMod) return;
+
+  const srcTab = srcMod.tabs.find(t=>t.id===fromTabId) || srcMod.tabs[0];
+  const dstTab = dstMod.tabs.find(t=>t.id===destTabId) || dstMod.tabs[0];
+  if(!srcTab || !dstTab) return;
+
+  if(!Array.isArray(srcTab.questions)) srcTab.questions = [];
+  if(!Array.isArray(dstTab.questions)) dstTab.questions = [];
+
+  const q = srcTab.questions.splice(fromQIdx, 1)[0];
+  if(!q) return;
+  dstTab.questions.push(q);
+
+  // Update timetable refs (question)
+  __updateDailyRefs(
+    ref => (ref.type==='question' && ref.id===q.id && String(ref.pid)===String(fromMid)),
+    ref => { ref.pid = destMid; }
+  );
+
+  saveData();
+  closeSelectorModal();
+
+  const r = getRoute();
+  if(r.page==='module') renderModule(r.id);
+  else renderRouter(true);
+  renderDailySidebar();
+}
+
+
+
+/* =========================
+   INIT
+========================= */
+async function init(){
+  const theme = localStorage.getItem(THEME_KEY) || 'light';
+  applyTheme(theme);
+
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(raw){
+    try{ DATA = JSON.parse(raw); }
+    catch(e){ DATA = baseData(); }
+  } else {
+    DATA = baseData();
+    try{
+      const res = await fetch('cpa_content_v2.json');
+      if(res.ok){
+        const json = await res.json();
+        DATA = {...DATA, ...json};
+      }
+    }catch(e){}
+  }
+
+  normalizeData();
+
+  updateDDayPanel();
+
+  VIEW_DATE = getLogicalDate();
+  ensureDailyData(VIEW_DATE);
+
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  window.addEventListener('hashchange', ()=> renderRouter(true));
+  renderRouter();
+
+  renderDailySidebar();
+
+  if(ticker) clearInterval(ticker);
+  ticker = setInterval(tickOneSecond, 1000);
+
+  saveData();
+}
+
+window.addEventListener('load', ()=>{ applyMath(); });
+
+init();
+</script>
+</body>
+</html>
