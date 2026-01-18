@@ -5,7 +5,7 @@
   },
   "home": {
     "title": "2026 CPA 1차 마스터 플래너",
-    "subtitle": "타이머, 진도율, 커스텀 노트 기능 탑재 (Local Storage 저장)",
+    "subtitle": "타이머, 진도율, 커스텀 노트 기능 탑재 (by inmonite)",
     "subjects": [
       {
         "id": "subject_management",
