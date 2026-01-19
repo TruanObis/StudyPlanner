@@ -442,6 +442,10 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
 <input type="file" id="fileInput" accept=".json" style="display:none" onchange="loadJsonFile(event)">
 
 <script>
+// Markdown: 단일 줄바꿈(Enter)을 <br>로 렌더링
+if (window.marked && typeof marked.setOptions === 'function') {
+  marked.setOptions({ breaks: true });
+}
 /* =========================
    DATA / STATE
 ========================= */
