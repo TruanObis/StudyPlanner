@@ -10,8 +10,9 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
-  <!-- 🏛️파비콘 -->
+<!-- 🏛️파비콘 -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%%22 y=%2250%%22 dominant-baseline=%22central%22 text-anchor=%22middle%22 font-size=%2280%22>🏛️</text></svg>">
+
 
   <style>
     :root {
@@ -133,7 +134,7 @@
     .sub-item span:hover { color: var(--primary); text-decoration: underline; }
 
     .timer-box { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
-    .timer-display { font-family: 'Courier New', monospace; font-weight: 800; font-size: 1.1rem; color: var(--text); min-width:90px; text-align:center;}
+    .timer-display { font-family: inherit; font-variant-numeric: tabular-nums; font-weight: 800; font-size: 1.1rem; color: var(--text); min-width:90px; text-align:center;}
     .chk-wrap { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 0.9rem; color: var(--text-sub); cursor: pointer; }
     .chk-wrap input { width: 18px; height: 18px; accent-color: var(--success); cursor: pointer; position: relative; z-index: 2; }
 
@@ -147,7 +148,7 @@
     .note-view:hover { background: rgba(128,128,128,0.1); outline: 1px dashed var(--line); }
     .note-view[data-empty="true"]::before { content: "클릭하여 노트/오답 메모 작성 (Markdown)"; color: var(--text-sub); font-size: 0.9rem; }
     .note-edit { display: none; width: 100%; margin-top: 5px; }
-    .note-textarea { width: 100%; min-height: 100px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; font-family: 'Consolas', monospace; resize: vertical; background: var(--input-bg); color: var(--text); line-height: 1.5; }
+    .note-textarea { width: 100%; min-height: 100px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; font-variant-numeric: tabular-nums; resize: vertical; background: var(--input-bg); color: var(--text); line-height: 1.5; }
 
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: none; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
     .modal { background: var(--card-bg); padding: 24px; border-radius: 20px; width: 450px; max-width: 90%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); border: 1px solid var(--line); display: flex; flex-direction: column; max-height: 80vh; }
@@ -177,12 +178,12 @@
     .sidebar-footer { padding: 15px; border-top: 1px solid var(--line); background: var(--card-bg); }
 
     .clock-display { position: absolute; top: 15px; right: 20px; text-align: right; line-height: 1.2; }
-    .clock-time { font-size: 1.1rem; font-weight: 800; color: var(--text); font-family: monospace;}
+    .clock-time { font-size: 1.1rem; font-weight: 800; color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums;}
     .clock-date { font-size: 0.8rem; color: var(--text-sub); }
 
     .goal-wrapper { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 5px; cursor: pointer; }
-    .goal-input { width: 80px; padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px; text-align: center; font-family: 'Courier New', monospace; font-size: 0.9rem; }
-    .goal-display-text { font-family: 'Courier New', monospace; font-weight: 700; color: var(--text-sub); text-decoration:none; }
+    .goal-input { width: 80px; padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px; text-align: center; font-family: inherit; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+    .goal-display-text { font-family: inherit; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text-sub); text-decoration:none; }
     .goal-wrapper:hover .goal-display-text { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
     .goal-display-text.achieved { color: #84cc16; }
 
@@ -230,7 +231,7 @@
       display: flex; align-items: center; justify-content: center;
     }
     .sb-title   { order: 3; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin: 0 4px; }
-    .sb-time    { order: 4; font-family: monospace; font-size: 0.8rem; color: var(--primary); font-weight:700; min-width:70px; text-align:right;}
+    .sb-time    { order: 4; font-family: inherit; font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--primary); font-weight:700; min-width:70px; text-align:right;}
     .sb-btn-play{ order: 5; font-size: 0.9rem; margin: 0 4px; }
     .sb-check   { order: 6; width:18px; height:18px; accent-color:var(--success); cursor:pointer; }
 
@@ -317,7 +318,7 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
 <div id="error-screen">
   <h2 style="font-size:2rem; margin-bottom:10px;">데이터/스크립트 오류</h2>
   <p>불러온 데이터(JSON) 또는 스크립트에 문제가 있어 앱을 실행할 수 없습니다.</p>
-  <p id="err-msg" style="background:var(--line); padding:10px; border-radius:8px; font-family:monospace; margin:20px 0; color:var(--text)"></p>
+  <p id="err-msg" style="background:var(--line); padding:10px; border-radius:8px; font-family:inherit; font-variant-numeric: tabular-nums; margin:20px 0; color:var(--text)"></p>
   <button class="btn btn-outline" style="padding:15px 30px; font-size:1.1rem;" onclick="hardReset()">데이터 강제 초기화 (복구)</button>
 </div>
 
@@ -341,7 +342,7 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
           <button class="btn btn-primary" style="padding:2px 6px; font-size:0.7rem;" onclick="saveDailyGoal(event)">저장</button>
         </div>
       </div>
-      <div id="todayTotal" style="font-size:1.6rem; font-weight:800; color:var(--primary); font-family:monospace; line-height:1;">00:00:00</div>
+      <div id="todayTotal" style="font-size:1.6rem; font-weight:800; color:var(--primary); font-family:inherit; font-variant-numeric: tabular-nums; line-height:1;">00:00:00</div>
     </div>
 
     <div class="nav-row">
@@ -458,6 +459,7 @@ const APP = document.getElementById('app');
 const ERR_SCREEN = document.getElementById('error-screen');
 let VIEW_DATE = null;
 let HOME_BADGE_FILTER = 'all';
+let MODULE_QSRC_FILTER = {}; // key: mid:tid => 'all' or src
 let selectorMode = 'add'; // 'add' | 'move_detail' | 'move_question'
 let moveState = null;
 let editState = null;
@@ -972,7 +974,7 @@ function renderStickyHeader(label, pct, time) {
       <div class="prog-text"><span>${label}</span><span style="color:var(--primary)">${pct||0}%</span></div>
       <div class="prog-bar"><div class="prog-fill" style="width:${pct||0}%"></div></div>
     </div>
-    <div style="background:#1e293b; color:white; padding:6px 12px; border-radius:99px; font-family:monospace; font-weight:700;">⏱ ${time || "00:00:00"}</div>
+    <div style="background:#1e293b; color:white; padding:6px 12px; border-radius:99px; font-family:inherit; font-variant-numeric: tabular-nums; font-weight:700;">⏱ ${time || "00:00:00"}</div>
   </div>`;
 }
 
@@ -1070,6 +1072,30 @@ function setHomeBadgeFilter(badge, btn){
   renderHome();
 }
 
+function getModuleQSrcFilter(mid, tid){
+  const k = mid + ':' + tid;
+  return MODULE_QSRC_FILTER[k] || 'all';
+}
+
+function setModuleQSrcFilter(mid, tid, src){
+  const k = mid + ':' + tid;
+  MODULE_QSRC_FILTER[k] = (src && String(src).trim()) ? String(src).trim() : 'all';
+  renderModule(mid);
+}
+
+function renderModuleQSrcFilterBar(mid, tid, tab){
+  const srcs = [...new Set((tab.questions||[]).map(q=>String(q.src||'').trim()).filter(Boolean))];
+  if(!srcs.length) return '';
+  const sel = getModuleQSrcFilter(mid, tid);
+  const esc = (s)=>String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  return `
+    <div class="tabs" style="margin:-10px 0 18px;flex-wrap:wrap;">
+      <button class="tab-btn ${sel==='all'?'active':''}" onclick="setModuleQSrcFilter('${mid}','${tid}','all')">전체</button>
+      ${srcs.map(s=>`<button class="tab-btn ${sel===s?'active':''}" onclick="setModuleQSrcFilter('${mid}','${tid}','${esc(s)}')">${s}</button>`).join('')}
+    </div>
+  `;
+}
+
 function renderDetail(sid) {
   const detail = DATA.details[sid];
   const stats = calcSubjectStats(sid);
@@ -1098,6 +1124,10 @@ function renderModule(mid) {
   const tab = mod.tabs.find(t=>t.id===tid)||mod.tabs[0];
   const stats = calcModuleStats(mid);
   const theoryId = `theory-${mid}-${tid}`;
+
+  const qSel = getModuleQSrcFilter(mid, tid);
+  const qAll = (tab.questions||[]);
+  const qList = (qSel==='all') ? qAll : qAll.filter(q=>String(q.src||'').trim()===qSel);
 
   APP.innerHTML = `
     <div class="flex-between" style="margin-bottom:20px;">
@@ -1152,8 +1182,10 @@ function renderModule(mid) {
       </div>
     </div>
 
+    ${renderModuleQSrcFilterBar(mid, tid, tab)}
+
     <div class="grid" id="questionGrid">
-      ${(tab.questions||[]).map((q, i) => renderCardItem(q, 'module', mid, i, tid)).join('')}
+      ${(qList||[]).map((q, i) => renderCardItem(q, 'module', mid, i, tid)).join('')}
       <div class="card ghost-card flex-center" onclick="openAddModal('module','${mid}','${tid}');event.stopPropagation()"><div class="ghost-plus">+</div></div>
     </div>`;
 }
