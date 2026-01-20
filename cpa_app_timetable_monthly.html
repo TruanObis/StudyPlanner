@@ -13,7 +13,6 @@
 <!-- 🏛️파비콘 -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%%22 y=%2250%%22 dominant-baseline=%22central%22 text-anchor=%22middle%22 font-size=%2280%22>🏛️</text></svg>">
 
-
   <style>
     :root {
       --primary: #2563eb; --accent: #f59e0b;
@@ -1125,9 +1124,12 @@ function renderModule(mid) {
   const stats = calcModuleStats(mid);
   const theoryId = `theory-${mid}-${tid}`;
 
+  // Question source filter (badge-like): keep ORIGINAL indices so edit/delete/move targets remain correct
   const qSel = getModuleQSrcFilter(mid, tid);
   const qAll = (tab.questions||[]);
-  const qList = (qSel==='all') ? qAll : qAll.filter(q=>String(q.src||'').trim()===qSel);
+  const qPairs = (qSel==='all')
+    ? qAll.map((q,i)=>({q, idx:i}))
+    : qAll.map((q,i)=>({q, idx:i})).filter(({q})=>String(q.src||'').trim()===qSel);
 
   APP.innerHTML = `
     <div class="flex-between" style="margin-bottom:20px;">
@@ -1185,7 +1187,7 @@ function renderModule(mid) {
     ${renderModuleQSrcFilterBar(mid, tid, tab)}
 
     <div class="grid" id="questionGrid">
-      ${(qList||[]).map((q, i) => renderCardItem(q, 'module', mid, i, tid)).join('')}
+      ${(qPairs||[]).map(({q,idx}) => renderCardItem(q, 'module', mid, idx, tid)).join('')}
       <div class="card ghost-card flex-center" onclick="openAddModal('module','${mid}','${tid}');event.stopPropagation()"><div class="ghost-plus">+</div></div>
     </div>`;
 }
