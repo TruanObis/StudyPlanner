@@ -277,6 +277,25 @@
     .drag-handle:hover{ border-color: var(--primary); color: var(--primary); }
     .drag-handle:active{ cursor: grabbing; }
 
+    /* Quick copy button: (::) 📋 (badge) */
+    .clip-btn{
+      width:26px; height:26px;
+      border-radius:10px;
+      border:1px solid var(--line);
+      background: var(--card-bg);
+      color: var(--text-sub);
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      user-select:none;
+      font-size: 0.9rem;
+      margin-right: 6px;
+    }
+    .clip-btn:hover{ border-color: var(--primary); color: var(--primary); }
+
+    .sb-clip{ width:24px; height:24px; border-radius:10px; }
+
   
 textarea.autogrow{ resize: vertical; overflow:hidden; }
 
@@ -306,6 +325,24 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
       .cal-cell{ min-height:56px; padding:8px 6px; }
       .cal-cell .t{ font-size:0.75rem; }
     }
+
+  /* Toast */
+  .toast{
+    position:fixed; left:50%; bottom:18px; transform:translateX(-50%);
+    background:rgba(15,23,42,0.92); color:#fff;
+    padding:10px 14px; border-radius:12px;
+    font-size:0.95rem; font-weight:700;
+    box-shadow:0 10px 24px rgba(0,0,0,0.25);
+    opacity:0; pointer-events:none;
+    transition:opacity .18s ease, transform .18s ease;
+    z-index:99999;
+    font-family:inherit;
+    font-variant-numeric: tabular-nums;
+    max-width: calc(100vw - 24px);
+    text-align:center;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(-6px); }
+
 </style>
 </head>
 <body>
@@ -322,6 +359,8 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
 </div>
 
 <div id="app" class="container"></div>
+
+<div id="toast" class="toast" aria-live="polite"></div>
 
 <div id="daily-sidebar">
   <div class="sidebar-header" id="sidebarHeader">
@@ -559,6 +598,59 @@ function badgeTags(raw){
   const s = (raw ?? "").toString().trim();
   if(!s) return [];
   return s.split(",").map(x => x.trim()).filter(Boolean);
+}
+
+// Escape for single-quoted JS literal inside onclick attributes
+function jsStr(s){
+  return String(s ?? '')
+    .replace(/\\/g,'\\\\')
+    .replace(/'/g,"\\'")
+    .replace(/\r/g,'')
+    .replace(/\n/g,'\\n');
+}
+
+function buildCardHash(type, id, pid, extra){
+  const t = String(type||'');
+  if(t === 'subject') return `#/detail/${id}`;
+  if(t === 'detail') return `#/detail/${pid}?focus=${id}`;
+  if(t === 'theory') return `#/module/${pid}?focus=theory-${pid}-${id}`;
+  if(t === 'question') return `#/module/${pid}?focus=${id}`;
+  // adhoc or unknown
+  return `#/`;
+}
+
+function showToast(msg, ms){
+  try{
+    const el = document.getElementById('toast');
+    if(!el) return;
+    el.textContent = msg || '';
+    el.classList.add('show');
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer = setTimeout(()=>{ el.classList.remove('show'); }, ms || 1200);
+  }catch(e){}
+}
+
+function copyCardMdLink(title, hash){
+  const base = (location.href || '').split('#')[0];
+  const url = base + (hash || '#/');
+  const txt = `[${title}](${url})`;
+
+  const fallbackCopy = () => {
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position='fixed'; ta.style.left='-9999px';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); }catch(e){}
+    ta.remove();
+    showToast('클립보드에 복사되었습니다');
+  };
+
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt)
+      .then(()=> showToast('클립보드에 복사되었습니다'))
+      .catch(()=> fallbackCopy());
+  } else {
+    fallbackCopy();
+  }
 }
 
 /* =========================
@@ -1016,10 +1108,11 @@ function renderHome() {
         const dStats = calcSubjectStats(sub.id);
         const cards = DATA.details[sub.id] ? DATA.details[sub.id].cards : [];
         return `
-        <div class="card" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'home',null,${realIdx})" data-index="${realIdx}">
+        <div class="card" id="card-${sub.id}" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'home',null,${realIdx})" data-index="${realIdx}">
           <div class="card-top">
             <div style="display:flex; align-items:center; gap:8px;">
               <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" title="드래그하여 시간표로">⋮⋮</span>
+              <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsStr(sub.name||'(제목 없음)')}', '#/?focus=${sub.id}');">📋</button>
               <span class="badge">${sub.badge||''}</span>
             </div>
             <div class="card-actions">
@@ -1154,6 +1247,7 @@ function renderModule(mid) {
       <div class="card-top">
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'theory', '${tid}', '${mid}')" title="드래그하여 시간표로">⋮⋮</span>
+          <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsStr('📌 '+(tab.label||'(이론)'))}', '${jsStr(buildCardHash('theory', tid, mid, null))}');">📋</button>
         <h3 class="editable" onclick="openEditModal('tab_rename','${mid}',undefined,'${tid}');event.stopPropagation()">📌 ${tab.label}</h3>
         </div>
         <div class="card-actions" style="opacity:1;">
@@ -1205,6 +1299,14 @@ function renderCardItem(item, level, pid, idx, tabId) {
   let isDone = !!item.done;
   let totalTime = item.time||0;
 
+  // Clipboard: [카드 제목](링크)
+  const copyTitle = isMod
+    ? (String(item.src||'').trim() ? String(item.src).trim() : (String(item.text||'').trim().split('\n')[0]||'문항'))
+    : (item.title||'(무제)');
+  const copyHash = isMod
+    ? buildCardHash('question', item.id, pid, null)
+    : buildCardHash('detail', sid, pid, null);
+
   if (!isMod && item.module && DATA.modules[item.module]) {
     const ms = calcModuleStats(item.module);
     totalTime += ms.rawTime;
@@ -1236,6 +1338,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
       <div class="card-top">
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="drag-handle" draggable="true" ondragstart="${dragStartCode}" title="드래그하여 시간표로">⋮⋮</span>
+          <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsStr(copyTitle)}', '${jsStr(copyHash)}');">📋</button>
           <span class="badge">${isMod?(item.src||'문항'):(item.badge||'Topic')}</span>
         </div>
         <div class="card-actions">
@@ -2096,6 +2199,11 @@ function renderSidebarCard(ref, date, sIdx, cIdx) {
           onmousedown="event.stopPropagation()"
           title="드래그로 이동">⋮⋮</span>
 
+        <button class="clip-btn sb-clip" title="[카드 제목](링크) 복사"
+          onpointerdown="event.stopPropagation()"
+          onmousedown="event.stopPropagation()"
+          onclick="event.stopPropagation(); copyCardMdLink('${jsStr(info.title)}', '${jsStr(buildCardHash(ref.type, ref.id, ref.pid, ref.originStr||''))}');">📋</button>
+
         <button class="btn btn-icon sb-btn-del"
           onpointerdown="event.stopPropagation()"
           onmousedown="event.stopPropagation()"
@@ -2239,7 +2347,15 @@ function copyDailyPlan() {
     txt += `\n`;
   });
   txt += `⏱ Total: ${formatTime(daily.totalSeconds||0)} / Goal: ${daily.goalStr||"00:00:00"}`;
-  navigator.clipboard.writeText(txt).then(() => alert("복사 완료!"));
+  navigator.clipboard.writeText(txt).then(() => showToast('클립보드에 복사되었습니다')).catch(()=>{
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position='fixed'; ta.style.left='-9999px';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); }catch(e){}
+    ta.remove();
+    showToast('클립보드에 복사되었습니다');
+  });
 }
 
 /* =========================
