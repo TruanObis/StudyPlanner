@@ -14,6 +14,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%%22 y=%2250%%22 dominant-baseline=%22central%22 text-anchor=%22middle%22 font-size=%2280%22>🏛️</text></svg>">
 
 
+
   <style>
     :root {
       --primary: #2563eb; --accent: #f59e0b;
@@ -125,6 +126,10 @@
     .card:hover .card-actions { opacity: 1; }
     .badge { background: rgba(37, 99, 235, 0.1); color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; }
     h3 { margin: 0 0 5px 0; font-size: 1.25rem; color: var(--text); display:flex; align-items:center; gap:8px; }
+
+    .editable{display:inline-block; min-height:1.2em; padding:2px 6px; border-radius:8px; white-space: pre-wrap; }
+    .editable.block{display:block; width:100%;}
+    .editable:empty::before{ content: "\00a0"; opacity: 0; }
     .editable:hover { text-decoration: underline; text-decoration-style: dashed; text-underline-offset: 4px; cursor: pointer; color: var(--primary); }
 
     .sub-list { margin-top: 15px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 0.9rem; color: var(--text-sub); }
@@ -1177,8 +1182,8 @@ function renderHome() {
         <button class="theme-btn" onclick="toggleDarkMode()">🌙</button>
       </div>
 
-      <h1 class="editable" onclick="openEditModal('app_info','home')">${DATA.home.title}</h1>
-      <p class="editable" onclick="openEditModal('app_info','home')" style="color:var(--text-sub)">${DATA.home.subtitle}</p>
+      <h1 class="editable block" data-placeholder="" onclick="openEditModal('app_info','home')">${DATA.home.title||''}</h1>
+      <p class="editable block" data-placeholder="" onclick="openEditModal('app_info','home')" style="color:var(--text-sub)">${DATA.home.subtitle||''}</p>
       <div style="margin-top:10px;">
         <button class="btn btn-outline" onclick="triggerImport()">📂</button>
         <button class="btn btn-outline" onclick="exportData()">💾</button>
@@ -1287,8 +1292,8 @@ function renderDetail(sid) {
   APP.innerHTML = `
     <div style="margin-bottom:20px;"><button class="btn btn-outline" onclick="location.hash='#/'">← 홈</button></div>
     <div style="margin-bottom:20px;">
-      <h1 class="editable" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.title||'(제목 없음)'}</h1>
-      <p class="editable" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.subtitle||''}</p>
+      <h1 class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.title||'(제목 없음)'}</h1>
+      <p class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.subtitle||''}</p>
     </div>
     ${renderStickyHeader('진행률', stats.pct, stats.timeStr)}
     <div class="tabs">
@@ -1324,8 +1329,8 @@ function renderModule(mid) {
       </div>
     </div>
 
-    <h1 class="editable" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.title||'(모듈)'}</h1>
-    <p class="editable" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.subtitle||''}</p>
+    <h1 class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.title||'(모듈)'}</h1>
+    <p class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.subtitle||''}</p>
 
     ${renderStickyHeader('모듈 진행률', stats.pct, stats.timeStr)}
 
