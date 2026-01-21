@@ -10,8 +10,9 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
-<!-- 🏛️파비콘 -->
+  <!-- 🏛️파비콘 -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%%22 y=%2250%%22 dominant-baseline=%22central%22 text-anchor=%22middle%22 font-size=%2280%22>🏛️</text></svg>">
+
 
   <style>
     :root {
@@ -343,6 +344,50 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
   }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(-6px); }
 
+
+
+/* ▼▼▼ [이미지 폭주 방지 결계] ▼▼▼ */
+.md-content img, .q-body img, .note-view img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.10);
+  display: block;
+  margin: 10px auto;
+}
+.md-content img:hover, .q-body img:hover, .note-view img:hover {
+  cursor: zoom-in;
+  opacity: 0.95;
+}
+/* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
+
+/* 카드 접기/펼치기 */
+.card .card-fold{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  margin-top:4px;
+  padding:0;
+  height:20px;
+  border-top:1px dashed var(--line);
+}
+.card .fold-btn{
+  border:none;
+  background:transparent;
+  color:var(--text-sub);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  height:18px;
+  min-width:40px;
+  font-size:16px;
+  padding:0 10px;
+  border-radius:10px;
+  line-height:1;
+}
+.card .fold-btn:hover{ background: rgba(0,0,0,0.06); }
+.card.collapsed > :not(.card-top):not(.card-fold){ display:none !important; }
+
 </style>
 </head>
 <body>
@@ -494,6 +539,52 @@ let DATA = null;
 const STORAGE_KEY = 'universal_planner_v28_data';
 const THEME_KEY = 'universal_planner_theme';
 const APP = document.getElementById('app');
+
+
+/* === 이미지 클릭 시 원본 보기 (새 탭) === */
+document.addEventListener('click', function(e){
+  const img = e.target && e.target.closest ? e.target.closest('img') : null;
+  if(!img) return;
+  if(!(img.closest('.md-content') || img.closest('.q-body') || img.closest('.note-view'))) return;
+  // 링크/버튼 내부 이미지는 원래 동작을 우선
+  if(img.closest('a,button')) return;
+  window.open(img.src, '_blank', 'noopener');
+});
+
+/* === 카드 접기/펼치기 (▲▼) === */
+function toggleCardFold(cardEl, btnEl){
+  const collapsed = cardEl.classList.toggle('collapsed');
+  if(btnEl) btnEl.textContent = collapsed ? '▼' : '▲';
+}
+function ensureFoldButtons(root){
+  const scope = root || document;
+  scope.querySelectorAll('.card').forEach(card=>{
+    if(card.querySelector('.card-fold')) return;
+    if(card.classList.contains('ghost-card')) return;
+    if(card.id && String(card.id).startsWith('ghost-')) return;
+    const fold = document.createElement('div');
+    fold.className = 'card-fold';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'fold-btn';
+    btn.textContent = '▲';
+    btn.title = '접기/펼치기';
+    btn.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      toggleCardFold(card, btn);
+    });
+    fold.appendChild(btn);
+    card.appendChild(fold);
+  });
+}
+
+// 자동 주입: 렌더링될 때마다 카드 하단에 접기 버튼을 붙입니다.
+try{
+  const _foldObs = new MutationObserver(()=>ensureFoldButtons(APP));
+  _foldObs.observe(APP, {childList:true, subtree:true});
+  // 초기 1회
+  ensureFoldButtons(APP);
+}catch(_e){}
 const ERR_SCREEN = document.getElementById('error-screen');
 let VIEW_DATE = null;
 let HOME_BADGE_FILTER = 'all';
