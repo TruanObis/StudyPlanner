@@ -773,6 +773,7 @@ function toggleDetailCardStatus(pid, idx, status) {
   const card = DATA.details[pid].cards[idx];
   
   card.done = status;
+  if (status) card.isRunning = false;
   if(card.module && DATA.modules[card.module]) {
     const mod = DATA.modules[card.module];
     mod.tabs.forEach(t => {
@@ -876,8 +877,16 @@ function toggleCheckAll(level, pid, checked) {
 function toggleCheck(chk, lvl, pid, idx, tid) {
   const status = chk.checked;
   if(lvl==='detail') { toggleDetailCardStatus(pid, idx, status); }
-  else if(lvl==='theory') DATA.modules[pid].tabs.find(t=>t.id===tid).done = status;
-  else DATA.modules[pid].tabs.find(t=>t.id===tid).questions[idx].done = status;
+  else if(lvl==='theory') {
+    const item = DATA.modules[pid].tabs.find(t=>t.id===tid);
+    item.done = status;
+    if (status) item.isRunning = false;
+  }
+  else {
+    const item = DATA.modules[pid].tabs.find(t=>t.id===tid).questions[idx];
+    item.done = status;
+    if (status) item.isRunning = false;
+  }
   saveData(); renderRouter();
 }
 
