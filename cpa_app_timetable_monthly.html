@@ -2701,11 +2701,17 @@ function toggleCheck(el, level, pid, idx, tabId){
     toggleDetailCardStatus(pid, idx, checked);
   } else if(level==='theory'){
     const t = DATA.modules?.[pid]?.tabs?.find(x=>x.id===tabId);
-    if(t) t.done = checked;
+    if(t){
+      t.done = checked;
+      if(checked) t.isRunning = false;
+    }
   } else if(level==='module'){
     const tab = DATA.modules?.[pid]?.tabs?.find(x=>x.id===tabId) || DATA.modules?.[pid]?.tabs?.[0];
     const q = tab?.questions?.[idx];
-    if(q) q.done = checked;
+    if(q){
+      q.done = checked;
+      if(checked) q.isRunning = false;
+    }
   }
 
   saveData();
@@ -2716,7 +2722,10 @@ function toggleCheck(el, level, pid, idx, tabId){
 function toggleCheckFromSidebar(type, id, pid, checked, sIdx, cIdx){
   const daily = ensureDailyData(VIEW_DATE);
   const ref = daily.slots?.[sIdx]?.cardIds?.[cIdx];
-  if(ref) ref.done = !!checked;
+  if(ref){
+    ref.done = !!checked;
+    if(checked) ref.isRunning = false;
+  }
 
   if(type==='detail'){
     const list = (DATA.details?.[pid]?.cards||[]);
@@ -2724,13 +2733,19 @@ function toggleCheckFromSidebar(type, id, pid, checked, sIdx, cIdx){
     if(idx>=0) toggleDetailCardStatus(pid, idx, !!checked);
   } else if(type==='theory'){
     const t = DATA.modules?.[pid]?.tabs?.find(x=>x.id===id);
-    if(t) t.done = !!checked;
+    if(t){
+      t.done = !!checked;
+      if(checked) t.isRunning = false;
+    }
   } else if(type==='question'){
     const mod = DATA.modules?.[pid];
     if(mod){
       mod.tabs.forEach(t=>{
         const q = (t.questions||[]).find(x=>x.id===id);
-        if(q) q.done = !!checked;
+        if(q){
+          q.done = !!checked;
+          if(checked) q.isRunning = false;
+        }
       });
     }
   } else if(type==='subject'){
