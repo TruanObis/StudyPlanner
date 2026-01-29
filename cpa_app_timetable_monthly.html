@@ -1029,7 +1029,7 @@ function router(keepScroll = false) {
     setTimeout(() => {
       applyMath();
 
-      if (route.focus) {
+      if (route.focus && !keepScroll) {
         const el = document.getElementById(`card-${route.focus}`);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
