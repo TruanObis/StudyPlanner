@@ -1242,9 +1242,9 @@ function renderHome() {
               <span>완료</span>
             </label>
             <div class="flex-center" style="gap:5px;">
-              <button class="btn btn-icon" onclick="editTime('subject',null,${idx});event.stopPropagation()">✏️</button>
+              <button class="btn btn-icon" onclick="editTime('subject',null,${realIdx});event.stopPropagation()">✏️</button>
               <div class="timer-display" id="time-disp-subject-${sub.id}">${dStats.timeStr}</div>
-              <button class="btn btn-outline" style="${sub.isRunning?'color:red':''}" onclick="toggleTimer('subject',null,${idx});event.stopPropagation()">${sub.isRunning?'❚❚':'▶'}</button>
+              <button class="btn btn-outline" style="${sub.isRunning?'color:red':''}" onclick="toggleTimer('subject',null,${realIdx});event.stopPropagation()">${sub.isRunning?'❚❚':'▶'}</button>
             </div>
           </div>
         </div>`;
