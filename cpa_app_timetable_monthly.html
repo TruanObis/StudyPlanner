@@ -750,7 +750,7 @@ function copyCardMdLink(title, hash){
 }
 
 /* =========================
-   D-DAY (TOP RIGHT, MAX 3)
+   D-DAY (TOP RIGHT, MAX 10)
 ========================= */
 function calcDDayLabel(dateStr){
   const target = new Date(dateStr + 'T00:00:00');
@@ -766,7 +766,7 @@ function updateDDayPanel(){
   const el = document.getElementById('ddayPanel');
   if(!el || !DATA || !DATA.home) return;
 
-  const ddays = Array.isArray(DATA.home.dDays) ? DATA.home.dDays.slice(0,3) : [];
+  const ddays = Array.isArray(DATA.home.dDays) ? DATA.home.dDays.slice(0,10) : [];
   const items = ddays.map((d, i) => {
     const label = (d && d.label) ? d.label : '(D-Day)';
     const date  = (d && d.date) ? d.date : '';
@@ -777,9 +777,9 @@ function updateDDayPanel(){
     </div>`;
   }).join('');
 
-  const addBtn = (ddays.length < 3)
+  const addBtn = (ddays.length < 10)
     ? `<div class="dday-badge" style="background:var(--card-bg); color:var(--text); border:1px dashed var(--line);" onclick="addDDay(); event.stopPropagation();" title="D-Day 추가">
-        <span>+ D-Day</span><span class="dday-count">최대 3</span>
+        <span>+ D-Day</span><span class="dday-count">최대 10</span>
       </div>`
     : '';
 
@@ -789,7 +789,7 @@ function updateDDayPanel(){
 
 function addDDay(){
   if(!DATA.home.dDays) DATA.home.dDays = [];
-  if(DATA.home.dDays.length >= 3) return alert('D-Day는 최대 3개까지 가능합니다.');
+  if(DATA.home.dDays.length >= 10) return alert('D-Day는 최대 10개까지 가능합니다.');
   openEditModal('dday', null, undefined);
 }
 
@@ -3188,7 +3188,7 @@ function saveCardChange(){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(date)) return alert('형식: YYYY-MM-DD');
 
     if(idx===undefined){
-      if(DATA.home.dDays.length >= 3) return alert('D-Day는 최대 3개까지 가능합니다.');
+      if(DATA.home.dDays.length >= 10) return alert('D-Day는 최대 10개까지 가능합니다.');
       DATA.home.dDays.push({ label, date });
     }else{
       const item = DATA.home.dDays[idx];
