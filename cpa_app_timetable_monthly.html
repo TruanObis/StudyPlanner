@@ -2715,6 +2715,15 @@ function updateSidebarTimerDOM(){
 /* =========================
    TOGGLE TIMER / CHECK
 ========================= */
+function renderWithScrollPreserved(){
+  const savedScroll = window.scrollY;
+  renderRouter(true);
+  renderDailySidebar();
+  setTimeout(() => {
+    window.scrollTo(0, savedScroll);
+  }, 80);
+}
+
 function toggleTimer(level, pid, idx, tabId){
   if(level==='subject'){
     const s = DATA.home.subjects[idx];
@@ -2740,8 +2749,7 @@ function toggleTimer(level, pid, idx, tabId){
     q.isRunning = !q.isRunning;
   }
   saveData();
-  renderRouter(true);
-  renderDailySidebar();
+  renderWithScrollPreserved();
 }
 
 function toggleTimerFromSidebar(type, id, pid, sIdx, cIdx){
@@ -2772,8 +2780,7 @@ function toggleTimerFromSidebar(type, id, pid, sIdx, cIdx){
   }
 
   saveData();
-  renderDailySidebar();
-  renderRouter(true);
+  renderWithScrollPreserved();
 }
 
 function toggleCheck(el, level, pid, idx, tabId){
