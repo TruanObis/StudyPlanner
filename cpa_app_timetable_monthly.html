@@ -537,6 +537,15 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
 if (window.marked && typeof marked.setOptions === 'function') {
   marked.setOptions({ breaks: true });
 }
+const MARKDOWN_SPECIAL_CHAR_FIX = /([()!@#$%^&\\=+`'"~-])(\*{1,3})(?=\S)/g;
+function normalizeMarkdownAsterisks(text){
+  if (!text) return '';
+  return String(text).replace(MARKDOWN_SPECIAL_CHAR_FIX, '$1\u200B$2');
+}
+function renderMarkdown(text){
+  if (!window.marked || typeof marked.parse !== 'function') return text || '';
+  return marked.parse(normalizeMarkdownAsterisks(text || ''));
+}
 /* =========================
    DATA / STATE
 ========================= */
@@ -1434,7 +1443,7 @@ function renderModule(mid) {
         </div>
       </div>
 
-      <div id="view-theory-${tid}" class="note-view md-content" data-empty="${!tab.theoryNote}" onclick="toggleNoteView('theory-${tid}')">${marked.parse(tab.theoryNote||"")}</div>
+      <div id="view-theory-${tid}" class="note-view md-content" data-empty="${!tab.theoryNote}" onclick="toggleNoteView('theory-${tid}')">${renderMarkdown(tab.theoryNote||"")}</div>
       <div id="edit-theory-${tid}" class="note-edit">
         <textarea id="ta-theory-${tid}" class="note-textarea">${tab.theoryNote||''}</textarea>
         <div style="text-align:right;margin-top:5px;">
@@ -1532,10 +1541,10 @@ function renderCardItem(item, level, pid, idx, tabId) {
 
       <div onclick="${level==='detail' ? `onDetailCardClick('${pid}',${idx})` : (!isMod&&item.module?`location.hash='#/module/${item.module}'`:'')}">
         ${isMod
-          ? `<div class="md-content" style="font-weight:600;font-size:1.05rem;">${marked.parse(item.text||'')}</div>`
+          ? `<div class="md-content" style="font-weight:600;font-size:1.05rem;">${renderMarkdown(item.text||'')}</div>`
           : `<h3>${item.title||'(무제)'}</h3><p>${item.scope||''}</p>`
         }
-        ${item.qbox?`<div class="md-content" style="background:var(--bg);padding:10px;border-radius:8px;margin-top:10px;font-size:0.9rem;">💡 ${marked.parse(item.qbox)}</div>`:''}
+        ${item.qbox?`<div class="md-content" style="background:var(--bg);padding:10px;border-radius:8px;margin-top:10px;font-size:0.9rem;">💡 ${renderMarkdown(item.qbox)}</div>`:''}
       </div>
 
       ${subHtml}
@@ -1543,7 +1552,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
       ${isMod?`
         <div class="note-area-wrap">
           <span class="note-label-small">📝 오답 노트</span>
-          <div id="view-${sid}" class="note-view md-content" data-empty="${!item.userNote}" onclick="toggleNoteView('${sid}')">${marked.parse(item.userNote||"")}</div>
+          <div id="view-${sid}" class="note-view md-content" data-empty="${!item.userNote}" onclick="toggleNoteView('${sid}')">${renderMarkdown(item.userNote||"")}</div>
           <div id="edit-${sid}" class="note-edit">
             <textarea id="ta-${sid}" class="note-textarea">${item.userNote||''}</textarea>
             <div style="text-align:right;margin-top:5px;">
