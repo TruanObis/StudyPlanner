@@ -538,7 +538,7 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
 if (window.marked && typeof marked.setOptions === 'function') {
   marked.setOptions({ breaks: true });
 }
-const MARKDOWN_SPECIAL_CHAR_FIX = /([()!@#$%^&\\=+`'"~-])(\*{1,3})(?=\S)/g;
+const MARKDOWN_SPECIAL_CHAR_FIX = /([\[\]()!@#$%^&\\=+`'"~-])(\*{1,3})(?=\S)/g;
 const MARKDOWN_TRAILING_BOLD_FIX = /(\*{2,3}[^*]+?\*{2,3})(?=\S)/g;
 function normalizeMarkdownAsterisks(text){
   if (!text) return '';
