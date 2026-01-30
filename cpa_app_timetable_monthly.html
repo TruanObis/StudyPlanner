@@ -539,9 +539,12 @@ if (window.marked && typeof marked.setOptions === 'function') {
   marked.setOptions({ breaks: true });
 }
 const MARKDOWN_SPECIAL_CHAR_FIX = /([()!@#$%^&\\=+`'"~-])(\*{1,3})(?=\S)/g;
+const MARKDOWN_TRAILING_BOLD_FIX = /(\*{2,3}[^*]+?\*{2,3})(?=\S)/g;
 function normalizeMarkdownAsterisks(text){
   if (!text) return '';
-  return String(text).replace(MARKDOWN_SPECIAL_CHAR_FIX, '$1\u200B$2');
+  return String(text)
+    .replace(MARKDOWN_SPECIAL_CHAR_FIX, '$1\u200B$2')
+    .replace(MARKDOWN_TRAILING_BOLD_FIX, '$1\u200B');
 }
 function renderMarkdown(text){
   if (!window.marked || typeof marked.parse !== 'function') return text || '';
