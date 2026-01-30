@@ -325,6 +325,7 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
     .cal-bottom{ margin-top:14px; padding-top:12px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:10px; }
     .cal-daytotal{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; font-family: inherit; font-weight:900; font-variant-numeric: tabular-nums; }
     .cal-daytotal #calSelectedLabel{ font-family:inherit; font-weight:700; color:var(--text-sub); margin-right:auto; }
+    .cal-date-input{ font-family: 'Pretendard', sans-serif; }
 
     @media (max-width:520px){
       .calendar-modal{ width: calc(100vw - 24px); }
@@ -522,7 +523,7 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
 
     <div class="cal-bottom">
       <div style="display:flex; gap:8px; align-items:center;">
-        <input type="date" id="calDatePicker" style="flex:1; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--card-bg); color:var(--text);" />
+        <input type="date" id="calDatePicker" class="cal-date-input" style="flex:1; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--card-bg); color:var(--text);" />
         <button class="btn btn-primary" onclick="calJumpToPicked()">이동</button>
       </div>
       <div class="cal-daytotal">선택일: <span id="calSelectedLabel">-</span><span id="calDayTotal">00:00:00</span></div>
