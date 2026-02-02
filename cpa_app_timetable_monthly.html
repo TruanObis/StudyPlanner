@@ -779,12 +779,23 @@ function updateDDayPanel(){
   const el = document.getElementById('ddayPanel');
   if(!el || !DATA || !DATA.home) return;
 
-  const ddays = Array.isArray(DATA.home.dDays) ? DATA.home.dDays.slice(0,10) : [];
-  const items = ddays.map((d, i) => {
+  const ddays = Array.isArray(DATA.home.dDays)
+    ? DATA.home.dDays.map((d, index) => ({ ...d, __index: index }))
+        .sort((a, b) => {
+          const aTime = a?.date ? new Date(`${a.date}T00:00:00`).getTime() : Number.POSITIVE_INFINITY;
+          const bTime = b?.date ? new Date(`${b.date}T00:00:00`).getTime() : Number.POSITIVE_INFINITY;
+          const safeATime = Number.isNaN(aTime) ? Number.POSITIVE_INFINITY : aTime;
+          const safeBTime = Number.isNaN(bTime) ? Number.POSITIVE_INFINITY : bTime;
+          if(safeATime === safeBTime) return a.__index - b.__index;
+          return safeATime - safeBTime;
+        })
+        .slice(0, 10)
+    : [];
+  const items = ddays.map((d) => {
     const label = (d && d.label) ? d.label : '(D-Day)';
     const date  = (d && d.date) ? d.date : '';
     const cnt = date ? calcDDayLabel(date) : 'D-?';
-    return `<div class="dday-badge" onclick="editDDay(${i}); event.stopPropagation();" title="클릭하여 편집">
+    return `<div class="dday-badge" onclick="editDDay(${d.__index}); event.stopPropagation();" title="클릭하여 편집">
       <span>${label}</span>
       <span class="dday-count">${cnt}</span>
     </div>`;
