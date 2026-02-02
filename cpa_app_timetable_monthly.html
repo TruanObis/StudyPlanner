@@ -1193,6 +1193,11 @@ function sanitizeLatexString(text) {
       i += 1;
       continue;
     }
+    if (ch === '&' && text[i - 1] !== '\\') {
+      out += '\\&';
+      i += 1;
+      continue;
+    }
 
     out += ch;
     i += 1;
