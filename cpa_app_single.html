@@ -281,12 +281,100 @@ function badgeTags(raw){
 function applyMath() {
   if (window.renderMathInElement) {
     try {
+      sanitizeLatexInElement(document.body);
       renderMathInElement(document.body, {
         delimiters: [{left: "$$", right: "$$", display: true}, {left: "$", right: "$", display: false}],
         throwOnError: false
       });
     } catch(e) { console.warn('MathJax error', e); }
   }
+}
+
+function sanitizeLatexInElement(root) {
+  if (!root) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  let node;
+  while ((node = walker.nextNode())) {
+    const parent = node.parentElement;
+    if (!parent) continue;
+    const tag = parent.tagName;
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'CODE' || tag === 'PRE') {
+      continue;
+    }
+    if (node.nodeValue && node.nodeValue.includes('$') && (node.nodeValue.includes('%') || node.nodeValue.includes('&'))) {
+      const sanitized = sanitizeLatexString(node.nodeValue);
+      if (sanitized !== node.nodeValue) node.nodeValue = sanitized;
+    }
+  }
+}
+
+function sanitizeLatexString(text) {
+  let out = '';
+  let i = 0;
+  let inMath = false;
+  let delimiter = '';
+
+  while (i < text.length) {
+    const ch = text[i];
+    if (!inMath) {
+      if (ch === '$' && !isEscaped(text, i)) {
+        if (text[i + 1] === '$') {
+          inMath = true;
+          delimiter = '$$';
+          out += '$$';
+          i += 2;
+          continue;
+        }
+        inMath = true;
+        delimiter = '$';
+        out += '$';
+        i += 1;
+        continue;
+      }
+      out += ch;
+      i += 1;
+      continue;
+    }
+
+    if (delimiter === '$$' && ch === '$' && text[i + 1] === '$' && !isEscaped(text, i)) {
+      inMath = false;
+      out += '$$';
+      i += 2;
+      continue;
+    }
+    if (delimiter === '$' && ch === '$' && !isEscaped(text, i)) {
+      inMath = false;
+      out += '$';
+      i += 1;
+      continue;
+    }
+
+    if (ch === '%' && text[i - 1] !== '\\') {
+      out += '\\%';
+      i += 1;
+      continue;
+    }
+    if (ch === '&' && text[i - 1] !== '\\') {
+      out += '\\&';
+      i += 1;
+      continue;
+    }
+
+    out += ch;
+    i += 1;
+  }
+
+  return out;
+}
+
+function isEscaped(text, index) {
+  let count = 0;
+  let i = index - 1;
+  while (i >= 0 && text[i] === '\\') {
+    count += 1;
+    i -= 1;
+  }
+  return count % 2 === 1;
 }
 
 // [Deep Clone & ID Regeneration]
