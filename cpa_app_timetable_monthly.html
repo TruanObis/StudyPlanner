@@ -1140,7 +1140,7 @@ function sanitizeLatexInElement(root) {
     if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'CODE' || tag === 'PRE') {
       continue;
     }
-    if (node.nodeValue && node.nodeValue.includes('$') && node.nodeValue.includes('%')) {
+    if (node.nodeValue && node.nodeValue.includes('$') && (node.nodeValue.includes('%') || node.nodeValue.includes('&'))) {
       const sanitized = sanitizeLatexString(node.nodeValue);
       if (sanitized !== node.nodeValue) node.nodeValue = sanitized;
     }
