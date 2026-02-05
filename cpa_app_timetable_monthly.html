@@ -1129,6 +1129,15 @@ function applyMath() {
   }
 }
 
+function scheduleMathRender() {
+  if (scheduleMathRender._pending) return;
+  scheduleMathRender._pending = true;
+  requestAnimationFrame(() => {
+    scheduleMathRender._pending = false;
+    applyMath();
+  });
+}
+
 function sanitizeLatexInElement(root) {
   if (!root) return;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
@@ -1365,6 +1374,7 @@ function renderHome() {
       <div class="card ghost-card flex-center" onclick="openAddModal('subject','home')"><div class="ghost-plus">+</div></div>
     </div>
   `;
+  scheduleMathRender();
 }
 
 function setHomeBadgeFilter(badge, btn){
@@ -1416,6 +1426,7 @@ function renderDetail(sid) {
       ${(detail.cards||[]).map((c, i) => renderCardItem(c, 'detail', sid, i)).join('')}
       <div class="card ghost-card flex-center" onclick="openAddModal('detail','${sid}')"><div class="ghost-plus">+</div></div>
     </div>`;
+  scheduleMathRender();
 }
 
 function renderModule(mid) {
@@ -1492,6 +1503,7 @@ function renderModule(mid) {
       ${(qPairs||[]).map(({q,idx}) => renderCardItem(q, 'module', mid, idx, tid)).join('')}
       <div class="card ghost-card flex-center" onclick="openAddModal('module','${mid}','${tid}');event.stopPropagation()"><div class="ghost-plus">+</div></div>
     </div>`;
+  scheduleMathRender();
 }
 
 function renderCardItem(item, level, pid, idx, tabId) {
