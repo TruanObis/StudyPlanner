@@ -291,10 +291,12 @@
     .md-content .katex-display,
     .note-view .katex-display,
     .q-body .katex-display {
+      display: block;
       max-width: 100%;
       overflow-x: auto;
       overflow-y: hidden;
       padding: 8px 10px;
+      margin: 10px 0;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: rgba(148, 163, 184, 0.08);
@@ -303,6 +305,25 @@
     .md-content .katex-display > .katex,
     .note-view .katex-display > .katex,
     .q-body .katex-display > .katex {
+      min-width: max-content;
+    }
+    .md-content span.katex,
+    .note-view span.katex,
+    .q-body span.katex {
+      display: block;
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      margin: 10px 0;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(148, 163, 184, 0.08);
+      -webkit-overflow-scrolling: touch;
+    }
+    .md-content span.katex > .katex-html,
+    .note-view span.katex > .katex-html,
+    .q-body span.katex > .katex-html {
       min-width: max-content;
     }
     .clickable { cursor: pointer; }
