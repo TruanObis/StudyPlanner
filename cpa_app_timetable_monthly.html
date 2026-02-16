@@ -1637,7 +1637,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
       <div onclick="${level==='detail' ? `onDetailCardClick('${pid}',${idx})` : (!isMod&&item.module?`location.hash='#/module/${item.module}'`:'')}">
         ${isMod
           ? `<div class="md-content" style="font-weight:600;font-size:1.05rem;">${renderMarkdown(item.text||'')}</div>`
-          : `<h3>${item.title||'(무제)'}</h3><p>${item.scope||''}</p>`
+          : `<h3>${item.title||'(무제)'}</h3><div class="md-content">${renderMarkdown(item.scope||'')}</div>`
         }
         ${item.qbox?`<div class="md-content" style="background:var(--bg);padding:10px;border-radius:8px;margin-top:10px;font-size:0.9rem;">💡 ${renderMarkdown(item.qbox)}</div>`:''}
       </div>
