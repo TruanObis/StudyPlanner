@@ -1403,7 +1403,7 @@ function renderHome() {
             </div>
           </div>
           <h3 style="cursor:pointer;" onclick="location.hash='#/detail/${sub.id}'">${sub.name||'(제목 없음)'}</h3>
-          <p style="color:var(--text-sub); font-size:0.9rem;">${sub.examInfo||''}</p>
+          <div class="md-content" style="color:var(--text-sub); font-size:0.9rem;">${renderMarkdown(sub.examInfo||'')}</div>
 
           <div class="sub-list">
             ${cards.map((c, i) => {
