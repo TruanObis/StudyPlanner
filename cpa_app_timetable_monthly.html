@@ -1533,6 +1533,7 @@ function renderModule(mid) {
         <h3 class="editable" onclick="openEditModal('tab_rename','${mid}',undefined,'${tid}');event.stopPropagation()">📌 ${tab.label}</h3>
         </div>
         <div class="card-actions" style="opacity:1;">
+          <button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveTheory('${mid}','${tid}');event.stopPropagation()">↪</button>
           <button class="btn btn-icon btn-danger" onclick="deleteTab('${mid}','${tid}');event.stopPropagation()">🗑</button>
         </div>
       </div>
@@ -3712,6 +3713,14 @@ function renderSelectorUI() {
             <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}');event.stopPropagation()">다음</button>
           </li>`;
       }
+      else if(selectorMode === 'move_theory'){
+        listEl.innerHTML += `
+          <li class="sel-item">
+            <span class="sel-label" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">${sub.name}</span>
+            <span class="sel-next" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">주제 선택 ></span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}');event.stopPropagation()">다음</button>
+          </li>`;
+      }
     });
     return;
   }
@@ -3747,6 +3756,23 @@ function renderSelectorUI() {
             <span class="sel-label" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}')">${c.title}</span>
             <span class="sel-next" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}')">탭 선택 ></span>
             <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}');event.stopPropagation()">선택</button>
+          </li>`;
+      });
+      return;
+    }
+
+    if(selectorMode === 'move_theory'){
+      const movable = cards.filter(c => c.module && DATA.modules[c.module]);
+      if(movable.length===0){
+        listEl.innerHTML = '<li style="padding:20px;text-align:center;">이동 가능한 모듈(주제)이 없습니다.</li>';
+        return;
+      }
+      movable.forEach(c => {
+        listEl.innerHTML += `
+          <li class="sel-item">
+            <span class="sel-label" onclick="selectorMoveTheory('${c.module}')">${c.title}</span>
+            <span class="sel-next"></span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorMoveTheory('${c.module}');event.stopPropagation()">이동</button>
           </li>`;
       });
       return;
@@ -3866,6 +3892,14 @@ function openMoveQuestion(fromMid, fromTabId, fromQIdx){
   renderSelectorUI();
 }
 
+function openMoveTheory(fromMid, fromTabId){
+  selectorMode = 'move_theory';
+  moveState = { fromMid, fromTabId };
+  selectorState = { date: null, slotIdx: null, stack: [{level:'root', id:null, title:'이동할 과목 선택'}] };
+  document.getElementById('selectorModal').style.display = 'flex';
+  renderSelectorUI();
+}
+
 function selectorMoveQuestion(destMid, destTabId){
   if(!moveState || !moveState.fromMid) return;
   const fromMid = moveState.fromMid;
@@ -3894,6 +3928,54 @@ function selectorMoveQuestion(destMid, destTabId){
     ref => (ref.type==='question' && ref.id===q.id && String(ref.pid)===String(fromMid)),
     ref => { ref.pid = destMid; }
   );
+
+  saveData();
+  closeSelectorModal();
+
+  const r = getRoute();
+  if(r.page==='module') renderModule(r.id);
+  else renderRouter(true);
+  renderDailySidebar();
+}
+
+function selectorMoveTheory(destMid){
+  if(!moveState || !moveState.fromMid) return;
+  const fromMid = moveState.fromMid;
+  const fromTabId = moveState.fromTabId;
+
+  if(String(destMid)===String(fromMid)) return;
+
+  const srcMod = DATA.modules?.[fromMid];
+  const dstMod = DATA.modules?.[destMid];
+  if(!srcMod || !dstMod) return;
+
+  if(!Array.isArray(srcMod.tabs)) srcMod.tabs = [];
+  if(!Array.isArray(dstMod.tabs)) dstMod.tabs = [];
+  if(srcMod.tabs.length<=1) return alert('탭은 최소 1개가 필요합니다.');
+
+  const srcIdx = srcMod.tabs.findIndex(t=>t.id===fromTabId);
+  if(srcIdx<0) return;
+
+  const movingTab = srcMod.tabs.splice(srcIdx, 1)[0];
+  if(!movingTab) return;
+  dstMod.tabs.push(movingTab);
+
+  srcMod.activeTab = (srcMod.activeTab===fromTabId)
+    ? (srcMod.tabs[0]?.id || '')
+    : (srcMod.activeTab || srcMod.tabs[0]?.id || '');
+  dstMod.activeTab = movingTab.id;
+
+  __updateDailyRefs(
+    ref => (ref.type==='theory' && String(ref.id)===String(movingTab.id) && String(ref.pid)===String(fromMid)),
+    ref => { ref.pid = destMid; }
+  );
+
+  (movingTab.questions||[]).forEach(q => {
+    __updateDailyRefs(
+      ref => (ref.type==='question' && String(ref.id)===String(q.id) && String(ref.pid)===String(fromMid)),
+      ref => { ref.pid = destMid; }
+    );
+  });
 
   saveData();
   closeSelectorModal();
