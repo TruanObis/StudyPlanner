@@ -1,0 +1,96 @@
+{
+  "meta": {
+    "appTitle": "2026 CPA Master Planner V2",
+    "version": "2.0"
+  },
+  "home": {
+    "title": "Placeholder",
+    "subtitle": "",
+    "subjects": [
+      {
+        "id": "s_Subject_Example",
+        "name": "Example Subject",
+        "examInfo": "Example Memo",
+        "badge": "Example Badge",
+        "done": false,
+        "time": 0,
+        "today": 0
+      }
+    ],
+    "dDays": [
+      {
+        "label": "Example D-Day",
+        "date": "2026-03-02"
+      }
+    ]
+  },
+  "details": {
+    "s_Subject_Example": {
+      "id": "s_Subject_Example",
+      "title": "Example Subject",
+      "subtitle": "",
+      "cards": [
+        {
+          "id": "c_Card_Example",
+          "title": "Example Subject",
+          "scope": "Example Range",
+          "badge": "Example Badge",
+          "qbox": "Example Tip",
+          "moduleId": null,
+          "time": 0,
+          "done": false,
+          "isRunning": false,
+          "module": "m_Module_Example"
+        }
+      ]
+    }
+  },
+  "modules": {
+    "m_Module_Example": {
+      "id": "m_Module_Example",
+      "title": "Example Subject",
+      "subtitle": "",
+      "backTo": "#/detail/s_Subject_Example",
+      "activeTab": "t_Module_Example_Tab",
+      "tabs": [
+        {
+          "id": "t_Module_Example_Tab",
+          "label": "Example Theory Subject",
+          "theoryNote": "Example Theory Markdown",
+          "questions": [
+            {
+              "id": "q_Example_Question",
+              "src": "Example Source",
+              "text": "Example Question Subject",
+              "userNote": "Example Question Markdown",
+              "time": 0,
+              "done": false,
+              "isRunning": false
+            }
+          ],
+          "time": 0,
+          "done": false,
+          "isRunning": false
+        }
+      ]
+    }
+  },
+  "dailyHistory": {
+    "2026-03-02": {
+      "totalSeconds": 0,
+      "slots": [
+        {
+          "id": "s1",
+          "label": "오전 (09-12)",
+          "cardIds": []
+        },
+        {
+          "id": "s2",
+          "label": "오후 (13-18)",
+          "cardIds": []
+        }
+      ],
+      "goalStr": "00:00:00"
+    }
+  }
+}
