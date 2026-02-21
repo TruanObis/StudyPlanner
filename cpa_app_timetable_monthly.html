@@ -663,6 +663,7 @@ try{
 const ERR_SCREEN = document.getElementById('error-screen');
 let VIEW_DATE = null;
 let HOME_BADGE_FILTER = 'all';
+let DETAIL_BADGE_FILTER = {}; // key: subject id => 'all' or badge
 let MODULE_QSRC_FILTER = {}; // key: mid:tid => 'all' or src
 let selectorMode = 'add'; // 'add' | 'move_detail' | 'move_question'
 let moveState = null;
@@ -1467,6 +1468,12 @@ function renderDetail(sid) {
   const detail = DATA.details[sid];
   const stats = calcSubjectStats(sid);
   const badgeList = [...new Set((detail.cards||[]).map(c=>badgeTags(c.badge)).flat())];
+  const selectedBadge = DETAIL_BADGE_FILTER[sid] || 'all';
+  const activeBadge = (selectedBadge === 'all' || badgeList.includes(selectedBadge)) ? selectedBadge : 'all';
+
+  DETAIL_BADGE_FILTER[sid] = activeBadge;
+
+  const esc = (s)=>String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 
   APP.innerHTML = `
     <div style="margin-bottom:20px;"><button class="btn btn-outline" onclick="location.hash='#/'">← 홈</button></div>
@@ -1476,13 +1483,14 @@ function renderDetail(sid) {
     </div>
     ${renderStickyHeader('진행률', stats.pct, stats.timeStr)}
     <div class="tabs">
-      <button class="tab-btn active" onclick="filterCards('all',this,'${sid}')">전체</button>
-      ${badgeList.map(b=>`<button class="tab-btn" onclick="filterCards('${b}',this,'${sid}')">${b}</button>`).join('')}
+      <button class="tab-btn ${activeBadge==='all'?'active':''}" onclick="filterCards('all',this,'${sid}')">전체</button>
+      ${badgeList.map(b=>`<button class="tab-btn ${activeBadge===b?'active':''}" onclick="filterCards('${esc(b)}',this,'${sid}')">${b}</button>`).join('')}
     </div>
     <div class="grid" id="cardGrid">
       ${(detail.cards||[]).map((c, i) => renderCardItem(c, 'detail', sid, i)).join('')}
       <div class="card ghost-card flex-center" onclick="openAddModal('detail','${sid}')"><div class="ghost-plus">+</div></div>
     </div>`;
+  filterCards(activeBadge, null, sid);
   scheduleMathRender();
 }
 
@@ -1747,7 +1755,8 @@ function onDetailCardClick(sid, idx){
    DETAIL FILTER
 ========================= */
 function filterCards(tag, btn, sid){
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  DETAIL_BADGE_FILTER[sid] = tag || 'all';
+  document.querySelectorAll('.tabs .tab-btn').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
 
   const detail = DATA.details[sid];
