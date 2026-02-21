@@ -1,0 +1,87 @@
+{
+  "meta": {
+    "appTitle": "2026 CPA Master Planner V2",
+    "version": "2.0"
+  },
+  "schedule": {
+    "dDays": [
+      {
+        "label": "Example D-Day",
+        "date": "2026-03-02"
+      }
+    ],
+    "dailyHistory": {
+      "2026-03-02": {
+        "totalSeconds": 0,
+        "slots": [
+          {
+            "id": "s1",
+            "label": "오전 (09-12)",
+            "cardIds": []
+          },
+          {
+            "id": "s2",
+            "label": "오후 (13-18)",
+            "cardIds": []
+          }
+        ],
+        "goalStr": "00:00:00"
+      }
+    }
+  },
+  "curriculum": [
+    {
+      "id": "s_Subject_Example",
+      "name": "Example Subject",
+      "examInfo": "Example Memo",
+      "badge": "Example Badge",
+      "progress": {
+        "done": false,
+        "time": 0,
+        "today": 0
+      },
+      "cards": [
+        {
+          "id": "c_Card_Example",
+          "title": "Example Subject",
+          "scope": "Example Range",
+          "qbox": "Example Tip",
+          "progress": {
+            "done": false,
+            "time": 0,
+            "isRunning": false
+          },
+          "module": {
+            "id": "m_Module_Example",
+            "activeTab": "t_Module_Example_Tab",
+            "tabs": [
+              {
+                "id": "t_Module_Example_Tab",
+                "label": "Example Theory Subject",
+                "theoryNote": "Example Theory Markdown",
+                "progress": {
+                  "done": false,
+                  "time": 0,
+                  "isRunning": false
+                },
+                "questions": [
+                  {
+                    "id": "q_Example_Question",
+                    "src": "Example Source",
+                    "text": "Example Question Subject",
+                    "userNote": "Example Question Markdown",
+                    "progress": {
+                      "done": false,
+                      "time": 0,
+                      "isRunning": false
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
