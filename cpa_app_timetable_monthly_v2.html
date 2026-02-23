@@ -1001,6 +1001,9 @@ function toLegacySchema(newData){
 }
 
 function toNewSchema(legacy){
+  const baseHome = baseData().home;
+  const homeTitle = (typeof legacy?.home?.title === 'string' && legacy.home.title.trim()) ? legacy.home.title : baseHome.title;
+  const homeSubtitle = (typeof legacy?.home?.subtitle === 'string' && legacy.home.subtitle.trim()) ? legacy.home.subtitle : baseHome.subtitle;
   const curriculum = (legacy?.home?.subjects || []).map((subj)=>{
     const sid = subj.id;
     const detail = legacy?.details?.[sid] || {};
@@ -1061,6 +1064,10 @@ function toNewSchema(legacy){
 
   return {
     meta: legacy?.meta || { version: '2.0' },
+    home: {
+      title: homeTitle,
+      subtitle: homeSubtitle
+    },
     schedule: {
       dDays: Array.isArray(legacy?.home?.dDays) ? legacy.home.dDays : [],
       dailyHistory: (legacy?.dailyHistory && typeof legacy.dailyHistory==='object') ? legacy.dailyHistory : {}
