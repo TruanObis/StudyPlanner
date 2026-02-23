@@ -914,9 +914,13 @@ function isNewSchema(data){
 }
 
 function toLegacySchema(newData){
+  const baseHome = baseData().home;
+  const homeTitle = (typeof newData?.home?.title === 'string' && newData.home.title.trim()) ? newData.home.title : baseHome.title;
+  const homeSubtitle = (typeof newData?.home?.subtitle === 'string' && newData.home.subtitle.trim()) ? newData.home.subtitle : baseHome.subtitle;
+
   const out = {
     meta: newData?.meta || { version: '2.0' },
-    home: { title:'', subtitle:'', subjects: [], dDays: Array.isArray(newData?.schedule?.dDays) ? newData.schedule.dDays : [] },
+    home: { title: homeTitle, subtitle: homeSubtitle, subjects: [], dDays: Array.isArray(newData?.schedule?.dDays) ? newData.schedule.dDays : [] },
     details: {},
     modules: {},
     dailyHistory: (newData?.schedule?.dailyHistory && typeof newData.schedule.dailyHistory==='object') ? newData.schedule.dailyHistory : {}
@@ -1136,9 +1140,12 @@ function baseData(){
 }
 
 function normalizeData(){
+  const baseHome = baseData().home;
   if(!DATA || typeof DATA !== 'object') DATA = baseData();
   if(!DATA.meta) DATA.meta = {appTitle:'2026 CPA Master Planner V2',version:'2.0'};
   if(!DATA.home) DATA.home = baseData().home;
+  if(typeof DATA.home.title !== 'string' || !DATA.home.title.trim()) DATA.home.title = baseHome.title;
+  if(typeof DATA.home.subtitle !== 'string' || !DATA.home.subtitle.trim()) DATA.home.subtitle = baseHome.subtitle;
   if(!Array.isArray(DATA.home.subjects)) DATA.home.subjects = [];
   if(!Array.isArray(DATA.home.dDays)) DATA.home.dDays = [];
   if(!DATA.details) DATA.details = {};
