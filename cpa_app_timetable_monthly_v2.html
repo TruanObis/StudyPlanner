@@ -951,7 +951,9 @@ function toLegacySchema(newData){
         id: card.id,
         title: card.title || '새 카드',
         scope: card.scope || '',
-        badge: subj.badge || '',
+        // 카드 배지는 과목 배지와 독립적으로 보존한다.
+        // (구버전 JSON 호환을 위해 값이 없을 때만 과목 배지로 폴백)
+        badge: card.badge ?? subj.badge ?? '',
         qbox: card.qbox || '',
         moduleId: null,
         time: Number(cp.time)||0,
@@ -1004,6 +1006,7 @@ function toNewSchema(legacy){
         id: card.id,
         title: card.title || '',
         scope: card.scope || '',
+        badge: card.badge || '',
         qbox: card.qbox || '',
         progress: {
           done: !!card.done,
