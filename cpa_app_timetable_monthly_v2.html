@@ -997,6 +997,25 @@ function toLegacySchema(newData){
     });
   });
 
+  const detailOverrides = newData?.pageInfo?.details;
+  if(detailOverrides && typeof detailOverrides === 'object'){
+    Object.entries(detailOverrides).forEach(([sid, info])=>{
+      if(!out.details[sid] || !info || typeof info !== 'object') return;
+      if(typeof info.title === 'string') out.details[sid].title = info.title;
+      if(typeof info.subtitle === 'string') out.details[sid].subtitle = info.subtitle;
+    });
+  }
+
+  const moduleOverrides = newData?.pageInfo?.modules;
+  if(moduleOverrides && typeof moduleOverrides === 'object'){
+    Object.entries(moduleOverrides).forEach(([mid, info])=>{
+      if(!out.modules[mid] || !info || typeof info !== 'object') return;
+      if(typeof info.title === 'string') out.modules[mid].title = info.title;
+      if(typeof info.subtitle === 'string') out.modules[mid].subtitle = info.subtitle;
+      if(typeof info.backTo === 'string') out.modules[mid].backTo = info.backTo;
+    });
+  }
+
   return out;
 }
 
@@ -1062,6 +1081,28 @@ function toNewSchema(legacy){
     };
   });
 
+  const pageInfo = { details: {}, modules: {} };
+  (legacy?.home?.subjects || []).forEach((subj)=>{
+    const sid = subj?.id;
+    if(!sid) return;
+    const detail = legacy?.details?.[sid];
+    if(detail){
+      pageInfo.details[sid] = {
+        title: detail.title || '',
+        subtitle: detail.subtitle || ''
+      };
+    }
+  });
+
+  Object.entries(legacy?.modules || {}).forEach(([mid, mod])=>{
+    if(!mod) return;
+    pageInfo.modules[mid] = {
+      title: mod.title || '',
+      subtitle: mod.subtitle || '',
+      backTo: mod.backTo || ''
+    };
+  });
+
   return {
     meta: legacy?.meta || { version: '2.0' },
     home: {
@@ -1072,7 +1113,8 @@ function toNewSchema(legacy){
       dDays: Array.isArray(legacy?.home?.dDays) ? legacy.home.dDays : [],
       dailyHistory: (legacy?.dailyHistory && typeof legacy.dailyHistory==='object') ? legacy.dailyHistory : {}
     },
-    curriculum
+    curriculum,
+    pageInfo
   };
 }
 function saveData(){
