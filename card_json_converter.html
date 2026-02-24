@@ -35,6 +35,7 @@
     h2 { margin: 0 0 10px; font-size: 1.1rem; }
     p { margin: 0 0 10px; color: var(--sub); }
     .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .row + .row { margin-top: 10px; }
     button {
       border: 0;
       border-radius: 8px;
@@ -59,6 +60,14 @@
       color: #0f172a;
       resize: vertical;
     }
+    select {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px 10px;
+      background: #fff;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
     .logs { font-size: 0.9rem; }
     .logs li { margin-bottom: 4px; }
     .ok { color: var(--ok); }
@@ -76,14 +85,31 @@
   <div class="wrap">
     <div class="panel">
       <h1>카드 JSON 변환 / 합체기</h1>
-      <p>Legacy JSON(<code>home/details/modules</code>) 또는 New JSON(<code>schedule/curriculum</code>) 파일 여러 개를 업로드하면, <b>카드 영역만</b> New 구조로 합쳐줍니다.</p>
+      <p>Legacy(<code>home/details/modules</code>) ↔ New(<code>schedule/curriculum</code>) 상호 변환을 지원합니다. 합체 시에는 첫 번째 파일의 제목/디데이 등 상위 메타 정보를 우선 유지합니다.</p>
       <div class="row">
         <label class="file-label">
           JSON 파일 선택
           <input id="fileInput" type="file" accept="application/json,.json" multiple />
         </label>
-        <button id="convertBtn">변환 + 합체</button>
+        <button id="convertBtn">변환 실행</button>
+        <button id="mergeBtn" class="secondary">합체 실행</button>
         <button id="downloadBtn" class="secondary" disabled>결과 다운로드</button>
+      </div>
+      <div class="row">
+        <label>
+          변환 방향
+          <select id="convertMode">
+            <option value="legacy_to_new">Legacy → New</option>
+            <option value="new_to_legacy">New → Legacy</option>
+          </select>
+        </label>
+        <label>
+          합체 결과 스키마
+          <select id="mergeOutputMode">
+            <option value="new">New (schedule/curriculum)</option>
+            <option value="legacy">Legacy (home/details/modules)</option>
+          </select>
+        </label>
       </div>
     </div>
 
@@ -93,7 +119,7 @@
     </div>
 
     <div class="panel">
-      <h2>결과 JSON (카드 부분만)</h2>
+      <h2>결과 JSON (즉시 사용 가능한 전체 구조)</h2>
       <textarea id="result" placeholder="결과가 여기 표시됩니다." spellcheck="false"></textarea>
     </div>
   </div>
@@ -101,7 +127,10 @@
   <script>
     const fileInput = document.getElementById('fileInput');
     const convertBtn = document.getElementById('convertBtn');
+    const mergeBtn = document.getElementById('mergeBtn');
     const downloadBtn = document.getElementById('downloadBtn');
+    const convertModeEl = document.getElementById('convertMode');
+    const mergeOutputModeEl = document.getElementById('mergeOutputMode');
     const logsEl = document.getElementById('logs');
     const resultEl = document.getElementById('result');
 
@@ -118,8 +147,16 @@
       logsEl.innerHTML = '';
     }
 
+    function deepClone(data) {
+      return JSON.parse(JSON.stringify(data));
+    }
+
     function isNewSchema(data) {
       return data && typeof data === 'object' && Array.isArray(data.curriculum);
+    }
+
+    function isLegacySchema(data) {
+      return data && typeof data === 'object' && data.home && data.details && data.modules;
     }
 
     function toBool(v) { return !!v; }
@@ -176,7 +213,9 @@
             id: card?.id,
             title: card?.title || '',
             scope: card?.scope || '',
+            badge: card?.badge || '',
             qbox: card?.qbox || '',
+            category: card?.category || '',
             progress: {
               done: toBool(card?.done),
               time: toInt(card?.time),
@@ -204,40 +243,152 @@
         });
       }
 
-      return { curriculum };
+      return {
+        schedule: {
+          title: home?.title || '',
+          dday: home?.dday || '',
+          subtitle: home?.subtitle || '',
+          updatedAt: home?.updatedAt || ''
+        },
+        curriculum
+      };
     }
 
-    function normalizeToCardOnlyNew(data) {
-      if (isNewSchema(data)) {
-        return { curriculum: Array.isArray(data.curriculum) ? data.curriculum : [] };
+    function convertNewToLegacy(data) {
+      const schedule = data?.schedule || {};
+      const curriculum = Array.isArray(data?.curriculum) ? data.curriculum : [];
+
+      const homeSubjects = [];
+      const details = {};
+      const modules = {};
+
+      for (const subject of curriculum) {
+        if (!subject?.id) continue;
+
+        homeSubjects.push({
+          id: subject.id,
+          name: subject.name || '',
+          examInfo: subject.examInfo || '',
+          badge: subject.badge || '',
+          done: toBool(subject?.progress?.done),
+          time: toInt(subject?.progress?.time),
+          today: toInt(subject?.progress?.today)
+        });
+
+        const cards = [];
+        for (const card of subject.cards || []) {
+          if (card?.module?.id) {
+            modules[card.module.id] = {
+              id: card.module.id,
+              activeTab: card.module.activeTab || '',
+              tabs: (card.module.tabs || []).map((tab) => ({
+                id: tab?.id,
+                label: tab?.label || '',
+                theoryNote: tab?.theoryNote || '',
+                done: toBool(tab?.progress?.done),
+                time: toInt(tab?.progress?.time),
+                isRunning: toBool(tab?.progress?.isRunning),
+                questions: (tab.questions || []).map((q) => ({
+                  id: q?.id,
+                  src: q?.src || '',
+                  text: q?.text || '',
+                  userNote: q?.userNote || '',
+                  done: toBool(q?.progress?.done),
+                  time: toInt(q?.progress?.time),
+                  isRunning: toBool(q?.progress?.isRunning)
+                }))
+              }))
+            };
+          }
+
+          cards.push({
+            id: card?.id,
+            title: card?.title || '',
+            scope: card?.scope || '',
+            badge: card?.badge || '',
+            qbox: card?.qbox || '',
+            category: card?.category || '',
+            module: card?.module?.id || '',
+            done: toBool(card?.progress?.done),
+            time: toInt(card?.progress?.time),
+            isRunning: toBool(card?.progress?.isRunning)
+          });
+        }
+
+        details[subject.id] = { cards };
       }
-      return convertLegacyToNew(data);
+
+      return {
+        home: {
+          title: schedule?.title || '',
+          dday: schedule?.dday || '',
+          subtitle: schedule?.subtitle || '',
+          updatedAt: schedule?.updatedAt || '',
+          subjects: homeSubjects
+        },
+        details,
+        modules
+      };
     }
 
-    function mergeCardOnlyJson(jsonList) {
+    function normalizeToFullNew(data) {
+      if (isNewSchema(data)) {
+        return {
+          schedule: data.schedule || {},
+          curriculum: Array.isArray(data.curriculum) ? data.curriculum : []
+        };
+      }
+      if (isLegacySchema(data)) {
+        return convertLegacyToNew(data);
+      }
+      throw new Error('지원하지 않는 JSON 구조입니다.');
+    }
+
+    function mergeSchedules(baseSchedule, incomingSchedule) {
+      const merged = deepClone(baseSchedule || {});
+      for (const [key, value] of Object.entries(incomingSchedule || {})) {
+        if (merged[key] === undefined || merged[key] === null || merged[key] === '') {
+          merged[key] = value;
+        }
+      }
+      return merged;
+    }
+
+    function mergeFullNewJson(jsonList) {
+      const first = deepClone(jsonList[0] || { schedule: {}, curriculum: [] });
       const subjectMap = new Map();
+
+      for (const subject of first.curriculum || []) {
+        if (!subject?.id) continue;
+        subjectMap.set(subject.id, { ...subject, cards: [...(subject.cards || [])], _cardMap: new Map() });
+        const target = subjectMap.get(subject.id);
+        (target.cards || []).forEach((card, idx) => {
+          if (card?.id) target._cardMap.set(card.id, idx);
+        });
+      }
+
+      for (let i = 1; i < jsonList.length; i++) {
+        first.schedule = mergeSchedules(first.schedule, jsonList[i].schedule);
+      }
 
       for (const data of jsonList) {
         for (const subject of data.curriculum || []) {
           if (!subject?.id) continue;
 
           if (!subjectMap.has(subject.id)) {
-            subjectMap.set(subject.id, {
-              id: subject.id,
-              name: subject.name || '',
-              examInfo: subject.examInfo || '',
-              badge: subject.badge || '',
-              progress: subject.progress || { done: false, time: 0, today: 0 },
-              cards: [],
-              _cardMap: new Map()
+            const created = { ...subject, cards: [...(subject.cards || [])], _cardMap: new Map() };
+            created.cards.forEach((card, idx) => {
+              if (card?.id) created._cardMap.set(card.id, idx);
             });
+            subjectMap.set(subject.id, created);
+            continue;
           }
 
           const target = subjectMap.get(subject.id);
-          if (subject.name) target.name = subject.name;
-          if (subject.examInfo) target.examInfo = subject.examInfo;
-          if (subject.badge) target.badge = subject.badge;
-          if (subject.progress) target.progress = subject.progress;
+          if (!target.name && subject.name) target.name = subject.name;
+          if (!target.examInfo && subject.examInfo) target.examInfo = subject.examInfo;
+          if (!target.badge && subject.badge) target.badge = subject.badge;
+          if (!target.progress && subject.progress) target.progress = subject.progress;
 
           for (const card of subject.cards || []) {
             if (!card?.id) {
@@ -260,12 +411,42 @@
         return clean;
       });
 
-      return { curriculum };
+      return {
+        schedule: first.schedule || {},
+        curriculum
+      };
     }
 
     async function readJsonFile(file) {
       const text = await file.text();
       return JSON.parse(text);
+    }
+
+    async function readAndNormalizeFiles() {
+      const files = Array.from(fileInput.files || []);
+      if (!files.length) {
+        addLog('파일을 하나 이상 선택해주세요.', 'warn');
+        return null;
+      }
+
+      const normalizedList = [];
+      for (const file of files) {
+        try {
+          const raw = await readJsonFile(file);
+          const normalized = normalizeToFullNew(raw);
+          normalizedList.push({ fileName: file.name, data: normalized });
+          addLog(`${file.name}: 구조 인식 성공 (subject ${normalized.curriculum?.length || 0}개)`);
+        } catch (e) {
+          addLog(`${file.name}: 파싱/인식 실패 - ${e.message}`, 'warn');
+        }
+      }
+
+      if (!normalizedList.length) {
+        addLog('유효한 JSON이 없어 중단했습니다.', 'warn');
+        return null;
+      }
+
+      return normalizedList;
     }
 
     convertBtn.addEventListener('click', async () => {
@@ -274,36 +455,46 @@
       downloadBtn.disabled = true;
       resultEl.value = '';
 
-      const files = Array.from(fileInput.files || []);
-      if (!files.length) {
-        addLog('파일을 하나 이상 선택해주세요.', 'warn');
-        return;
-      }
+      const normalizedList = await readAndNormalizeFiles();
+      if (!normalizedList) return;
 
-      const converted = [];
-      for (const file of files) {
-        try {
-          const raw = await readJsonFile(file);
-          const normalized = normalizeToCardOnlyNew(raw);
-          converted.push(normalized);
-          addLog(`${file.name}: 변환 성공 (subject ${normalized.curriculum?.length || 0}개)`);
-        } catch (e) {
-          addLog(`${file.name}: 파싱 실패 - ${e.message}`, 'warn');
-        }
-      }
+      const mode = convertModeEl.value;
+      const convertedItems = normalizedList.map(({ fileName, data }) => {
+        const converted = mode === 'new_to_legacy' ? convertNewToLegacy(data) : data;
+        return { fileName, converted };
+      });
 
-      if (!converted.length) {
-        addLog('유효한 JSON이 없어 중단했습니다.', 'warn');
-        return;
-      }
+      latestOutput = convertedItems.length === 1
+        ? convertedItems[0].converted
+        : {
+            mode,
+            items: convertedItems.map((item) => ({ fileName: item.fileName, data: item.converted }))
+          };
 
-      const merged = mergeCardOnlyJson(converted);
-      latestOutput = merged;
-      resultEl.value = JSON.stringify(merged, null, 2);
+      resultEl.value = JSON.stringify(latestOutput, null, 2);
+      downloadBtn.disabled = false;
+      addLog(`변환 완료: ${convertedItems.length}개 파일 처리`);
+    });
+
+    mergeBtn.addEventListener('click', async () => {
+      clearLogs();
+      latestOutput = null;
+      downloadBtn.disabled = true;
+      resultEl.value = '';
+
+      const normalizedList = await readAndNormalizeFiles();
+      if (!normalizedList) return;
+
+      const mergedNew = mergeFullNewJson(normalizedList.map((v) => v.data));
+      const outputMode = mergeOutputModeEl.value;
+      latestOutput = outputMode === 'legacy' ? convertNewToLegacy(mergedNew) : mergedNew;
+
+      resultEl.value = JSON.stringify(latestOutput, null, 2);
       downloadBtn.disabled = false;
 
-      const cardCount = merged.curriculum.reduce((sum, s) => sum + (s.cards?.length || 0), 0);
-      addLog(`합체 완료: subject ${merged.curriculum.length}개, card ${cardCount}개`);
+      const cardCount = mergedNew.curriculum.reduce((sum, s) => sum + (s.cards?.length || 0), 0);
+      addLog(`합체 완료: subject ${mergedNew.curriculum.length}개, card ${cardCount}개`);
+      addLog(`메타 우선순위: 첫 번째 파일 schedule(title/dday 등) 기준 유지`);
     });
 
     downloadBtn.addEventListener('click', () => {
@@ -312,7 +503,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'merged_cards_new_schema.json';
+      a.download = 'card_json_output.json';
       a.click();
       URL.revokeObjectURL(url);
     });
