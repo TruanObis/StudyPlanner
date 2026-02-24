@@ -1546,7 +1546,7 @@ function renderModule(mid) {
 
       <div id="view-theory-${tid}" class="note-view md-content" data-empty="${!tab.theoryNote}" onclick="toggleNoteView('theory-${tid}')">${renderMarkdown(tab.theoryNote||"")}</div>
       <div id="edit-theory-${tid}" class="note-edit">
-        <textarea id="ta-theory-${tid}" class="note-textarea">${tab.theoryNote||''}</textarea>
+        <textarea id="ta-theory-${tid}" class="note-textarea" data-autosave="1" data-kind="theory" data-mid="${mid}" data-tid="${tid}">${tab.theoryNote||''}</textarea>
         <div style="text-align:right;margin-top:5px;">
           <button class="btn btn-primary" onclick="saveNoteText('theory','${mid}',null,'${tid}','theory-${tid}')">저장</button>
         </div>
@@ -1656,7 +1656,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
           <span class="note-label-small">📝 오답 노트</span>
           <div id="view-${sid}" class="note-view md-content" data-empty="${!item.userNote}" onclick="toggleNoteView('${sid}')">${renderMarkdown(item.userNote||"")}</div>
           <div id="edit-${sid}" class="note-edit">
-            <textarea id="ta-${sid}" class="note-textarea">${item.userNote||''}</textarea>
+            <textarea id="ta-${sid}" class="note-textarea" data-autosave="1" data-kind="card" data-mid="${pid}" data-tabid="${tabId}" data-idx="${idx}">${item.userNote||''}</textarea>
             <div style="text-align:right;margin-top:5px;">
               <button class="btn btn-primary" onclick="saveNoteText('card','${pid}',${idx},'${tabId}','${sid}')">저장</button>
             </div>
@@ -3088,6 +3088,65 @@ function toggleNoteView(id){
   edit.style.display = isEditing ? 'none' : 'block';
   view.style.display = isEditing ? 'block' : 'none';
 }
+
+const noteAutosaveTimers = new WeakMap();
+
+function persistNoteDraftFromTextarea(ta){
+  if(!ta || ta.dataset.autosave !== '1') return false;
+  const kind = ta.dataset.kind;
+  const mid = ta.dataset.mid;
+  if(kind === 'theory'){
+    const tid = ta.dataset.tid;
+    const mod = DATA.modules?.[mid];
+    if(!mod) return false;
+    const tab = (mod.tabs||[]).find(t => String(t.id)===String(tid));
+    if(!tab) return false;
+    tab.theoryNote = ta.value || '';
+    saveData();
+    return true;
+  }
+  if(kind === 'card'){
+    const tabId = ta.dataset.tabid;
+    const idx = Number(ta.dataset.idx);
+    const mod = DATA.modules?.[mid];
+    if(!mod || Number.isNaN(idx)) return false;
+    const tab = (mod.tabs||[]).find(t => String(t.id)===String(tabId)) || (mod.tabs||[])[0];
+    const q = tab?.questions?.[idx];
+    if(!q) return false;
+    q.userNote = ta.value || '';
+    saveData();
+    return true;
+  }
+  return false;
+}
+
+function queueNoteDraftAutosave(ta){
+  if(!ta || ta.dataset.autosave !== '1') return;
+  const prev = noteAutosaveTimers.get(ta);
+  if(prev) clearTimeout(prev);
+  const timer = setTimeout(() => {
+    persistNoteDraftFromTextarea(ta);
+    noteAutosaveTimers.delete(ta);
+  }, 300);
+  noteAutosaveTimers.set(ta, timer);
+}
+
+document.addEventListener('input', (ev) => {
+  const ta = ev.target;
+  if(!(ta instanceof HTMLTextAreaElement)) return;
+  if(ta.classList.contains('note-textarea')) queueNoteDraftAutosave(ta);
+});
+
+window.addEventListener('beforeunload', () => {
+  document.querySelectorAll('textarea.note-textarea[data-autosave="1"]').forEach((ta) => {
+    const timer = noteAutosaveTimers.get(ta);
+    if(timer){
+      clearTimeout(timer);
+      noteAutosaveTimers.delete(ta);
+    }
+    persistNoteDraftFromTextarea(ta);
+  });
+});
 
 function saveNoteText(kind, mid, idx, tid, sid){
   try{
