@@ -929,7 +929,7 @@ window.loadJsonFile = function(e) {
   r.onload = function(evt) {
     try {
       const parsed = JSON.parse(evt.target.result);
-      DATA = parsed;
+      DATA = convertIncomingData(parsed);
       normalizeData();
       saveData();
       renderRouter();
@@ -953,7 +953,7 @@ async function hardReset(){
     const res = await fetch('New_Default.json');
     if(res.ok) {
       const json = await res.json();
-      DATA = {...DATA, ...json};
+      DATA = convertIncomingData(json);
     }
   } catch (e) {}
 
@@ -978,6 +978,96 @@ function baseData(){
     modules: {},
     dailyHistory: {}
   };
+}
+
+function convertIncomingData(raw){
+  if(!raw || typeof raw !== 'object') return baseData();
+
+  // New schema: { meta, schedule, curriculum }
+  if(Array.isArray(raw.curriculum) || raw.schedule){
+    const next = baseData();
+
+    if(raw.meta && typeof raw.meta === 'object'){
+      next.meta = {...next.meta, ...raw.meta};
+    }
+
+    const schedule = (raw.schedule && typeof raw.schedule === 'object') ? raw.schedule : {};
+    if(Array.isArray(schedule.dDays)) next.home.dDays = schedule.dDays;
+    if(schedule.dailyHistory && typeof schedule.dailyHistory === 'object') next.dailyHistory = schedule.dailyHistory;
+
+    const curriculum = Array.isArray(raw.curriculum) ? raw.curriculum : [];
+    next.home.subjects = curriculum.map(s=>({
+      id: s.id || uid('s'),
+      name: s.name || '새 과목',
+      examInfo: s.examInfo || '',
+      badge: s.badge || '',
+      done: !!s.progress?.done,
+      time: Number(s.progress?.time) || 0,
+      today: Number(s.progress?.today) || 0
+    }));
+
+    curriculum.forEach((s, sIdx)=>{
+      const sid = next.home.subjects[sIdx].id;
+      const cards = Array.isArray(s.cards) ? s.cards : [];
+      next.details[sid] = {
+        id: sid,
+        title: s.name || '새 과목',
+        subtitle: s.examInfo || '',
+        cards: cards.map(c=>{
+          const card = {
+            id: c.id || uid('c'),
+            title: c.title || '새 카드',
+            scope: c.scope || '',
+            qbox: c.qbox || '',
+            done: !!c.progress?.done,
+            time: Number(c.progress?.time) || 0,
+            isRunning: !!c.progress?.isRunning
+          };
+
+          const mod = (c.module && typeof c.module === 'object') ? c.module : null;
+          if(mod){
+            const mid = mod.id || uid('m');
+            card.module = mid;
+            if(!next.modules[mid]){
+              const tabs = Array.isArray(mod.tabs) ? mod.tabs : [];
+              next.modules[mid] = {
+                id: mid,
+                title: c.title || '모듈',
+                subtitle: c.scope || '',
+                backTo: `#/detail/${sid}`,
+                activeTab: mod.activeTab || tabs[0]?.id || '',
+                tabs: tabs.map(t=>(
+                  {
+                    id: t.id || uid('t'),
+                    label: t.label || '이론',
+                    theoryNote: t.theoryNote || '',
+                    done: !!t.progress?.done,
+                    time: Number(t.progress?.time) || 0,
+                    isRunning: !!t.progress?.isRunning,
+                    questions: (Array.isArray(t.questions) ? t.questions : []).map(q=>({
+                      id: q.id || uid('q'),
+                      src: q.src || '',
+                      text: q.text || '',
+                      userNote: q.userNote || '',
+                      done: !!q.progress?.done,
+                      time: Number(q.progress?.time) || 0,
+                      isRunning: !!q.progress?.isRunning
+                    }))
+                  }
+                ))
+              };
+            }
+          }
+
+          return card;
+        })
+      };
+    });
+
+    return next;
+  }
+
+  return raw;
 }
 
 function normalizeData(){
@@ -4074,7 +4164,7 @@ async function init(){
       const res = await fetch('New_Default.json');
       if(res.ok){
         const json = await res.json();
-        DATA = {...DATA, ...json};
+        DATA = convertIncomingData(json);
       }
     }catch(e){}
   }
