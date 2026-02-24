@@ -909,216 +909,8 @@ function toggleDarkMode(){
 /* =========================
    STORAGE / IMPORT EXPORT
 ========================= */
-function isNewSchema(data){
-  return !!(data && typeof data==='object' && data.schedule && Array.isArray(data.curriculum));
-}
-
-function toLegacySchema(newData){
-  const baseHome = baseData().home;
-  const homeTitle = (typeof newData?.home?.title === 'string' && newData.home.title.trim()) ? newData.home.title : baseHome.title;
-  const homeSubtitle = (typeof newData?.home?.subtitle === 'string' && newData.home.subtitle.trim()) ? newData.home.subtitle : baseHome.subtitle;
-
-  const out = {
-    meta: newData?.meta || { version: '2.0' },
-    home: { title: homeTitle, subtitle: homeSubtitle, subjects: [], dDays: Array.isArray(newData?.schedule?.dDays) ? newData.schedule.dDays : [] },
-    details: {},
-    modules: {},
-    dailyHistory: (newData?.schedule?.dailyHistory && typeof newData.schedule.dailyHistory==='object') ? newData.schedule.dailyHistory : {}
-  };
-
-  (newData?.curriculum || []).forEach((subj)=>{
-    if(!subj || !subj.id) return;
-    const sp = subj.progress || {};
-    out.home.subjects.push({
-      id: subj.id,
-      name: subj.name || '새 과목',
-      examInfo: subj.examInfo || '',
-      badge: subj.badge || '',
-      done: !!sp.done,
-      time: Number(sp.time)||0,
-      today: Number(sp.today)||0
-    });
-
-    out.details[subj.id] = {
-      id: subj.id,
-      title: subj.name || '새 과목',
-      subtitle: subj.examInfo || '',
-      cards: []
-    };
-
-    (subj.cards || []).forEach((card)=>{
-      if(!card || !card.id) return;
-      const cp = card.progress || {};
-      const mid = card.module?.id || card.module || `m_${card.id}`;
-
-      out.details[subj.id].cards.push({
-        id: card.id,
-        title: card.title || '새 카드',
-        scope: card.scope || '',
-        // 카드 배지는 과목 배지와 독립적으로 보존한다.
-        // (구버전 JSON 호환을 위해 값이 없을 때만 과목 배지로 폴백)
-        badge: card.badge ?? subj.badge ?? '',
-        qbox: card.qbox || '',
-        moduleId: null,
-        time: Number(cp.time)||0,
-        done: !!cp.done,
-        isRunning: !!cp.isRunning,
-        module: mid
-      });
-
-      const module = card.module || {};
-      out.modules[mid] = {
-        id: mid,
-        title: card.title || subj.name || '모듈',
-        subtitle: card.scope || '',
-        backTo: `#/detail/${subj.id}`,
-        activeTab: module.activeTab || module.tabs?.[0]?.id || '',
-        tabs: (module.tabs || []).map(tab=>({
-          id: tab.id,
-          label: tab.label || '이론',
-          theoryNote: tab.theoryNote || '',
-          questions: (tab.questions || []).map(q=>{
-            const qp = q.progress || {};
-            return {
-              id: q.id,
-              src: q.src || '',
-              text: q.text || '',
-              userNote: q.userNote || '',
-              time: Number(qp.time)||0,
-              done: !!qp.done,
-              isRunning: !!qp.isRunning
-            };
-          }),
-          time: Number(tab.progress?.time)||0,
-          done: !!tab.progress?.done,
-          isRunning: !!tab.progress?.isRunning
-        }))
-      };
-    });
-  });
-
-  const detailOverrides = newData?.pageInfo?.details;
-  if(detailOverrides && typeof detailOverrides === 'object'){
-    Object.entries(detailOverrides).forEach(([sid, info])=>{
-      if(!out.details[sid] || !info || typeof info !== 'object') return;
-      if(typeof info.title === 'string') out.details[sid].title = info.title;
-      if(typeof info.subtitle === 'string') out.details[sid].subtitle = info.subtitle;
-    });
-  }
-
-  const moduleOverrides = newData?.pageInfo?.modules;
-  if(moduleOverrides && typeof moduleOverrides === 'object'){
-    Object.entries(moduleOverrides).forEach(([mid, info])=>{
-      if(!out.modules[mid] || !info || typeof info !== 'object') return;
-      if(typeof info.title === 'string') out.modules[mid].title = info.title;
-      if(typeof info.subtitle === 'string') out.modules[mid].subtitle = info.subtitle;
-      if(typeof info.backTo === 'string') out.modules[mid].backTo = info.backTo;
-    });
-  }
-
-  return out;
-}
-
-function toNewSchema(legacy){
-  const baseHome = baseData().home;
-  const homeTitle = (typeof legacy?.home?.title === 'string' && legacy.home.title.trim()) ? legacy.home.title : baseHome.title;
-  const homeSubtitle = (typeof legacy?.home?.subtitle === 'string' && legacy.home.subtitle.trim()) ? legacy.home.subtitle : baseHome.subtitle;
-  const curriculum = (legacy?.home?.subjects || []).map((subj)=>{
-    const sid = subj.id;
-    const detail = legacy?.details?.[sid] || {};
-    const cards = (detail.cards || []).map((card)=>{
-      const mod = legacy?.modules?.[card.module] || {};
-      return {
-        id: card.id,
-        title: card.title || '',
-        scope: card.scope || '',
-        badge: card.badge || '',
-        qbox: card.qbox || '',
-        progress: {
-          done: !!card.done,
-          time: Number(card.time)||0,
-          isRunning: !!card.isRunning
-        },
-        module: {
-          id: mod.id || card.module || `m_${card.id}`,
-          activeTab: mod.activeTab || mod.tabs?.[0]?.id || '',
-          tabs: (mod.tabs || []).map(tab=>({
-            id: tab.id,
-            label: tab.label || '',
-            theoryNote: tab.theoryNote || '',
-            progress: {
-              done: !!tab.done,
-              time: Number(tab.time)||0,
-              isRunning: !!tab.isRunning
-            },
-            questions: (tab.questions || []).map(q=>({
-              id: q.id,
-              src: q.src || '',
-              text: q.text || '',
-              userNote: q.userNote || '',
-              progress: {
-                done: !!q.done,
-                time: Number(q.time)||0,
-                isRunning: !!q.isRunning
-              }
-            }))
-          }))
-        }
-      };
-    });
-
-    return {
-      id: sid,
-      name: subj.name || '',
-      examInfo: subj.examInfo || '',
-      badge: subj.badge || '',
-      progress: {
-        done: !!subj.done,
-        time: Number(subj.time)||0,
-        today: Number(subj.today)||0
-      },
-      cards
-    };
-  });
-
-  const pageInfo = { details: {}, modules: {} };
-  (legacy?.home?.subjects || []).forEach((subj)=>{
-    const sid = subj?.id;
-    if(!sid) return;
-    const detail = legacy?.details?.[sid];
-    if(detail){
-      pageInfo.details[sid] = {
-        title: detail.title || '',
-        subtitle: detail.subtitle || ''
-      };
-    }
-  });
-
-  Object.entries(legacy?.modules || {}).forEach(([mid, mod])=>{
-    if(!mod) return;
-    pageInfo.modules[mid] = {
-      title: mod.title || '',
-      subtitle: mod.subtitle || '',
-      backTo: mod.backTo || ''
-    };
-  });
-
-  return {
-    meta: legacy?.meta || { version: '2.0' },
-    home: {
-      title: homeTitle,
-      subtitle: homeSubtitle
-    },
-    schedule: {
-      dDays: Array.isArray(legacy?.home?.dDays) ? legacy.home.dDays : [],
-      dailyHistory: (legacy?.dailyHistory && typeof legacy.dailyHistory==='object') ? legacy.dailyHistory : {}
-    },
-    curriculum,
-    pageInfo
-  };
-}
 function saveData(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(toNewSchema(DATA))); }catch(e){}
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }catch(e){}
   try{ rebuildIndex(); }catch(e){}
 }
 
@@ -1126,7 +918,7 @@ function triggerImport() { document.getElementById('fileInput').click(); }
 
 function exportData() {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(toNewSchema(DATA), null, 2)], { type: "application/json" }));
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(DATA, null, 2)], { type: "application/json" }));
   a.download = `planner_backup_${new Date().toISOString().slice(0,10)}.json`;
   a.click();
 }
@@ -1137,7 +929,7 @@ window.loadJsonFile = function(e) {
   r.onload = function(evt) {
     try {
       const parsed = JSON.parse(evt.target.result);
-      DATA = isNewSchema(parsed) ? toLegacySchema(parsed) : parsed;
+      DATA = parsed;
       normalizeData();
       saveData();
       renderRouter();
@@ -1161,7 +953,7 @@ async function hardReset(){
     const res = await fetch('New_Default.json');
     if(res.ok) {
       const json = await res.json();
-      DATA = isNewSchema(json) ? toLegacySchema(json) : {...DATA, ...json};
+      DATA = {...DATA, ...json};
     }
   } catch (e) {}
 
@@ -4214,7 +4006,7 @@ async function init(){
   if(raw){
     try{
       const parsed = JSON.parse(raw);
-      DATA = isNewSchema(parsed) ? toLegacySchema(parsed) : parsed;
+      DATA = parsed;
     }
     catch(e){ DATA = baseData(); }
   } else {
@@ -4223,7 +4015,7 @@ async function init(){
       const res = await fetch('New_Default.json');
       if(res.ok){
         const json = await res.json();
-        DATA = isNewSchema(json) ? toLegacySchema(json) : {...DATA, ...json};
+        DATA = {...DATA, ...json};
       }
     }catch(e){}
   }
