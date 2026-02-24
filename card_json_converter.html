@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>카드 JSON 변환/합체 도구</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #0f172a;
+      --sub: #475569;
+      --line: #dbeafe;
+      --primary: #2563eb;
+      --ok: #15803d;
+      --warn: #b45309;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      line-height: 1.45;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 28px 16px 40px; }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+    }
+    h1 { margin: 0 0 12px; font-size: 1.45rem; }
+    h2 { margin: 0 0 10px; font-size: 1.1rem; }
+    p { margin: 0 0 10px; color: var(--sub); }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--primary);
+      color: #fff;
+    }
+    button.secondary { background: #334155; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    textarea {
+      width: 100%;
+      min-height: 340px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.84rem;
+      background: #f8fafc;
+      color: #0f172a;
+      resize: vertical;
+    }
+    .logs { font-size: 0.9rem; }
+    .logs li { margin-bottom: 4px; }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .file-label {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--sub);
+      width: fit-content;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>카드 JSON 변환 / 합체기</h1>
+      <p>Legacy JSON(<code>home/details/modules</code>) 또는 New JSON(<code>schedule/curriculum</code>) 파일 여러 개를 업로드하면, <b>카드 영역만</b> New 구조로 합쳐줍니다.</p>
+      <div class="row">
+        <label class="file-label">
+          JSON 파일 선택
+          <input id="fileInput" type="file" accept="application/json,.json" multiple />
+        </label>
+        <button id="convertBtn">변환 + 합체</button>
+        <button id="downloadBtn" class="secondary" disabled>결과 다운로드</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>처리 로그</h2>
+      <ul id="logs" class="logs"></ul>
+    </div>
+
+    <div class="panel">
+      <h2>결과 JSON (카드 부분만)</h2>
+      <textarea id="result" placeholder="결과가 여기 표시됩니다." spellcheck="false"></textarea>
+    </div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const convertBtn = document.getElementById('convertBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const logsEl = document.getElementById('logs');
+    const resultEl = document.getElementById('result');
+
+    let latestOutput = null;
+
+    function addLog(text, type = 'ok') {
+      const li = document.createElement('li');
+      li.textContent = text;
+      li.className = type;
+      logsEl.appendChild(li);
+    }
+
+    function clearLogs() {
+      logsEl.innerHTML = '';
+    }
+
+    function isNewSchema(data) {
+      return data && typeof data === 'object' && Array.isArray(data.curriculum);
+    }
+
+    function toBool(v) { return !!v; }
+    function toInt(v) { return Number.isFinite(Number(v)) ? Number(v) : 0; }
+
+    function convertLegacyToNew(data) {
+      const home = data?.home || {};
+      const details = data?.details || {};
+      const modules = data?.modules || {};
+
+      const curriculum = [];
+      for (const subject of home.subjects || []) {
+        const sid = subject?.id;
+        if (!sid) continue;
+
+        const detail = details[sid] || {};
+        const cards = [];
+
+        for (const card of detail.cards || []) {
+          const moduleId = card?.module;
+          const module = moduleId ? (modules[moduleId] || {}) : {};
+
+          const tabs = [];
+          for (const tab of module.tabs || []) {
+            const questions = [];
+            for (const q of tab.questions || []) {
+              questions.push({
+                id: q?.id,
+                src: q?.src || '',
+                text: q?.text || '',
+                userNote: q?.userNote || '',
+                progress: {
+                  done: toBool(q?.done),
+                  time: toInt(q?.time),
+                  isRunning: toBool(q?.isRunning)
+                }
+              });
+            }
+
+            tabs.push({
+              id: tab?.id,
+              label: tab?.label || '',
+              theoryNote: tab?.theoryNote || '',
+              progress: {
+                done: toBool(tab?.done),
+                time: toInt(tab?.time),
+                isRunning: toBool(tab?.isRunning)
+              },
+              questions
+            });
+          }
+
+          cards.push({
+            id: card?.id,
+            title: card?.title || '',
+            scope: card?.scope || '',
+            qbox: card?.qbox || '',
+            progress: {
+              done: toBool(card?.done),
+              time: toInt(card?.time),
+              isRunning: toBool(card?.isRunning)
+            },
+            module: {
+              id: module?.id || moduleId,
+              activeTab: module?.activeTab || '',
+              tabs
+            }
+          });
+        }
+
+        curriculum.push({
+          id: sid,
+          name: subject?.name || '',
+          examInfo: subject?.examInfo || '',
+          badge: subject?.badge || '',
+          progress: {
+            done: toBool(subject?.done),
+            time: toInt(subject?.time),
+            today: toInt(subject?.today)
+          },
+          cards
+        });
+      }
+
+      return { curriculum };
+    }
+
+    function normalizeToCardOnlyNew(data) {
+      if (isNewSchema(data)) {
+        return { curriculum: Array.isArray(data.curriculum) ? data.curriculum : [] };
+      }
+      return convertLegacyToNew(data);
+    }
+
+    function mergeCardOnlyJson(jsonList) {
+      const subjectMap = new Map();
+
+      for (const data of jsonList) {
+        for (const subject of data.curriculum || []) {
+          if (!subject?.id) continue;
+
+          if (!subjectMap.has(subject.id)) {
+            subjectMap.set(subject.id, {
+              id: subject.id,
+              name: subject.name || '',
+              examInfo: subject.examInfo || '',
+              badge: subject.badge || '',
+              progress: subject.progress || { done: false, time: 0, today: 0 },
+              cards: [],
+              _cardMap: new Map()
+            });
+          }
+
+          const target = subjectMap.get(subject.id);
+          if (subject.name) target.name = subject.name;
+          if (subject.examInfo) target.examInfo = subject.examInfo;
+          if (subject.badge) target.badge = subject.badge;
+          if (subject.progress) target.progress = subject.progress;
+
+          for (const card of subject.cards || []) {
+            if (!card?.id) {
+              target.cards.push(card);
+              continue;
+            }
+            if (target._cardMap.has(card.id)) {
+              const idx = target._cardMap.get(card.id);
+              target.cards[idx] = card;
+            } else {
+              target._cardMap.set(card.id, target.cards.length);
+              target.cards.push(card);
+            }
+          }
+        }
+      }
+
+      const curriculum = Array.from(subjectMap.values()).map((s) => {
+        const { _cardMap, ...clean } = s;
+        return clean;
+      });
+
+      return { curriculum };
+    }
+
+    async function readJsonFile(file) {
+      const text = await file.text();
+      return JSON.parse(text);
+    }
+
+    convertBtn.addEventListener('click', async () => {
+      clearLogs();
+      latestOutput = null;
+      downloadBtn.disabled = true;
+      resultEl.value = '';
+
+      const files = Array.from(fileInput.files || []);
+      if (!files.length) {
+        addLog('파일을 하나 이상 선택해주세요.', 'warn');
+        return;
+      }
+
+      const converted = [];
+      for (const file of files) {
+        try {
+          const raw = await readJsonFile(file);
+          const normalized = normalizeToCardOnlyNew(raw);
+          converted.push(normalized);
+          addLog(`${file.name}: 변환 성공 (subject ${normalized.curriculum?.length || 0}개)`);
+        } catch (e) {
+          addLog(`${file.name}: 파싱 실패 - ${e.message}`, 'warn');
+        }
+      }
+
+      if (!converted.length) {
+        addLog('유효한 JSON이 없어 중단했습니다.', 'warn');
+        return;
+      }
+
+      const merged = mergeCardOnlyJson(converted);
+      latestOutput = merged;
+      resultEl.value = JSON.stringify(merged, null, 2);
+      downloadBtn.disabled = false;
+
+      const cardCount = merged.curriculum.reduce((sum, s) => sum + (s.cards?.length || 0), 0);
+      addLog(`합체 완료: subject ${merged.curriculum.length}개, card ${cardCount}개`);
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      if (!latestOutput) return;
+      const blob = new Blob([JSON.stringify(latestOutput, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'merged_cards_new_schema.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+</html>
