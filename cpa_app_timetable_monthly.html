@@ -216,6 +216,12 @@
     .time-slot { background: var(--input-bg); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; padding: 10px; transition: 0.2s; cursor: pointer; }
     .time-slot:hover { border-color: var(--primary); background: rgba(37, 99, 235, 0.02); }
     .time-slot.drag-over { border-color: var(--primary); background: rgba(37,99,235,0.05); transform: scale(1.02); }
+    .time-slot.slot-dragging { opacity: 0.65; }
+
+    .slot-head { font-size:0.85rem; font-weight:700; color:var(--text-sub); margin-bottom:8px; }
+    .slot-head-actions { display:flex; align-items:center; gap:2px; }
+    .slot-drag-handle { cursor: grab; user-select:none; font-size:0.95rem; padding:2px 6px; border-radius:6px; }
+    .slot-drag-handle:active { cursor: grabbing; }
 
     .sb-card { background: var(--card-bg); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: grab; display:flex; flex-direction:column; }
     .sb-card:active { cursor: grabbing; }
@@ -1900,10 +1906,25 @@ function renderDailySidebar() {
   const container = document.getElementById('dailySlots');
 
   container.innerHTML = (daily.slots||[]).map((slot, sIdx) => `
-    <div class="time-slot" ondragover="allowDrop(event)" ondrop="dropOnSlot(event, '${VIEW_DATE}', ${sIdx})">
-      <div class="flex-between" style="font-size:0.85rem; font-weight:700; color:var(--text-sub); margin-bottom:8px;">
+    <div class="time-slot"
+      ondragover="allowDrop(event)"
+      ondrop="dropOnSlot(event, '${VIEW_DATE}', ${sIdx})">
+      <div class="flex-between slot-head">
         <span>${slot.label}</span>
-        <button class="btn btn-icon" style="font-size:0.7rem;" onclick="removeSlot('${VIEW_DATE}', ${sIdx}); event.stopPropagation();">🗑</button>
+        <div class="slot-head-actions">
+          <span class="slot-drag-handle"
+            draggable="true"
+            title="시간 블록 순서 이동"
+            ondragstart="handleSlotDragStart(event, ${sIdx})"
+            ondragend="handleSlotDragEnd(event)"
+            onpointerdown="event.stopPropagation()"
+            onmousedown="event.stopPropagation()">⋮⋮</span>
+          <button class="btn btn-icon" style="font-size:0.8rem;" title="블록 이름 수정"
+            onpointerdown="event.stopPropagation()"
+            onmousedown="event.stopPropagation()"
+            onclick="editDailySlotLabel('${VIEW_DATE}', ${sIdx}); event.stopPropagation();">✏️</button>
+          <button class="btn btn-icon" style="font-size:0.7rem;" onclick="removeSlot('${VIEW_DATE}', ${sIdx}); event.stopPropagation();">🗑</button>
+        </div>
       </div>
       <div class="ts-content" style="min-height:30px;">
         ${(slot.cardIds||[]).map((ref, cIdx) => renderSidebarCard(ref, VIEW_DATE, sIdx, cIdx)).join('')}
@@ -2337,7 +2358,21 @@ function dropOnSlot(ev, date, sIdx) {
     if(!raw) return;
     const data = JSON.parse(raw);
 
-    if(data.source === 'sidebar') {
+    if(data.source === 'slot') {
+      const daily = DATA.dailyHistory?.[date];
+      if(!daily || !Array.isArray(daily.slots)) return;
+
+      const fromIdx = Number(data.sIdx);
+      const toIdx = Number(sIdx);
+      if(Number.isNaN(fromIdx) || Number.isNaN(toIdx) || fromIdx === toIdx) return;
+
+      const [moved] = daily.slots.splice(fromIdx, 1);
+      if(!moved) return;
+      daily.slots.splice(toIdx, 0, moved);
+
+      saveData();
+      renderDailySidebar();
+    } else if(data.source === 'sidebar') {
       const daily = DATA.dailyHistory?.[date];
       if(!daily) return;
       const srcSlot = daily.slots?.[data.sIdx];
@@ -2529,11 +2564,17 @@ function renderSidebarCard(ref, date, sIdx, cIdx) {
     </div>`;
 }
 
-
-function handleSidebarDragStart(ev, sIdx, cIdx) {
-  ev.dataTransfer.setData("application/json", JSON.stringify({ source:'sidebar', sIdx, cIdx }));
+function handleSlotDragStart(ev, sIdx){
+  ev.dataTransfer.effectAllowed = 'move';
+  ev.dataTransfer.setData('application/json', JSON.stringify({ source:'slot', sIdx }));
+  const slotEl = ev.target?.closest('.time-slot');
+  if(slotEl) slotEl.classList.add('slot-dragging');
 }
 
+function handleSlotDragEnd(ev){
+  const slotEl = ev.target?.closest('.time-slot');
+  if(slotEl) slotEl.classList.remove('slot-dragging');
+}
 
 
 function addToSlot(date, sIdx, ref) {
@@ -2607,6 +2648,20 @@ function addDailySlot() {
     saveData(); renderDailySidebar();
   }
 }
+function editDailySlotLabel(date, sIdx){
+  const slot = DATA.dailyHistory?.[date]?.slots?.[sIdx];
+  if(!slot) return;
+
+  const newLabel = prompt('블록 제목을 입력하세요:', slot.label || '');
+  if(newLabel === null) return;
+  const trimmed = newLabel.trim();
+  if(!trimmed) return;
+
+  slot.label = trimmed;
+  saveData();
+  renderDailySidebar();
+}
+
 function removeSlot(d,i) {
   if(confirm('삭제?')){
     DATA.dailyHistory[d].slots.splice(i,1);
