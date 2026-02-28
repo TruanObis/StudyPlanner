@@ -2564,15 +2564,25 @@ function renderSidebarCard(ref, date, sIdx, cIdx) {
     </div>`;
 }
 
+function getSlotElementFromEvent(ev){
+  const node = ev?.currentTarget || ev?.target;
+  if(!node) return null;
+  if(typeof node.closest === 'function') return node.closest('.time-slot');
+  if(node.parentElement && typeof node.parentElement.closest === 'function') return node.parentElement.closest('.time-slot');
+  return null;
+}
+
 function handleSlotDragStart(ev, sIdx){
-  ev.dataTransfer.effectAllowed = 'move';
-  ev.dataTransfer.setData('application/json', JSON.stringify({ source:'slot', sIdx }));
-  const slotEl = ev.target?.closest('.time-slot');
+  if(ev.dataTransfer){
+    ev.dataTransfer.effectAllowed = 'move';
+    ev.dataTransfer.setData('application/json', JSON.stringify({ source:'slot', sIdx }));
+  }
+  const slotEl = getSlotElementFromEvent(ev);
   if(slotEl) slotEl.classList.add('slot-dragging');
 }
 
 function handleSlotDragEnd(ev){
-  const slotEl = ev.target?.closest('.time-slot');
+  const slotEl = getSlotElementFromEvent(ev);
   if(slotEl) slotEl.classList.remove('slot-dragging');
 }
 
