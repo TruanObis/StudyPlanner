@@ -653,6 +653,7 @@ function renderHome() {
       <div style="margin-top:10px; display:flex; gap:8px; justify-content:center;">
         <button class="btn btn-outline" style="font-size:0.8rem;" onclick="triggerImport()">📂 백업 불러오기</button>
         <button class="btn btn-outline" style="font-size:0.8rem;" onclick="exportData()">💾 백업 저장</button>
+        <button class="btn btn-outline" style="font-size:0.8rem;" onclick="resetAccumulatedTime('all')">⏱ 전체 시간 초기화</button>
         <button class="btn btn-outline" style="font-size:0.8rem; color:#ef4444; border-color:#ef4444;" onclick="hardReset()">🗑 초기화</button>
       </div>
     </header>
@@ -701,6 +702,7 @@ function renderHome() {
              </label>
              <div class="flex-center" style="gap:5px;">
                 <button class="btn btn-icon" title="시간 직접 수정" onclick="editTime('subject', null, ${idx}, null)">✏️</button>
+                <button class="btn btn-icon" title="누적 시간 초기화" onclick="resetAccumulatedTime('subject', null, ${idx}, null);event.stopPropagation()">⏱</button>
                 <div class="timer-display" id="time-disp-subject-${sub.id}">${detailStats.timeStr}</div>
                 <button class="btn btn-outline" style="padding:2px 8px; width:40px; ${sub.isRunning?'color:red; border-color:red;':''}" 
                   onclick="toggleTimer('subject', null, ${idx}, null)">
@@ -814,6 +816,7 @@ function renderModule(mid) {
          </label>
          <div class="flex-center" style="gap:5px;">
             <button class="btn btn-icon" title="시간 수정" onclick="editTime('theory', '${mid}', 0, '${activeTabId}')">✏️</button>
+            <button class="btn btn-icon" title="누적 시간 초기화" onclick="resetAccumulatedTime('theory', '${mid}', 0, '${activeTabId}');event.stopPropagation()">⏱</button>
             <div class="timer-display" id="time-disp-theory-${mid}-${activeTabId}">${formatTime(activeTab.time || 0)}</div>
             <button class="btn btn-outline" style="padding:2px 8px; width:40px; ${activeTab.isRunning?'color:red; border-color:red;':''}" 
               onclick="toggleTimer('theory', '${mid}', 0, '${activeTabId}')">
@@ -917,6 +920,7 @@ function renderCardItem(item, level, pid, idx, tabId = null) {
          </label>
          <div class="flex-center" style="gap:5px;">
             <button class="btn btn-icon" title="시간 수정" onclick="editTime('${level}', '${pid}', ${idx}, '${tabId||''}')">✏️</button>
+            <button class="btn btn-icon" title="누적 시간 초기화" onclick="resetAccumulatedTime('${level}', '${pid}', ${idx}, '${tabId||''}');event.stopPropagation()">⏱</button>
             <div class="timer-display" id="time-disp-${stableId}">${formatTime(totalTime)}</div>
             <button class="btn btn-outline" style="padding:2px 8px; width:40px; ${item.isRunning?'color:red; border-color:red;':''}" 
               onclick="toggleTimer('${level}', '${pid}', ${idx}, '${tabId||''}')">
@@ -1133,6 +1137,33 @@ function editTime(lvl, pid, idx, tid) {
   if(minStr === null) return;
   const min = parseInt(minStr);
   if(!isNaN(min)) { item.time = min * 60; saveData(); renderRouter(true); }
+}
+
+function resetAccumulatedTime(level, pid, idx, tabId) {
+  const clearItemTime = (item) => { if(item){ item.time = 0; item.isRunning = false; } };
+
+  if (level === 'all') {
+    if (!confirm('모든 카드의 누적 시간을 초기화하시겠습니까?')) return;
+    (DATA.home?.subjects || []).forEach(clearItemTime);
+    Object.values(DATA.details || {}).forEach(d => (d.cards || []).forEach(clearItemTime));
+    Object.values(DATA.modules || {}).forEach(m => (m.tabs || []).forEach(t => { clearItemTime(t); (t.questions || []).forEach(clearItemTime); }));
+  } else {
+    let target = null;
+    if(level === 'subject') target = DATA.home?.subjects?.[idx];
+    else if(level === 'detail') target = DATA.details?.[pid]?.cards?.[idx];
+    else if(level === 'theory') target = DATA.modules?.[pid]?.tabs?.find(t => String(t.id) === String(tabId));
+    else if(level === 'module') {
+      const tab = DATA.modules?.[pid]?.tabs?.find(t => String(t.id) === String(tabId)) || DATA.modules?.[pid]?.tabs?.[0];
+      target = tab?.questions?.[idx];
+    }
+    if(!target) return;
+    if(!confirm('이 카드의 누적 시간을 초기화하시겠습니까?')) return;
+    clearItemTime(target);
+  }
+
+  saveData();
+  if (typeof renderRouter === 'function') renderRouter(true);
+  if (typeof renderDailySidebar === 'function') renderDailySidebar();
 }
 
 function tickTimers() {
