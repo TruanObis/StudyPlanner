@@ -257,7 +257,8 @@
     .sb-body { background: var(--bg); padding: 8px; border-top: 1px solid var(--line); font-size: 0.85rem; display: none; }
     .sb-body.expanded { display: block; }
     .sb-child { display: flex; align-items: center; gap: 6px; padding: 4px 0; color: var(--text-sub); }
-    .sb-child input { accent-color: var(--success); cursor:pointer; }
+    .sb-child-check { display:flex; align-items:center; justify-content:center; width: 28px; height: 28px; margin: -5px 0; cursor:pointer; flex: 0 0 28px; }
+    .sb-child input { width:18px; height:18px; accent-color: var(--success); cursor:pointer; }
     .sb-child span { cursor: pointer; transition:0.2s; }
     .sb-child span:hover { color: var(--primary); text-decoration: underline; }
 
@@ -817,7 +818,7 @@ function exportCardPdf(level, pid, idx, tabId){
     title=sub?.name||'홈페이지 카드';
     headerLeft = `${title}`;
     headerRight = sub?.badge || '';
-    html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(sub?.examInfo || '')}${(DATA.details?.[sub?.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>하위 카드 체크리스트</h3><ul>${(DATA.details?.[sub?.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`;
+    html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(sub?.examInfo || '')}${(DATA.details?.[sub?.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>체크리스트</h3><ul>${(DATA.details?.[sub?.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`;
   } else if(level==='detail'){
     const c = DATA.details?.[pid]?.cards?.[idx];
     if(!c) return;
@@ -853,7 +854,7 @@ function exportPagePdf(level, id){
   if(level==='home'){
     const headerRight = HOME_BADGE_FILTER==='all' ? '' : `${HOME_BADGE_FILTER}`;
     const list = (HOME_BADGE_FILTER==='all') ? (DATA.home.subjects||[]) : (DATA.home.subjects||[]).filter(s=>badgeTags(s.badge).includes(HOME_BADGE_FILTER) || String(s.badge||'').trim()===HOME_BADGE_FILTER);
-    const html = `<h1>${escapeHtml(DATA.home.title||APP_NAME)}</h1>${renderMdOrText(DATA.home.subtitle||'')}` + list.map(sub=>`<hr><h2>${escapeHtml(sub.name||'')}</h2>${renderMdOrText(sub.examInfo||'')}${(DATA.details?.[sub.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>하위 카드 체크리스트</h3><ul>${(DATA.details?.[sub.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`).join('');
+    const html = `<h1>${escapeHtml(DATA.home.title||APP_NAME)}</h1>${renderMdOrText(DATA.home.subtitle||'')}` + list.map(sub=>`<hr><h2>${escapeHtml(sub.name||'')}</h2>${renderMdOrText(sub.examInfo||'')}${(DATA.details?.[sub.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>체크리스트</h3><ul>${(DATA.details?.[sub.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`).join('');
     return openPrintWindow(DATA.home.title||'홈', html, { headerRight });
   }
   if(level==='detail'){
@@ -2693,12 +2694,14 @@ function renderSidebarCard(ref, date, sIdx, cIdx) {
   const childrenHtml = hasChildren
     ? children.map(ch => `
       <div class="sb-child" onclick="sbCardClick(event,'${ch.type}','${ch.id}','${ch.pid}',''); event.stopPropagation();">
-        <input type="checkbox" ${ch.done?'checked':''}
-          draggable="false"
-          onpointerdown="event.stopPropagation()"
-          onmousedown="event.stopPropagation()"
-          onclick="event.stopPropagation()"
-          ondragstart="return false" onchange="event.stopPropagation(); toggleChildDone('${ch.type}','${ch.id}','${ch.pid}', this.checked)">
+        <label class="sb-child-check" onclick="event.stopPropagation()">
+          <input type="checkbox" ${ch.done?'checked':''}
+            draggable="false"
+            onpointerdown="event.stopPropagation()"
+            onmousedown="event.stopPropagation()"
+            onclick="event.stopPropagation()"
+            ondragstart="return false" onchange="event.stopPropagation(); toggleChildDone('${ch.type}','${ch.id}','${ch.pid}', this.checked)">
+        </label>
         <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${ch.text}</span>
       </div>
     `).join('')
