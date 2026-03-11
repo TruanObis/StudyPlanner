@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Universal Master Planner V1.0 by Inmonite</title>
+  <title>Inmonite's Study Helper</title>
 
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -77,6 +77,9 @@
     }
     .card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
     .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; min-height: 32px; }
+    .select-wrap { display:flex; align-items:center; gap:8px; }
+    .card-select { width:16px; height:16px; cursor:pointer; }
+    .bulk-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px; padding:10px; border:1px solid var(--line); border-radius:10px; background:#fff; }
     .card-actions { display: flex; gap: 2px; opacity: 0; transition: opacity 0.2s; }
     .card:hover .card-actions { opacity: 1; }
     .badge { background: #eff6ff; color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; }
@@ -234,6 +237,8 @@ let DATA = null;
 const STORAGE_KEY = 'universal_planner_v9_data';
 const APP = document.getElementById('app');
 const ERR_SCREEN = document.getElementById('error-screen');
+const APP_NAME = "Inmonite's Study Helper";
+const selectedCards = new Set();
 
 // [Safety: Global Error Handler]
 window.onerror = function(msg, url, line) {
@@ -443,8 +448,8 @@ async function init() {
     }
   } else {
     DATA = {
-      meta: { appTitle: "CPA Master Planner V9", version: "9.0" },
-      home: { title: "2026 CPA 합격 플래너", subtitle: "과목별 진도와 시간을 체계적으로 관리하세요", subjects: [], dDays:[{label:"1차 시험", date:"2026-02-28"}] },
+      meta: { appTitle: APP_NAME, version: "9.0" },
+      home: { title: APP_NAME, subtitle: "과목별 진도와 시간을 체계적으로 관리하세요", subjects: [], dDays:[{label:"1차 시험", date:"2026-02-28"}] },
       details: {},
       modules: {}
     };
@@ -456,6 +461,7 @@ async function init() {
   }
   
   if(!DATA.home.dDays) DATA.home.dDays = [];
+  applyGlobalTitle();
 
   if(window.marked) marked.setOptions({ breaks: true });
   window.addEventListener('hashchange', router);
@@ -466,6 +472,88 @@ async function init() {
   } catch(e) {
     showErrorScreen("렌더링 중 오류 발생: " + e.message);
   }
+}
+
+
+function applyGlobalTitle() {
+  document.title = APP_NAME;
+  if(!DATA.meta) DATA.meta = {};
+  DATA.meta.appTitle = APP_NAME;
+  if(DATA.home) DATA.home.title = APP_NAME;
+}
+
+function getSelectionKey(level, pid, idx, tabId) { return `${level}|${pid||''}|${tabId||''}|${idx}`; }
+function isSelected(level, pid, idx, tabId) { return selectedCards.has(getSelectionKey(level,pid,idx,tabId)); }
+function toggleCardSelection(level, pid, idx, tabId, checked) {
+  const k = getSelectionKey(level,pid,idx,tabId);
+  if(checked) selectedCards.add(k); else selectedCards.delete(k);
+  renderRouter();
+}
+function clearCurrentSelection(level,pid,tabId){
+  [...selectedCards].forEach(k=>{ if(k.startsWith(`${level}|${pid||''}|${tabId||''}|`)) selectedCards.delete(k); });
+}
+function selectAllCurrent(level,pid,tabId){
+  clearCurrentSelection(level,pid,tabId);
+  if(level==='detail') (DATA.details[pid]?.cards||[]).forEach((_,i)=>selectedCards.add(getSelectionKey(level,pid,i,tabId)));
+  if(level==='module') (DATA.modules[pid]?.tabs.find(t=>t.id===tabId)?.questions||[]).forEach((_,i)=>selectedCards.add(getSelectionKey(level,pid,i,tabId)));
+  renderRouter();
+}
+function getSelectedIndices(level,pid,tabId){
+  const pref=`${level}|${pid||''}|${tabId||''}|`;
+  return [...selectedCards].filter(k=>k.startsWith(pref)).map(k=>+k.split('|').pop()).filter(n=>!Number.isNaN(n)).sort((a,b)=>a-b);
+}
+function deleteSelectedCards(level,pid,tabId){
+  const idxs=getSelectedIndices(level,pid,tabId);
+  if(!idxs.length) return alert('선택된 카드가 없습니다.');
+  if(!confirm(`선택한 ${idxs.length}개 카드를 삭제하시겠습니까?`)) return;
+  if(level==='detail'){
+    const list=DATA.details[pid].cards;
+    idxs.slice().reverse().forEach(i=>{ const c=list[i]; if(c?.module) delete DATA.modules[c.module]; list.splice(i,1); });
+  } else {
+    const list=DATA.modules[pid].tabs.find(t=>t.id===tabId).questions;
+    idxs.slice().reverse().forEach(i=>list.splice(i,1));
+  }
+  clearCurrentSelection(level,pid,tabId); saveData(); renderRouter();
+}
+function moveSelectedCards(level,pid,tabId){
+  const idxs=getSelectedIndices(level,pid,tabId);
+  if(!idxs.length) return alert('선택된 카드가 없습니다.');
+  moveTarget = { level, pid, idx: idxs[0], tabId, multi: idxs };
+  moveCard(level,pid,idxs[0],tabId,true);
+}
+
+function exportCardPdf(level,pid,idx,tabId){
+  let title='카드'; let html='';
+  if(level==='detail'){
+    const c=DATA.details[pid].cards[idx];
+    title=c.title||'카드';
+    html=`<h1>${title}</h1><p>${c.scope||''}</p><div>${(c.qbox||'').replace(/\n/g,'<br>')}</div>`;
+  } else {
+    const q=DATA.modules[pid].tabs.find(t=>t.id===tabId).questions[idx];
+    title=(q.text||'문제').slice(0,30);
+    html=`<h1>${title}</h1><p>${q.src||''}</p><div>${(q.userNote||'').replace(/\n/g,'<br>')}</div>`;
+  }
+  openPrintWindow(`${APP_NAME} - ${title}`, html);
+}
+function exportPagePdf(type,id){
+  let title=APP_NAME, html='';
+  if(type==='detail'){
+    const d=DATA.details[id];
+    title=d.title||APP_NAME;
+    html=`<h1>${d.title||''}</h1><p>${d.subtitle||''}</p>` + (d.cards||[]).map(c=>`<hr><h2>${c.title||''}</h2><p>${c.scope||''}</p><div>${(c.qbox||'').replace(/\n/g,'<br>')}</div>`).join('');
+  } else if(type==='module'){
+    const m=DATA.modules[id];
+    title=m.title||APP_NAME;
+    html=`<h1>${m.title||''}</h1><p>${m.subtitle||''}</p>` + (m.tabs||[]).map(t=>`<hr><h2>${t.label}</h2><div>${(t.theoryNote||'').replace(/\n/g,'<br>')}</div>` + (t.questions||[]).map(q=>`<h3>${q.text||''}</h3><p>${q.src||''}</p>`).join('')).join('');
+  }
+  openPrintWindow(`${APP_NAME} - ${title}`, html);
+}
+function openPrintWindow(title, bodyHtml){
+  const w=window.open('', '_blank');
+  if(!w) return alert('팝업이 차단되어 PDF 내보내기를 실행할 수 없습니다.');
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:Pretendard,sans-serif;padding:24px;line-height:1.6}h1,h2,h3{margin:0 0 8px}hr{margin:16px 0}</style></head><body>${bodyHtml}</body></html>`);
+  w.document.close();
+  setTimeout(()=>{w.focus(); w.print();}, 300);
 }
 
 function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }
@@ -567,7 +655,7 @@ function renderHome() {
         ${ddayHtml}
         ${ddays.length === 0 ? '<div class="dday-badge" style="background:#eee; color:#aaa" onclick="openDDayModal()">+ D-Day 추가</div>' : ''}
       </div>
-      <h1 class="editable" onclick="openEditModal('app_info', 'home')" title="제목 수정">${DATA.home.title}</h1>
+      <h1>${APP_NAME}</h1>
       <p class="editable" onclick="openEditModal('app_info', 'home')" style="color:#64748b">${DATA.home.subtitle}</p>
       <div style="margin-top:10px; display:flex; gap:8px; justify-content:center;">
         <button class="btn btn-outline" style="font-size:0.8rem;" onclick="triggerImport()">📂 백업 불러오기</button>
@@ -656,12 +744,21 @@ function renderDetail(sid) {
     <div style="margin-bottom:20px;">
       <h1 class="editable" onclick="openEditModal('page_info', 'detail', null, null, '${sid}')">${detail.title}</h1>
       <p class="editable" onclick="openEditModal('page_info', 'detail', null, null, '${sid}')" style="color:#64748b;">${detail.subtitle}</p>
+      <button class="btn btn-outline" onclick="exportPagePdf('detail','${sid}')">🧾 페이지 PDF</button>
     </div>
 
     ${renderStickyHeader('과목 진행률', stats.pct, stats.timeStr)}
 
     <div class="tabs">
       ${filters.map(f => `<button class="tab-btn ${f.key==='all'?'active':''}" onclick='filterCards(${JSON.stringify(f.key)}, this)'>${f.label}</button>`).join('')}
+    </div>
+
+    <div class="bulk-bar">
+      <strong>선택 ${getSelectedIndices('detail', sid, '').length}개</strong>
+      <button class="btn btn-outline" onclick="selectAllCurrent('detail','${sid}','')">전체 선택</button>
+      <button class="btn btn-outline" onclick="clearCurrentSelection('detail','${sid}',''); renderRouter();">선택 해제</button>
+      <button class="btn btn-outline" onclick="moveSelectedCards('detail','${sid}','')">선택 이동</button>
+      <button class="btn btn-outline" style="color:#ef4444;border-color:#ef4444;" onclick="deleteSelectedCards('detail','${sid}','')">선택 삭제</button>
     </div>
 
     <div class="grid" id="cardGrid">
@@ -694,6 +791,7 @@ function renderModule(mid) {
 
     <h1 class="editable" onclick="openEditModal('page_info', 'module', null, null, '${mid}')">${mod.title}</h1>
     <p class="editable" onclick="openEditModal('page_info', 'module', null, null, '${mid}')" style="color:#64748b; margin-bottom:20px;">${mod.subtitle}</p>
+    <button class="btn btn-outline" style="margin-bottom:20px;" onclick="exportPagePdf('module','${mid}')">🧾 페이지 PDF</button>
 
     ${renderStickyHeader('모듈 진행률', stats.pct, stats.timeStr)}
 
@@ -740,6 +838,14 @@ function renderModule(mid) {
             </button>
          </div>
       </div>
+    </div>
+
+    <div class="bulk-bar">
+      <strong>선택 ${getSelectedIndices('module', mid, activeTabId).length}개</strong>
+      <button class="btn btn-outline" onclick="selectAllCurrent('module','${mid}','${activeTabId}')">전체 선택</button>
+      <button class="btn btn-outline" onclick="clearCurrentSelection('module','${mid}','${activeTabId}'); renderRouter();">선택 해제</button>
+      <button class="btn btn-outline" onclick="moveSelectedCards('module','${mid}','${activeTabId}')">선택 이동</button>
+      <button class="btn btn-outline" style="color:#ef4444;border-color:#ef4444;" onclick="deleteSelectedCards('module','${mid}','${activeTabId}')">선택 삭제</button>
     </div>
 
     <div class="grid" id="questionGrid">
@@ -789,7 +895,8 @@ function renderCardItem(item, level, pid, idx, tabId = null) {
   return `
     <div class="card ${!isMod && item.module ? 'clickable' : ''}" draggable="true" data-index="${idx}" id="card-${stableId}">
       <div class="card-top">
-        <div style="display:flex; align-items:center;">
+        <div class="select-wrap">
+           <input class="card-select" type="checkbox" ${level==='subject' ? 'style="display:none"' : ''} ${isSelected(level==='module'?'module':'detail', pid, idx, tabId||'') ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleCardSelection('${level==='module'?'module':'detail'}','${pid}',${idx},'${tabId||''}', this.checked)">
            <span class="card-handle material-icons" style="cursor:grab; color:#cbd5e1; margin-right:5px;">⠿</span>
            <span class="badge">${isMod ? (item.src || '문항') : (item.badge || 'Topic')}</span>
         </div>
@@ -797,6 +904,7 @@ function renderCardItem(item, level, pid, idx, tabId = null) {
            ${!isMod && item.module ? `<button class="btn btn-icon" title="모듈 바로가기" onclick="location.hash='#/module/${item.module}'; event.stopPropagation();">🚀</button>` : ''}
            <button class="btn btn-icon" title="복제" onclick="duplicateCard('${level}', '${pid}', ${idx}, '${tabId||''}');event.stopPropagation()">📑</button>
            <button class="btn btn-icon" title="이동" onclick="moveCard('${level}', '${pid}', ${idx}, '${tabId||''}');event.stopPropagation()">📂</button>
+           <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabId||''}');event.stopPropagation()">🧾</button>
            <button class="btn btn-icon" title="링크 복사" onclick="copyLink('${level}','${stableId}','${linkLabel.replace(/'/g,"")}',{pid:'${pid}',module:'${item.module||''}'});event.stopPropagation()">🔗</button>
            <button class="btn btn-icon" title="수정" onclick="openEditModal('${level}', '${pid}', ${idx}, '${tabId || ''}');event.stopPropagation()">✏️</button>
            <button class="btn btn-icon btn-danger" title="삭제" onclick="deleteCard('${level}', '${pid}', ${idx}, '${tabId || ''}');event.stopPropagation()">🗑</button>
@@ -1076,7 +1184,7 @@ function saveCardChange() {
   const b = document.getElementById('editBadge').value;
   const q = document.getElementById('editQBox').value;
   const { mode, pid, idx, tabId, pageId } = editState;
-  if (mode === 'app_info') { DATA.home.title = t; DATA.home.subtitle = d; }
+  if (mode === 'app_info') { DATA.home.title = APP_NAME; DATA.home.subtitle = d; }
   else if (mode === 'page_info') { if(DATA.details[pageId]) { DATA.details[pageId].title = t; DATA.details[pageId].subtitle = d; } else { DATA.modules[pageId].title = t; DATA.modules[pageId].subtitle = d; } }
   else if (mode === 'tab_rename') { DATA.modules[pid].tabs.find(x=>x.id===tabId).label = t; }
   else if (mode === 'tab_add') { DATA.modules[pid].tabs.push({id: Date.now().toString(), label: t, theoryNote:"", questions:[]}); }
@@ -1194,8 +1302,8 @@ function duplicateCard(level, pid, idx, tabId) {
 let moveTarget = null;
 
 // 이동 모달 열기
-function moveCard(level, pid, idx, tabId) {
-  moveTarget = { level, pid, idx, tabId };
+function moveCard(level, pid, idx, tabId, isMulti = false) {
+  if(!isMulti) moveTarget = { level, pid, idx, tabId };
   
   const selSubject = document.getElementById('moveSubject');
   const grpTopic = document.getElementById('grpMoveTopic');
@@ -1284,24 +1392,23 @@ function updateMoveUI_Tabs() {
 
 function execMoveCard() {
   const { level, pid, idx, tabId } = moveTarget;
+  const movingIdx = (moveTarget.multi && moveTarget.multi.length) ? moveTarget.multi.slice().sort((a,b)=>a-b) : [idx];
   const targetSubId = document.getElementById('moveSubject').value;
   
   if (level === 'detail') {
       // 주제 카드 이동 (다른 과목으로)
       if (pid === targetSubId) { alert("현재와 동일한 과목입니다."); return; }
       
-      const card = DATA.details[pid].cards.splice(idx, 1)[0];
+      const cards = movingIdx.slice().reverse().map(i=>DATA.details[pid].cards.splice(i,1)[0]).reverse();
       
       // Ensure target detail exists
       if(!DATA.details[targetSubId]) DATA.details[targetSubId] = {id:targetSubId, title:"상세", cards:[]};
       
       // Push info
+      cards.forEach(card=>{
       DATA.details[targetSubId].cards.push(card);
-      
-      // Update back link
-      if(card.module && DATA.modules[card.module]) {
-          DATA.modules[card.module].backTo = `#/detail/${targetSubId}`;
-      }
+      if(card.module && DATA.modules[card.module]) DATA.modules[card.module].backTo = `#/detail/${targetSubId}`;
+      });
   } 
   else if (level === 'module') {
       // 문제 카드 이동 (과목 > 주제 > 탭)
@@ -1314,11 +1421,9 @@ function execMoveCard() {
 
       // Source List
       const srcList = DATA.modules[pid].tabs.find(t => t.id === tabId).questions;
-      const [q] = srcList.splice(idx, 1);
-      
-      // Dest List
+      const moved = movingIdx.slice().reverse().map(i=>srcList.splice(i,1)[0]).reverse();
       const dstList = DATA.modules[targetMid].tabs.find(t => t.id === targetTid).questions;
-      dstList.push(q);
+      moved.forEach(q=>dstList.push(q));
   }
   
   saveData();
