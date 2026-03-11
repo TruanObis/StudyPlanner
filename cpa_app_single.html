@@ -670,6 +670,15 @@ function clearCurrentSelection(level,pid,tabId){
   [...selectedCards].forEach(k=>{ if(k.startsWith(`${level}|${pid||''}|${tabId||''}|`)) selectedCards.delete(k); });
 }
 function selectAllCurrent(level,pid,tabId){
+  const total = level==='detail'
+    ? (DATA.details[pid]?.cards||[]).length
+    : (DATA.modules[pid]?.tabs.find(t=>t.id===tabId)?.questions||[]).length;
+  const selectedCount = getSelectedIndices(level,pid,tabId).length;
+  if(total > 0 && selectedCount === total) {
+    clearCurrentSelection(level,pid,tabId);
+    renderRouter();
+    return;
+  }
   clearCurrentSelection(level,pid,tabId);
   if(level==='detail') (DATA.details[pid]?.cards||[]).forEach((_,i)=>selectedCards.add(getSelectionKey(level,pid,i,tabId)));
   if(level==='module') (DATA.modules[pid]?.tabs.find(t=>t.id===tabId)?.questions||[]).forEach((_,i)=>selectedCards.add(getSelectionKey(level,pid,i,tabId)));
@@ -699,38 +708,134 @@ function moveSelectedCards(level,pid,tabId){
   moveCard(level,pid,idxs[0],tabId,true);
 }
 
+function escapeHtml(s='') {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderMdOrText(text) {
+  return `<div class="md-content">${renderMd(text || '')}</div>`;
+}
+
+function findSubjectNameByDetailId(detailId) {
+  return DATA.home.subjects.find(s => s.id === detailId)?.name || '홈페이지 카드';
+}
+
+function findDetailCardByModuleId(mid) {
+  for (const [detailId, detail] of Object.entries(DATA.details || {})) {
+    const card = (detail.cards || []).find(c => c.module === mid);
+    if (card) return { detailId, card };
+  }
+  return null;
+}
+
 function exportCardPdf(level,pid,idx,tabId){
   let title='카드'; let html='';
-  if(level==='detail'){
+  let headerLeft = '';
+  let headerRight = '';
+
+  if(level==='subject'){
+    const sub = DATA.home.subjects[idx];
+    title=sub?.name||'홈페이지 카드';
+    headerLeft = `${title}`;
+    headerRight = sub?.badge || '';
+    html=`
+      <h1>${escapeHtml(title)}</h1>
+      ${renderMdOrText(sub?.examInfo || '')}
+    `;
+  } else if(level==='detail'){
     const c=DATA.details[pid].cards[idx];
     title=c.title||'카드';
-    html=`<h1>${title}</h1><p>${c.scope||''}</p><div>${(c.qbox||'').replace(/\n/g,'<br>')}</div>`;
+    const homeTitle = findSubjectNameByDetailId(pid);
+    headerLeft = `${homeTitle} > ${title}`;
+    headerRight = c.badge || '';
+    html=`
+      <h1>${escapeHtml(title)}</h1>
+      ${renderMdOrText(c.scope || '')}
+      ${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}
+    `;
+  } else if(level==='module_theory') {
+    const mod = DATA.modules[pid];
+    const tab = mod.tabs.find(t => t.id === tabId);
+    const parent = findDetailCardByModuleId(pid);
+    const homeTitle = parent ? findSubjectNameByDetailId(parent.detailId) : '홈페이지 카드';
+    const detailTitle = parent?.card?.title || mod.title || 'module 카드';
+    title = tab?.label || '이론 카드';
+    headerLeft = `${homeTitle} > ${detailTitle} > ${title}`;
+    html=`
+      <h1>${escapeHtml(title)}</h1>
+      ${renderMdOrText(tab?.theoryNote || '')}
+    `;
   } else {
     const q=DATA.modules[pid].tabs.find(t=>t.id===tabId).questions[idx];
     title=(q.text||'문제').slice(0,30);
-    html=`<h1>${title}</h1><p>${q.src||''}</p><div>${(q.userNote||'').replace(/\n/g,'<br>')}</div>`;
+    const mod = DATA.modules[pid];
+    const tab = mod.tabs.find(t => t.id === tabId);
+    const parent = findDetailCardByModuleId(pid);
+    const homeTitle = parent ? findSubjectNameByDetailId(parent.detailId) : '홈페이지 카드';
+    const detailTitle = parent?.card?.title || mod.title || 'module 카드';
+    headerLeft = `${homeTitle} > ${detailTitle} > ${(tab?.label || '기출문제')}`;
+    headerRight = q.src || '';
+    html=`
+      <div class="md-content as-body">${renderMd(q.text || '')}</div>
+      ${q.userNote ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(q.userNote)}` : ''}
+    `;
   }
-  openPrintWindow(`${APP_NAME} - ${title}`, html);
+  openPrintWindow(`${APP_NAME} - ${title}`, html, { headerLeft, headerRight });
 }
 function exportPagePdf(type,id){
   let title=APP_NAME, html='';
   if(type==='detail'){
     const d=DATA.details[id];
     title=d.title||APP_NAME;
-    html=`<h1>${d.title||''}</h1><p>${d.subtitle||''}</p>` + (d.cards||[]).map(c=>`<hr><h2>${c.title||''}</h2><p>${c.scope||''}</p><div>${(c.qbox||'').replace(/\n/g,'<br>')}</div>`).join('');
+    html=`<h1>${escapeHtml(d.title||'')}</h1>${renderMdOrText(d.subtitle||'')}` + (d.cards||[]).map(c=>`<hr><h2>${escapeHtml(c.title||'')}</h2>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}`).join('');
   } else if(type==='module'){
     const m=DATA.modules[id];
     title=m.title||APP_NAME;
-    html=`<h1>${m.title||''}</h1><p>${m.subtitle||''}</p>` + (m.tabs||[]).map(t=>`<hr><h2>${t.label}</h2><div>${(t.theoryNote||'').replace(/\n/g,'<br>')}</div>` + (t.questions||[]).map(q=>`<h3>${q.text||''}</h3><p>${q.src||''}</p>`).join('')).join('');
+    html=`<h1>${escapeHtml(m.title||'')}</h1>${renderMdOrText(m.subtitle||'')}` + (m.tabs||[]).map(t=>`<hr><h2>${escapeHtml(t.label)}</h2>${renderMdOrText(t.theoryNote||'')}` + (t.questions||[]).map(q=>`<div class="section-gap"></div><div class="md-content">${renderMd(q.text||'')}</div>${q.src ? `<div style="color:#64748b;font-size:0.9rem;">${escapeHtml(q.src)}</div>` : ''}${q.userNote ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(q.userNote)}` : ''}`).join('')).join('');
   }
   openPrintWindow(`${APP_NAME} - ${title}`, html);
 }
-function openPrintWindow(title, bodyHtml){
+function openPrintWindow(title, bodyHtml, opts = {}){
+  const headerLeft = opts.headerLeft || '';
+  const headerRight = opts.headerRight || '';
   const w=window.open('', '_blank');
   if(!w) return alert('팝업이 차단되어 PDF 내보내기를 실행할 수 없습니다.');
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:Pretendard,sans-serif;padding:24px;line-height:1.6}h1,h2,h3{margin:0 0 8px}hr{margin:16px 0}</style></head><body>${bodyHtml}</body></html>`);
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <style>
+    body{font-family:Pretendard,sans-serif;padding:24px;line-height:1.6;color:#0f172a}
+    .print-header{display:flex;justify-content:space-between;align-items:flex-start;color:#475569;font-size:12px;margin-bottom:18px}
+    .print-header .right{text-align:right}
+    h1,h2,h3{margin:0 0 8px}
+    h1{font-size:1.4rem}
+    .as-body{font-size:1rem;font-weight:400;line-height:1.7}
+    .as-body h1,.as-body h2,.as-body h3{font-size:1rem;font-weight:400;margin:0 0 6px}
+    .md-content h1,.md-content h2,.md-content h3{font-size:1rem;font-weight:600;margin:0 0 8px}
+    .md-content p{margin:0.35rem 0}
+    .section-sep{margin:16px 0 10px;border:0;border-top:1px solid #cbd5e1}
+    .section-gap{height:6px}
+  </style>
+  </head><body>
+  <div class="print-header"><div>${escapeHtml(headerLeft)}</div><div class="right">${escapeHtml(headerRight)}</div></div>
+  ${bodyHtml}
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <script>
+    function __renderPrintMath(){
+      if(window.renderMathInElement){
+        renderMathInElement(document.body, { delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}], throwOnError:false });
+      }
+      setTimeout(function(){ window.focus(); window.print(); }, 250);
+    }
+    window.addEventListener('load', function(){ setTimeout(__renderPrintMath, 100); });
+  </script>
+  </body></html>`);
   w.document.close();
-  setTimeout(()=>{w.focus(); w.print();}, 300);
 }
 
 function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }
@@ -912,6 +1017,7 @@ function renderHome() {
              </div>
              <div class="card-actions">
                <button class="btn btn-icon" title="과목 복제" onclick="duplicateCard('subject', null, ${idx});event.stopPropagation()">📑</button>
+               <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('subject','home',${idx},'');event.stopPropagation()">🧾</button>
                <button class="btn btn-icon" title="링크 복사" onclick="copyLink('subject','${sub.id}','${sub.name}');event.stopPropagation()">🔗</button>
                <button class="btn btn-icon" title="과목 수정" onclick="openEditModal('subject', 'home', ${idx});event.stopPropagation()">✏️</button>
                <button class="btn btn-icon btn-danger" title="과목 삭제" onclick="deleteCard('subject', 'home', ${idx});event.stopPropagation()">🗑</button>
@@ -1039,6 +1145,7 @@ function renderModule(mid) {
            📌 ${activeTab.label}
         </h3>
         <div class="card-actions" style="opacity:1;">
+           <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('module_theory','${mid}',0,'${activeTabId}')">🧾</button>
            <button class="btn btn-icon" title="링크 복사" onclick="copyLink('module','${theoryId}','${activeTab.label}',{pid:'${mid}'})">🔗</button>
            <button class="btn btn-icon" title="내용 수정" onclick="toggleNoteView('theory-${activeTabId}')">✏️</button>
            <button class="btn btn-icon btn-danger" title="탭 삭제" onclick="deleteTab('${mid}', '${activeTabId}')">🗑</button>
