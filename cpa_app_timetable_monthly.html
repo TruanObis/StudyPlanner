@@ -768,6 +768,7 @@ function openPrintWindow(title, bodyHtml, opts = {}){
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <style>
+    html{font-size:65%;}
     body{font-family:Pretendard,sans-serif;padding:24px;line-height:1.6;color:#0f172a}
     .print-header{display:flex;justify-content:space-between;align-items:flex-start;color:#475569;font-size:12px;margin-bottom:18px}
     .print-header .right{text-align:right}
@@ -1549,7 +1550,7 @@ function renderHome() {
             <div class="card-actions">
 
               <button class="btn btn-icon" onclick="duplicateSubject(${realIdx});event.stopPropagation()">📑</button>
-              <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('home','home',${realIdx},'');event.stopPropagation()">🧾</button>
+              <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('home','home',${realIdx},'');event.stopPropagation()">🖨️</button>
               <button class="btn btn-icon" onclick="openEditModal('subject','home',${realIdx});event.stopPropagation()">✏️</button>
               <button class="btn btn-icon btn-danger" onclick="deleteCard('subject','home',${realIdx});event.stopPropagation()">🗑</button>
             </div>
@@ -1639,7 +1640,7 @@ function renderDetail(sid) {
     <div style="margin-bottom:20px;">
       <h1 class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.title||'(제목 없음)'}</h1>
       <p class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.subtitle||''}</p>
-      <button class="btn btn-outline" style="margin-top:10px;" onclick="exportPagePdf('detail','${sid}')">🧾 페이지 PDF</button>
+      <button class="btn btn-outline" style="margin-top:10px;" onclick="exportPagePdf('detail','${sid}')">🖨️ 페이지 PDF</button>
     </div>
     ${renderStickyHeader('진행률', stats.pct, stats.timeStr)}
     <div class="bulk-bar">
@@ -1689,7 +1690,7 @@ function renderModule(mid) {
 
     <h1 class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.title||'(모듈)'}</h1>
     <p class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.subtitle||''}</p>
-    <button class="btn btn-outline" style="margin-bottom:12px;" onclick="exportPagePdf('module','${mid}')">🧾 페이지 PDF</button>
+    <button class="btn btn-outline" style="margin-bottom:12px;" onclick="exportPagePdf('module','${mid}')">🖨️ 페이지 PDF</button>
 
     ${renderStickyHeader('모듈 진행률', stats.pct, stats.timeStr)}
 
@@ -1715,7 +1716,7 @@ function renderModule(mid) {
         </div>
         <div class="card-actions" style="opacity:1;">
           <button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveTheory('${mid}','${tid}');event.stopPropagation()">↪</button>
-          <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('module_theory','${mid}',0,'${tid}');event.stopPropagation()">🧾</button>
+          <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('module_theory','${mid}',0,'${tid}');event.stopPropagation()">🖨️</button>
           <button class="btn btn-icon btn-danger" onclick="deleteTab('${mid}','${tid}');event.stopPropagation()">🗑</button>
         </div>
       </div>
@@ -1813,7 +1814,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
           ${level==='detail' ? `<button class="btn btn-icon" title="다른 과목으로 이동" onclick="openMoveDetailCard('${pid}',${idx});event.stopPropagation()">↪</button>` : ''}
           ${isMod ? `<button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveQuestion('${pid}','${tabSafe}',${idx});event.stopPropagation()">↪</button>` : ''}
 
-          <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">🧾</button>
+          <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">🖨️</button>
           <button class="btn btn-icon" onclick="duplicateCard('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">📑</button>
           <button class="btn btn-icon" onclick="(('${level}'==='detail')?openEditModal('detail','${pid}',${idx}):openEditModal('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">✏️</button>
           <button class="btn btn-icon btn-danger" onclick="(('${level}'==='detail')?deleteCard('detail','${pid}',${idx}):deleteCard('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">🗑</button>
