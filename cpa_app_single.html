@@ -743,7 +743,7 @@ function renderModuleChecklist(mid){
   const tabs = mod.tabs || [];
   if(!tabs.length) return '';
   return `<div class="section-gap"></div><h3>체크리스트</h3>` + tabs.map(tab => {
-    const qHtml = (tab.questions||[]).map((q, qi) => `<li>${doneMark(!!q.done)} 문항 ${qi+1} ${escapeHtml((q.text||'').replace(/<[^>]*>/g,'').trim().slice(0, 50) || '(내용 없음)')}</li>`).join('');
+    const qHtml = (tab.questions||[]).map((q, qi) => `<li>${doneMark(!!q.done)} ${escapeHtml((q.text||'').replace(/<[^>]*>/g,'').trim().slice(0, 50) || '(내용 없음)')}</li>`).join('');
     return `<div class="section-gap"></div><div><strong>${doneMark(!!tab.done)} ${escapeHtml(tab.label || '탭')}</strong></div>${qHtml ? `<ul>${qHtml}</ul>` : ''}`;
   }).join('');
 }
@@ -809,7 +809,7 @@ function exportPagePdf(type,id){
   if(type==='home'){
     const activeFilter = typeof HOME_BADGE_FILTER === 'string' ? HOME_BADGE_FILTER : 'all';
     const subjects = (DATA.home.subjects||[]).filter(s => activeFilter==='all' ? true : badgeTags(s.badge).includes(activeFilter));
-    const headerRight = activeFilter==='all' ? '' : `필터: ${activeFilter}`;
+    const headerRight = activeFilter==='all' ? '' : `${activeFilter}`;
     title = APP_NAME;
     html = `<h1>${escapeHtml(APP_NAME)}</h1>` + subjects.map(sub => `<hr><h2>${escapeHtml(sub.name||'')}</h2>${renderMdOrText(sub.examInfo||'')}${(DATA.details?.[sub.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>하위 카드 체크리스트</h3><ul>${(DATA.details?.[sub.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`).join('');
     return openPrintWindow(`${APP_NAME} - ${title}`, html, { headerRight });
@@ -817,7 +817,7 @@ function exportPagePdf(type,id){
     const d=DATA.details[id];
     const activeFilter = (typeof DETAIL_BADGE_FILTER === 'object' && DETAIL_BADGE_FILTER && DETAIL_BADGE_FILTER[id]) ? DETAIL_BADGE_FILTER[id] : 'all';
     const cards = (d.cards||[]).filter(c => activeFilter==='all' ? true : badgeTags(c.badge).includes(activeFilter));
-    const headerRight = activeFilter==='all' ? '' : `필터: ${activeFilter}`;
+    const headerRight = activeFilter==='all' ? '' : `${activeFilter}`;
     title=d.title||APP_NAME;
     html=`<h1>${escapeHtml(d.title||'')}</h1>${renderMdOrText(d.subtitle||'')}` + cards.map(c=>`<hr><h2>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</h2>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}${renderModuleChecklist(c.module)}`).join('');
     return openPrintWindow(`${APP_NAME} - ${title}`, html, { headerRight });
