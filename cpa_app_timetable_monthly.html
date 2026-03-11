@@ -739,12 +739,19 @@ function getSelectedIndices(level, pid, tabId){
 }
 
 function openPrintWindow(title, bodyHtml){
-  const w = window.open('', '_blank', 'noopener,noreferrer,width=980,height=760');
+  const w = window.open('', '_blank', 'width=980,height=760');
   if(!w) return alert('팝업 차단을 해제해주세요.');
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:Pretendard,sans-serif;padding:24px;line-height:1.6}h1,h2,h3{margin:0 0 8px}hr{margin:16px 0}</style></head><body>${bodyHtml}</body></html>`);
-  w.document.close();
-  w.focus();
-  setTimeout(()=>w.print(), 200);
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:Pretendard,sans-serif;padding:24px;line-height:1.6}h1,h2,h3{margin:0 0 8px}hr{margin:16px 0}</style></head><body>${bodyHtml}<script>window.addEventListener('load',()=>{ setTimeout(()=>{ try{ window.focus(); window.print(); }catch(_e){} }, 120); });<\/script></body></html>`;
+
+  try {
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  } catch (e) {
+    w.close();
+    alert('팝업이 차단되어 PDF 내보내기를 실행할 수 없습니다.');
+  }
 }
 function exportCardPdf(level, pid, idx, tabId){
   if(level==='detail'){
@@ -1419,6 +1426,7 @@ function renderHome() {
   const ddays = DATA.home.dDays || [];
   const homeBadges = [...new Set((DATA.home.subjects||[]).map(s=>String(s.badge||'').trim()).filter(b=>b))];
   const homeFiltered = (HOME_BADGE_FILTER==='all') ? (DATA.home.subjects||[]) : (DATA.home.subjects||[]).filter(s=>badgeTags(s.badge).includes(HOME_BADGE_FILTER) || String(s.badge||'').trim()===HOME_BADGE_FILTER);
+  const selectedCount = getSelectedIndices('home', 'home', null).length;
   APP.style.display = '';
   ERR_SCREEN.style.display = 'none';
 
@@ -1444,15 +1452,24 @@ function renderHome() {
       ${homeBadges.map(b=>`<button class="tab-btn ${HOME_BADGE_FILTER===b?'active':''}" onclick="setHomeBadgeFilter('${b}',this)">${b}</button>`).join('')}
     </div>
 
+    <div class="bulk-bar">
+      <label class="chk-wrap" style="cursor:pointer;"><input type="checkbox" onchange="selectAllCurrent('home','home',null,this.checked)"><span>현재 목록 전체 선택</span></label>
+      <span style="color:var(--text-sub);">선택 ${selectedCount}개</span>
+      <button class="btn btn-outline btn-danger" onclick="deleteSelectedCards('home','home',null)">선택 삭제</button>
+      <button class="btn btn-outline" onclick="clearSelectionAndRender()">선택 해제</button>
+    </div>
+
     <div class="grid" id="homeGrid">
       ${homeFiltered.map((sub, idx) => {
         const realIdx = (DATA.home.subjects||[]).findIndex(x=>x.id===sub.id);
         const dStats = calcSubjectStats(sub.id);
         const cards = DATA.details[sub.id] ? DATA.details[sub.id].cards : [];
+        const selected = isCardSelected('home', 'home', realIdx, null);
         return `
-        <div class="card" id="card-${sub.id}" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'home',null,${realIdx})" data-index="${realIdx}">
+        <div class="card ${selected?'card-selected':''}" id="card-${sub.id}" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'home',null,${realIdx})" data-index="${realIdx}">
           <div class="card-top">
             <div style="display:flex; align-items:center; gap:8px;">
+              <input type="checkbox" ${selected?'checked':''} onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" onchange="toggleCardSelection('home','home',${realIdx},null,this.checked); renderRouter(true)">
               <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" title="드래그하여 시간표로">⋮⋮</span>
               <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsStr(sub.name||'(제목 없음)')}', '#/?focus=${sub.id}');">📋</button>
               <span class="badge">${sub.badge||''}</span>
@@ -1711,7 +1728,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
     <div class="card ${!isMod&&item.module?'clickable':''} ${selected?'card-selected':''}" data-index="${idx}" id="card-${sid}" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'${level}','${pid}',${idx},'${tabSafe}')">
       <div class="card-top">
         <div style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" ${selected?'checked':''} onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" onchange="toggleCardSelection('${level}','${pid}',${idx},'${tabId}',this.checked); renderRouter(true)">
+          <input type="checkbox" ${selected?'checked':''} onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" onchange="toggleCardSelection('${level}','${pid}',${idx},'${tabSafe}',this.checked); renderRouter(true)">
           <span class="drag-handle" draggable="true" ondragstart="${dragStartCode}" title="드래그하여 시간표로">⋮⋮</span>
           <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsStr(copyTitle)}', '${jsStr(copyHash)}');">📋</button>
           <span class="badge">${isMod?(item.src||'문항'):(item.badge||'Topic')}</span>
@@ -1720,10 +1737,10 @@ function renderCardItem(item, level, pid, idx, tabId) {
           ${level==='detail' ? `<button class="btn btn-icon" title="다른 과목으로 이동" onclick="openMoveDetailCard('${pid}',${idx});event.stopPropagation()">↪</button>` : ''}
           ${isMod ? `<button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveQuestion('${pid}','${tabSafe}',${idx});event.stopPropagation()">↪</button>` : ''}
 
-          <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">🧾</button>
-          <button class="btn btn-icon" onclick="duplicateCard('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">📑</button>
-          <button class="btn btn-icon" onclick="(('${level}'==='detail')?openEditModal('detail','${pid}',${idx}):openEditModal('module','${pid}',${idx},'${tabId}'));event.stopPropagation()">✏️</button>
-          <button class="btn btn-icon btn-danger" onclick="(('${level}'==='detail')?deleteCard('detail','${pid}',${idx}):deleteCard('module','${pid}',${idx},'${tabId}'));event.stopPropagation()">🗑</button>
+          <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">🧾</button>
+          <button class="btn btn-icon" onclick="duplicateCard('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">📑</button>
+          <button class="btn btn-icon" onclick="(('${level}'==='detail')?openEditModal('detail','${pid}',${idx}):openEditModal('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">✏️</button>
+          <button class="btn btn-icon btn-danger" onclick="(('${level}'==='detail')?deleteCard('detail','${pid}',${idx}):deleteCard('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">🗑</button>
         </div>
       </div>
 
@@ -1744,7 +1761,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
           <div id="edit-${sid}" class="note-edit">
             <textarea id="ta-${sid}" class="note-textarea">${item.userNote||''}</textarea>
             <div style="text-align:right;margin-top:5px;">
-              <button class="btn btn-primary" onclick="saveNoteText('card','${pid}',${idx},'${tabId}','${sid}')">저장</button>
+              <button class="btn btn-primary" onclick="saveNoteText('card','${pid}',${idx},'${tabSafe}','${sid}')">저장</button>
             </div>
           </div>
         </div>` : ''
@@ -1754,13 +1771,13 @@ function renderCardItem(item, level, pid, idx, tabId) {
         <label class="chk-wrap">
           <input type="checkbox" ${isDone?'checked':''} draggable="false" ondragstart="return false"
             onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
-            onchange="toggleCheck(this,'${level}','${pid}',${idx},'${tabId}')">
+            onchange="toggleCheck(this,'${level}','${pid}',${idx},'${tabSafe}')">
           <span>완료</span>
         </label>
         <div class="flex-center" style="gap:5px;">
-          <button class="btn btn-icon" onclick="editTime('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">✏️</button>
+          <button class="btn btn-icon" onclick="editTime('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">✏️</button>
           <div class="timer-display" id="time-disp-${sid}">${formatTime(totalTime)}</div>
-          <button class="btn btn-outline" style="${item.isRunning?'color:red':''}" onclick="toggleTimer('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">${item.isRunning?'❚❚':'▶'}</button>
+          <button class="btn btn-outline" style="${item.isRunning?'color:red':''}" onclick="toggleTimer('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">${item.isRunning?'❚❚':'▶'}</button>
         </div>
       </div>
     </div>`;
@@ -3574,7 +3591,15 @@ function clearSelectionAndRender(){
 }
 
 function selectAllCurrent(level, pid, tabId, checked){
-  if(level==='detail'){
+  if(level==='home'){
+    const list = (HOME_BADGE_FILTER==='all')
+      ? (DATA.home?.subjects||[])
+      : (DATA.home?.subjects||[]).filter(s=>badgeTags(s.badge).includes(HOME_BADGE_FILTER) || String(s.badge||'').trim()===HOME_BADGE_FILTER);
+    list.forEach((s)=>{
+      const i = (DATA.home?.subjects||[]).findIndex(x=>x.id===s.id);
+      if(i>=0) toggleCardSelection('home', 'home', i, null, checked);
+    });
+  }else if(level==='detail'){
     const list = DATA.details?.[pid]?.cards || [];
     list.forEach((_,i)=>toggleCardSelection(level, pid, i, null, checked));
   }else if(level==='module'){
@@ -3590,7 +3615,20 @@ function deleteSelectedCards(level, pid, tabId){
   if(!selected.length) return alert('선택된 카드가 없습니다.');
   if(!confirm(`선택한 ${selected.length}개 카드를 삭제하시겠습니까?`)) return;
 
-  if(level==='detail'){
+  if(level==='home'){
+    [...selected].sort((a,b)=>b-a).forEach(i=>{
+      const s = DATA.home?.subjects?.[i];
+      if(!s) return;
+      const sid = s.id;
+      const d = DATA.details?.[sid];
+      if(d){
+        (d.cards||[]).forEach(c=>{ if(c.module && DATA.modules?.[c.module]) delete DATA.modules[c.module]; });
+        delete DATA.details[sid];
+      }
+      DATA.home.subjects.splice(i,1);
+      purgeDailyRefs(ref=> (ref.type==='subject' && ref.id===sid) || (ref.pid===sid));
+    });
+  }else if(level==='detail'){
     const list = DATA.details?.[pid]?.cards || [];
     [...selected].sort((a,b)=>b-a).forEach(i=>{
       const c = list[i];
