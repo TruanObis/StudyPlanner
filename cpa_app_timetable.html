@@ -343,7 +343,7 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
       <button class="btn btn-outline" style="flex:1" onclick="addDailySlot()">+ 시간 블록</button>
       <button class="btn btn-outline" style="flex:1" onclick="copyDailyPlan()" title="복사">텍스트 복사</button>
     </div>
-    <button class="btn btn-icon" style="margin-top:5px; width:100%;" onclick="resetDailyToday()" title="초기화">현재 날짜 초기화</button>
+    <button class="btn btn-icon" style="margin-top:5px; width:100%;" onclick="resetDailyToday()" title="Daily 초기화">🧽 Daily 초기화</button>
   </div>
 </div>
 
@@ -1025,6 +1025,7 @@ function renderHome() {
       <div style="margin-top:10px;">
         <button class="btn btn-outline" onclick="triggerImport()">📂</button>
         <button class="btn btn-outline" onclick="exportData()">💾</button>
+        <button class="btn btn-outline" onclick="resetAccumulatedTime('all')" title="누적 시간 전체 초기화">⏱</button>
         <button class="btn btn-outline" style="color:#ef4444;" onclick="hardReset()">🗑</button>
       </div>
     </header>
@@ -1080,6 +1081,7 @@ function renderHome() {
             </label>
             <div class="flex-center" style="gap:5px;">
               <button class="btn btn-icon" onclick="editTime('subject',null,${idx});event.stopPropagation()">✏️</button>
+              <button class="btn btn-icon" title="누적 시간 초기화" onclick="resetAccumulatedTime('subject',null,${idx});event.stopPropagation()">⏱</button>
               <div class="timer-display" id="time-disp-subject-${sub.id}">${dStats.timeStr}</div>
               <button class="btn btn-outline" style="${sub.isRunning?'color:red':''}" onclick="toggleTimer('subject',null,${idx});event.stopPropagation()">${sub.isRunning?'❚❚':'▶'}</button>
             </div>
@@ -1173,6 +1175,7 @@ function renderModule(mid) {
         </label>
         <div class="flex-center" style="gap:5px;">
           <button class="btn btn-icon" onclick="editTime('theory','${mid}',0,'${tid}');event.stopPropagation()">✏️</button>
+          <button class="btn btn-icon" title="누적 시간 초기화" onclick="resetAccumulatedTime('theory','${mid}',0,'${tid}');event.stopPropagation()">⏱</button>
           <div class="timer-display" id="time-disp-theory-${mid}-${tid}">${formatTime(tab.time||0)}</div>
           <button class="btn btn-outline" style="${tab.isRunning?'color:red':''}" onclick="toggleTimer('theory','${mid}',0,'${tid}');event.stopPropagation()">${tab.isRunning?'❚❚':'▶'}</button>
         </div>
@@ -1273,6 +1276,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
         </label>
         <div class="flex-center" style="gap:5px;">
           <button class="btn btn-icon" onclick="editTime('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">✏️</button>
+          <button class="btn btn-icon" title="누적 시간 초기화" onclick="resetAccumulatedTime('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">⏱</button>
           <div class="timer-display" id="time-disp-${sid}">${formatTime(totalTime)}</div>
           <button class="btn btn-outline" style="${item.isRunning?'color:red':''}" onclick="toggleTimer('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">${item.isRunning?'❚❚':'▶'}</button>
         </div>
@@ -2517,6 +2521,33 @@ function editTime(level, pid, idx, tabId){
   if(sec==null || !Number.isFinite(sec) || sec<0) return alert('형식이 올바르지 않습니다.');
   target.time = sec;
   saveData(); renderRouter(true); renderDailySidebar();
+}
+
+function resetAccumulatedTime(level, pid, idx, tabId){
+  const clearItemTime = (item) => { if(item){ item.time = 0; item.isRunning = false; } };
+
+  if(level === 'all'){
+    if(!confirm('모든 카드의 누적 시간을 초기화하시겠습니까?')) return;
+    (DATA.home?.subjects||[]).forEach(clearItemTime);
+    Object.values(DATA.details||{}).forEach(d => (d.cards||[]).forEach(clearItemTime));
+    Object.values(DATA.modules||{}).forEach(m => (m.tabs||[]).forEach(t => { clearItemTime(t); (t.questions||[]).forEach(clearItemTime); }));
+  } else {
+    let target = null;
+    if(level==='subject') target = DATA.home?.subjects?.[idx];
+    else if(level==='detail') target = DATA.details?.[pid]?.cards?.[idx];
+    else if(level==='theory') target = DATA.modules?.[pid]?.tabs?.find(t => String(t.id)===String(tabId));
+    else if(level==='module'){
+      const tab = DATA.modules?.[pid]?.tabs?.find(t => String(t.id)===String(tabId)) || DATA.modules?.[pid]?.tabs?.[0];
+      target = tab?.questions?.[idx];
+    }
+    if(!target) return;
+    if(!confirm('이 카드의 누적 시간을 초기화하시겠습니까?')) return;
+    clearItemTime(target);
+  }
+
+  saveData();
+  if(typeof renderRouter === 'function') renderRouter(true);
+  if(typeof renderDailySidebar === 'function') renderDailySidebar();
 }
 
 /* =========================
