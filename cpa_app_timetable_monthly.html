@@ -739,19 +739,12 @@ function getSelectedIndices(level, pid, tabId){
 }
 
 function openPrintWindow(title, bodyHtml){
-  const w = window.open('', '_blank', 'width=980,height=760');
+  const w = window.open('', '_blank', 'noopener,noreferrer,width=980,height=760');
   if(!w) return alert('팝업 차단을 해제해주세요.');
-
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:Pretendard,sans-serif;padding:24px;line-height:1.6}h1,h2,h3{margin:0 0 8px}hr{margin:16px 0}</style></head><body>${bodyHtml}<script>window.addEventListener('load',()=>{ setTimeout(()=>{ try{ window.focus(); window.print(); }catch(_e){} }, 120); });<\/script></body></html>`;
-
-  try {
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
-  } catch (e) {
-    w.close();
-    alert('팝업이 차단되어 PDF 내보내기를 실행할 수 없습니다.');
-  }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:Pretendard,sans-serif;padding:24px;line-height:1.6}h1,h2,h3{margin:0 0 8px}hr{margin:16px 0}</style></head><body>${bodyHtml}</body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>w.print(), 200);
 }
 function exportCardPdf(level, pid, idx, tabId){
   if(level==='detail'){
