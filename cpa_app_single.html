@@ -761,7 +761,7 @@ function exportCardPdf(level,pid,idx,tabId){
     html=`
       <h1>${escapeHtml(title)}</h1>
       ${renderMdOrText(sub?.examInfo || '')}
-      ${(DATA.details?.[sub?.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>하위 카드 체크리스트</h3><ul>${(DATA.details?.[sub?.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}
+      ${(DATA.details?.[sub?.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>체크리스트</h3><ul>${(DATA.details?.[sub?.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}
     `;
   } else if(level==='detail'){
     const c=DATA.details[pid].cards[idx];
@@ -811,7 +811,7 @@ function exportPagePdf(type,id){
     const subjects = (DATA.home.subjects||[]).filter(s => activeFilter==='all' ? true : badgeTags(s.badge).includes(activeFilter));
     const headerRight = activeFilter==='all' ? '' : `${activeFilter}`;
     title = APP_NAME;
-    html = `<h1>${escapeHtml(APP_NAME)}</h1>` + subjects.map(sub => `<hr><h2>${escapeHtml(sub.name||'')}</h2>${renderMdOrText(sub.examInfo||'')}${(DATA.details?.[sub.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>하위 카드 체크리스트</h3><ul>${(DATA.details?.[sub.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`).join('');
+    html = `<h1>${escapeHtml(APP_NAME)}</h1>` + subjects.map(sub => `<hr><h2>${escapeHtml(sub.name||'')}</h2>${renderMdOrText(sub.examInfo||'')}${(DATA.details?.[sub.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>체크리스트</h3><ul>${(DATA.details?.[sub.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`).join('');
     return openPrintWindow(`${APP_NAME} - ${title}`, html, { headerRight });
   } else if(type==='detail'){
     const d=DATA.details[id];

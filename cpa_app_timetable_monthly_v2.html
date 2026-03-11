@@ -251,7 +251,8 @@
     .sb-body { background: var(--bg); padding: 8px; border-top: 1px solid var(--line); font-size: 0.85rem; display: none; }
     .sb-body.expanded { display: block; }
     .sb-child { display: flex; align-items: center; gap: 6px; padding: 4px 0; color: var(--text-sub); }
-    .sb-child input { accent-color: var(--success); cursor:pointer; }
+    .sb-child-check { display:flex; align-items:center; justify-content:center; width: 28px; height: 28px; margin: -5px 0; cursor:pointer; flex: 0 0 28px; }
+    .sb-child input { width:18px; height:18px; accent-color: var(--success); cursor:pointer; }
     .sb-child span { cursor: pointer; transition:0.2s; }
     .sb-child span:hover { color: var(--primary); text-decoration: underline; }
 
@@ -2773,12 +2774,14 @@ function renderSidebarCard(ref, date, sIdx, cIdx) {
   const childrenHtml = hasChildren
     ? children.map(ch => `
       <div class="sb-child" onclick="sbCardClick(event,'${ch.type}','${ch.id}','${ch.pid}',''); event.stopPropagation();">
-        <input type="checkbox" ${ch.done?'checked':''}
-          draggable="false"
-          onpointerdown="event.stopPropagation()"
-          onmousedown="event.stopPropagation()"
-          onclick="event.stopPropagation()"
-          ondragstart="return false" onchange="event.stopPropagation(); toggleChildDone('${ch.type}','${ch.id}','${ch.pid}', this.checked)">
+        <label class="sb-child-check" onclick="event.stopPropagation()">
+          <input type="checkbox" ${ch.done?'checked':''}
+            draggable="false"
+            onpointerdown="event.stopPropagation()"
+            onmousedown="event.stopPropagation()"
+            onclick="event.stopPropagation()"
+            ondragstart="return false" onchange="event.stopPropagation(); toggleChildDone('${ch.type}','${ch.id}','${ch.pid}', this.checked)">
+        </label>
         <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${ch.text}</span>
       </div>
     `).join('')
