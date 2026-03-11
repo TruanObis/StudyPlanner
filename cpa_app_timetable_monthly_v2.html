@@ -3399,6 +3399,10 @@ function resetAccumulatedTime(level, pid, idx, tabId){
     (DATA.home?.subjects||[]).forEach(clearItemTime);
     Object.values(DATA.details||{}).forEach(d => (d.cards||[]).forEach(clearItemTime));
     Object.values(DATA.modules||{}).forEach(m => (m.tabs||[]).forEach(t => { clearItemTime(t); (t.questions||[]).forEach(clearItemTime); }));
+    Object.values(DATA.dailyHistory||{}).forEach(day => {
+      day.totalSeconds = 0;
+      (day.slots||[]).forEach(slot => (slot.cardIds||[]).forEach(ref => { ref.time = 0; ref.isRunning = false; }));
+    });
   } else {
     let target = null;
     if(level==='subject') target = DATA.home?.subjects?.[idx];

@@ -243,6 +243,8 @@ const ASSET_ID_PREFIX = 'app://asset/';
 const APP = document.getElementById('app');
 const ERR_SCREEN = document.getElementById('error-screen');
 const APP_NAME = "Inmonite's Study Helper";
+let HOME_BADGE_FILTER = 'all';
+let DETAIL_BADGE_FILTER = {};
 const selectedCards = new Set();
 let __assetDbPromise = null;
 const __assetUrlCache = new Map();
@@ -733,6 +735,19 @@ function findDetailCardByModuleId(mid) {
   return null;
 }
 
+function doneMark(done){ return done ? '☑' : '☐'; }
+
+function renderModuleChecklist(mid){
+  const mod = DATA.modules?.[mid];
+  if(!mod) return '';
+  const tabs = mod.tabs || [];
+  if(!tabs.length) return '';
+  return `<div class="section-gap"></div><h3>체크리스트</h3>` + tabs.map(tab => {
+    const qHtml = (tab.questions||[]).map((q, qi) => `<li>${doneMark(!!q.done)} ${escapeHtml((q.text||'').replace(/<[^>]*>/g,'').trim().slice(0, 50) || '(내용 없음)')}</li>`).join('');
+    return `<div class="section-gap"></div><div><strong>${doneMark(!!tab.done)} ${escapeHtml(tab.label || '탭')}</strong></div>${qHtml ? `<ul>${qHtml}</ul>` : ''}`;
+  }).join('');
+}
+
 function exportCardPdf(level,pid,idx,tabId){
   let title='카드'; let html='';
   let headerLeft = '';
@@ -746,6 +761,7 @@ function exportCardPdf(level,pid,idx,tabId){
     html=`
       <h1>${escapeHtml(title)}</h1>
       ${renderMdOrText(sub?.examInfo || '')}
+      ${(DATA.details?.[sub?.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>하위 카드 체크리스트</h3><ul>${(DATA.details?.[sub?.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}
     `;
   } else if(level==='detail'){
     const c=DATA.details[pid].cards[idx];
@@ -757,6 +773,7 @@ function exportCardPdf(level,pid,idx,tabId){
       <h1>${escapeHtml(title)}</h1>
       ${renderMdOrText(c.scope || '')}
       ${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}
+      ${renderModuleChecklist(c.module)}
     `;
   } else if(level==='module_theory') {
     const mod = DATA.modules[pid];
@@ -789,10 +806,21 @@ function exportCardPdf(level,pid,idx,tabId){
 }
 function exportPagePdf(type,id){
   let title=APP_NAME, html='';
-  if(type==='detail'){
+  if(type==='home'){
+    const activeFilter = typeof HOME_BADGE_FILTER === 'string' ? HOME_BADGE_FILTER : 'all';
+    const subjects = (DATA.home.subjects||[]).filter(s => activeFilter==='all' ? true : badgeTags(s.badge).includes(activeFilter));
+    const headerRight = activeFilter==='all' ? '' : `${activeFilter}`;
+    title = APP_NAME;
+    html = `<h1>${escapeHtml(APP_NAME)}</h1>` + subjects.map(sub => `<hr><h2>${escapeHtml(sub.name||'')}</h2>${renderMdOrText(sub.examInfo||'')}${(DATA.details?.[sub.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>하위 카드 체크리스트</h3><ul>${(DATA.details?.[sub.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`).join('');
+    return openPrintWindow(`${APP_NAME} - ${title}`, html, { headerRight });
+  } else if(type==='detail'){
     const d=DATA.details[id];
+    const activeFilter = (typeof DETAIL_BADGE_FILTER === 'object' && DETAIL_BADGE_FILTER && DETAIL_BADGE_FILTER[id]) ? DETAIL_BADGE_FILTER[id] : 'all';
+    const cards = (d.cards||[]).filter(c => activeFilter==='all' ? true : badgeTags(c.badge).includes(activeFilter));
+    const headerRight = activeFilter==='all' ? '' : `${activeFilter}`;
     title=d.title||APP_NAME;
-    html=`<h1>${escapeHtml(d.title||'')}</h1>${renderMdOrText(d.subtitle||'')}` + (d.cards||[]).map(c=>`<hr><h2>${escapeHtml(c.title||'')}</h2>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}`).join('');
+    html=`<h1>${escapeHtml(d.title||'')}</h1>${renderMdOrText(d.subtitle||'')}` + cards.map(c=>`<hr><h2>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</h2>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}${renderModuleChecklist(c.module)}`).join('');
+    return openPrintWindow(`${APP_NAME} - ${title}`, html, { headerRight });
   } else if(type==='module'){
     const m=DATA.modules[id];
     title=m.title||APP_NAME;
@@ -999,6 +1027,7 @@ function renderHome() {
       <div style="margin-top:10px; display:flex; gap:8px; justify-content:center;">
         <button class="btn btn-outline" style="font-size:0.8rem;" onclick="triggerImport()">📂 백업 불러오기</button>
         <button class="btn btn-outline" style="font-size:0.8rem;" onclick="exportData()">💾 백업 저장</button>
+        <button class="btn btn-outline" style="font-size:0.8rem;" onclick="exportPagePdf('home','home')">🖨️ 페이지 PDF</button>
         <button class="btn btn-outline" style="font-size:0.8rem;" onclick="resetAccumulatedTime('all')">⏱ 전체 시간 초기화</button>
         <button class="btn btn-outline" style="font-size:0.8rem; color:#ef4444; border-color:#ef4444;" onclick="resetData()">🗑 초기화</button>
       </div>
@@ -1644,10 +1673,13 @@ function exportAnki(mid) {
 }
 function filterCards(k, btn) {
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
-  const cards = DATA.details[getRoute().id].cards;
+  const sid = getRoute().id;
+  DETAIL_BADGE_FILTER[sid] = k;
+  const cards = DATA.details[sid].cards;
   cards.forEach((c, i) => {
-    const el = document.getElementById(`card-${c.id||('detail-'+getRoute().id+'-'+i)}`);
-    if(el) el.style.display = (k==='all' || c.category===k) ? 'flex' : 'none';
+    const el = document.getElementById(`card-${c.id||('detail-'+sid+'-'+i)}`);
+    const tags = badgeTags(c.badge);
+    if(el) el.style.display = (k==='all' || tags.includes(k)) ? 'flex' : 'none';
   });
 }
 function switchTab(mid, tid) { DATA.modules[mid].activeTab = tid; saveData(); renderModule(mid); }
