@@ -808,6 +808,7 @@ function openPrintWindow(title, bodyHtml, opts = {}){
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <style>
+    html{font-size:65%;}
     body{font-family:Pretendard,sans-serif;padding:24px;line-height:1.6;color:#0f172a}
     .print-header{display:flex;justify-content:space-between;align-items:flex-start;color:#475569;font-size:12px;margin-bottom:18px}
     .print-header .right{text-align:right}
@@ -1017,7 +1018,7 @@ function renderHome() {
              </div>
              <div class="card-actions">
                <button class="btn btn-icon" title="과목 복제" onclick="duplicateCard('subject', null, ${idx});event.stopPropagation()">📑</button>
-               <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('subject','home',${idx},'');event.stopPropagation()">🧾</button>
+               <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('subject','home',${idx},'');event.stopPropagation()">🖨️</button>
                <button class="btn btn-icon" title="링크 복사" onclick="copyLink('subject','${sub.id}','${sub.name}');event.stopPropagation()">🔗</button>
                <button class="btn btn-icon" title="과목 수정" onclick="openEditModal('subject', 'home', ${idx});event.stopPropagation()">✏️</button>
                <button class="btn btn-icon btn-danger" title="과목 삭제" onclick="deleteCard('subject', 'home', ${idx});event.stopPropagation()">🗑</button>
@@ -1083,7 +1084,7 @@ function renderDetail(sid) {
     <div style="margin-bottom:20px;">
       <h1 class="editable" onclick="openEditModal('page_info', 'detail', null, null, '${sid}')">${detail.title}</h1>
       <p class="editable" onclick="openEditModal('page_info', 'detail', null, null, '${sid}')" style="color:#64748b;">${detail.subtitle}</p>
-      <button class="btn btn-outline" onclick="exportPagePdf('detail','${sid}')">🧾 페이지 PDF</button>
+      <button class="btn btn-outline" onclick="exportPagePdf('detail','${sid}')">🖨️ 페이지 PDF</button>
     </div>
 
     ${renderStickyHeader('과목 진행률', stats.pct, stats.timeStr)}
@@ -1130,7 +1131,7 @@ function renderModule(mid) {
 
     <h1 class="editable" onclick="openEditModal('page_info', 'module', null, null, '${mid}')">${mod.title}</h1>
     <p class="editable" onclick="openEditModal('page_info', 'module', null, null, '${mid}')" style="color:#64748b; margin-bottom:20px;">${mod.subtitle}</p>
-    <button class="btn btn-outline" style="margin-bottom:20px;" onclick="exportPagePdf('module','${mid}')">🧾 페이지 PDF</button>
+    <button class="btn btn-outline" style="margin-bottom:20px;" onclick="exportPagePdf('module','${mid}')">🖨️ 페이지 PDF</button>
 
     ${renderStickyHeader('모듈 진행률', stats.pct, stats.timeStr)}
 
@@ -1145,7 +1146,7 @@ function renderModule(mid) {
            📌 ${activeTab.label}
         </h3>
         <div class="card-actions" style="opacity:1;">
-           <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('module_theory','${mid}',0,'${activeTabId}')">🧾</button>
+           <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('module_theory','${mid}',0,'${activeTabId}')">🖨️</button>
            <button class="btn btn-icon" title="링크 복사" onclick="copyLink('module','${theoryId}','${activeTab.label}',{pid:'${mid}'})">🔗</button>
            <button class="btn btn-icon" title="내용 수정" onclick="toggleNoteView('theory-${activeTabId}')">✏️</button>
            <button class="btn btn-icon btn-danger" title="탭 삭제" onclick="deleteTab('${mid}', '${activeTabId}')">🗑</button>
@@ -1244,7 +1245,7 @@ function renderCardItem(item, level, pid, idx, tabId = null) {
            ${!isMod && item.module ? `<button class="btn btn-icon" title="모듈 바로가기" onclick="location.hash='#/module/${item.module}'; event.stopPropagation();">🚀</button>` : ''}
            <button class="btn btn-icon" title="복제" onclick="duplicateCard('${level}', '${pid}', ${idx}, '${tabId||''}');event.stopPropagation()">📑</button>
            <button class="btn btn-icon" title="이동" onclick="moveCard('${level}', '${pid}', ${idx}, '${tabId||''}');event.stopPropagation()">📂</button>
-           <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabId||''}');event.stopPropagation()">🧾</button>
+           <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabId||''}');event.stopPropagation()">🖨️</button>
            <button class="btn btn-icon" title="링크 복사" onclick="copyLink('${level}','${stableId}','${linkLabel.replace(/'/g,"")}',{pid:'${pid}',module:'${item.module||''}'});event.stopPropagation()">🔗</button>
            <button class="btn btn-icon" title="수정" onclick="openEditModal('${level}', '${pid}', ${idx}, '${tabId || ''}');event.stopPropagation()">✏️</button>
            <button class="btn btn-icon btn-danger" title="삭제" onclick="deleteCard('${level}', '${pid}', ${idx}, '${tabId || ''}');event.stopPropagation()">🗑</button>
