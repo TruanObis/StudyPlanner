@@ -759,6 +759,17 @@ function findDetailCardByModuleId(mid) {
   }
   return null;
 }
+function doneMark(done){ return done ? '☑' : '☐'; }
+function renderModuleChecklist(mid){
+  const mod = DATA.modules?.[mid];
+  if(!mod) return '';
+  const tabs = mod.tabs || [];
+  if(!tabs.length) return '';
+  return `<div class="section-gap"></div><h3>체크리스트</h3>` + tabs.map(tab => {
+    const qHtml = (tab.questions||[]).map((q, qi) => `<li>${doneMark(!!q.done)} 문항 ${qi+1} ${escapeHtml((q.text||'').replace(/<[^>]*>/g,'').trim().slice(0, 50) || '(내용 없음)')}</li>`).join('');
+    return `<div class="section-gap"></div><div><strong>${doneMark(!!tab.done)} ${escapeHtml(tab.label || '탭')}</strong></div>${qHtml ? `<ul>${qHtml}</ul>` : ''}`;
+  }).join('');
+}
 function openPrintWindow(title, bodyHtml, opts = {}){
   const headerLeft = opts.headerLeft || '';
   const headerRight = opts.headerRight || '';
@@ -806,14 +817,14 @@ function exportCardPdf(level, pid, idx, tabId){
     title=sub?.name||'홈페이지 카드';
     headerLeft = `${title}`;
     headerRight = sub?.badge || '';
-    html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(sub?.examInfo || '')}`;
+    html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(sub?.examInfo || '')}${(DATA.details?.[sub?.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>하위 카드 체크리스트</h3><ul>${(DATA.details?.[sub?.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`;
   } else if(level==='detail'){
     const c = DATA.details?.[pid]?.cards?.[idx];
     if(!c) return;
     title=c.title||'카드';
     headerLeft = `${findSubjectNameByDetailId(pid)} > ${title}`;
     headerRight = c.badge || '';
-    html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}`;
+    html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}${renderModuleChecklist(c.module)}`;
   } else if(level==='module_theory'){
     const mod = DATA.modules?.[pid];
     const tab = mod?.tabs?.find(t=>t.id===tabId);
@@ -839,11 +850,20 @@ function exportCardPdf(level, pid, idx, tabId){
   openPrintWindow(title, html, { headerLeft, headerRight });
 }
 function exportPagePdf(level, id){
+  if(level==='home'){
+    const headerRight = HOME_BADGE_FILTER==='all' ? '' : `필터: ${HOME_BADGE_FILTER}`;
+    const list = (HOME_BADGE_FILTER==='all') ? (DATA.home.subjects||[]) : (DATA.home.subjects||[]).filter(s=>badgeTags(s.badge).includes(HOME_BADGE_FILTER) || String(s.badge||'').trim()===HOME_BADGE_FILTER);
+    const html = `<h1>${escapeHtml(DATA.home.title||APP_NAME)}</h1>${renderMdOrText(DATA.home.subtitle||'')}` + list.map(sub=>`<hr><h2>${escapeHtml(sub.name||'')}</h2>${renderMdOrText(sub.examInfo||'')}${(DATA.details?.[sub.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>하위 카드 체크리스트</h3><ul>${(DATA.details?.[sub.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`).join('');
+    return openPrintWindow(DATA.home.title||'홈', html, { headerRight });
+  }
   if(level==='detail'){
     const d = DATA.details?.[id];
     if(!d) return;
-    const html = `<h1>${escapeHtml(d.title||'')}</h1>${renderMdOrText(d.subtitle||'')}` + (d.cards||[]).map(c=>`<hr><h2>${escapeHtml(c.title||'')}</h2>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}`).join('');
-    return openPrintWindow(d.title||'상세', html);
+    const activeFilter = DETAIL_BADGE_FILTER?.[id] || 'all';
+    const cards = (d.cards||[]).filter(c => activeFilter==='all' ? true : badgeTags(c.badge).includes(activeFilter));
+    const headerRight = activeFilter==='all' ? '' : `필터: ${activeFilter}`;
+    const html = `<h1>${escapeHtml(d.title||'')}</h1>${renderMdOrText(d.subtitle||'')}` + cards.map(c=>`<hr><h2>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</h2>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}${renderModuleChecklist(c.module)}`).join('');
+    return openPrintWindow(d.title||'상세', html, { headerRight });
   }
   if(level==='module'){
     const m = DATA.modules?.[id];
@@ -1514,6 +1534,7 @@ function renderHome() {
       <div style="margin-top:10px;">
         <button class="btn btn-outline" onclick="triggerImport()">📂</button>
         <button class="btn btn-outline" onclick="exportData()">💾</button>
+        <button class="btn btn-outline" onclick="exportPagePdf('home','home')" title="현재 필터 기준 페이지 PDF">🖨️</button>
         <button class="btn btn-outline" onclick="resetAccumulatedTime('all')" title="누적 시간 전체 초기화">⏱</button>
         <button class="btn btn-outline" style="color:#ef4444;" onclick="hardReset()">🗑</button>
       </div>
@@ -3328,6 +3349,10 @@ function resetAccumulatedTime(level, pid, idx, tabId){
     (DATA.home?.subjects||[]).forEach(clearItemTime);
     Object.values(DATA.details||{}).forEach(d => (d.cards||[]).forEach(clearItemTime));
     Object.values(DATA.modules||{}).forEach(m => (m.tabs||[]).forEach(t => { clearItemTime(t); (t.questions||[]).forEach(clearItemTime); }));
+    Object.values(DATA.dailyHistory||{}).forEach(day => {
+      day.totalSeconds = 0;
+      (day.slots||[]).forEach(slot => (slot.cardIds||[]).forEach(ref => { ref.time = 0; ref.isRunning = false; }));
+    });
   } else {
     let target = null;
     if(level==='subject') target = DATA.home?.subjects?.[idx];
