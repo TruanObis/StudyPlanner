@@ -738,48 +738,116 @@ function getSelectedIndices(level, pid, tabId){
     .sort((a,b)=>a-b);
 }
 
-function openPrintWindow(title, bodyHtml){
-  const w = window.open('', '_blank', 'width=980,height=760');
-  if(!w) return alert('팝업 차단을 해제해주세요.');
-
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:Pretendard,sans-serif;padding:24px;line-height:1.6}h1,h2,h3{margin:0 0 8px}hr{margin:16px 0}</style></head><body>${bodyHtml}<script>window.addEventListener('load',()=>{ setTimeout(()=>{ try{ window.focus(); window.print(); }catch(_e){} }, 120); });<\/script></body></html>`;
-
-  try {
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
-  } catch (e) {
-    w.close();
-    alert('팝업이 차단되어 PDF 내보내기를 실행할 수 없습니다.');
+function escapeHtml(s='') {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function renderMdOrText(text) {
+  return `<div class="md-content">${renderMarkdown(text || '')}</div>`;
+}
+function findSubjectNameByDetailId(detailId) {
+  return DATA.home.subjects.find(s => s.id === detailId)?.name || '홈페이지 카드';
+}
+function findDetailCardByModuleId(mid) {
+  for (const [detailId, detail] of Object.entries(DATA.details || {})) {
+    const card = (detail.cards || []).find(c => c.module === mid);
+    if (card) return { detailId, card };
   }
+  return null;
+}
+function openPrintWindow(title, bodyHtml, opts = {}){
+  const headerLeft = opts.headerLeft || '';
+  const headerRight = opts.headerRight || '';
+  const w=window.open('', '_blank');
+  if(!w) return alert('팝업이 차단되어 PDF 내보내기를 실행할 수 없습니다.');
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <style>
+    body{font-family:Pretendard,sans-serif;padding:24px;line-height:1.6;color:#0f172a}
+    .print-header{display:flex;justify-content:space-between;align-items:flex-start;color:#475569;font-size:12px;margin-bottom:18px}
+    .print-header .right{text-align:right}
+    h1,h2,h3{margin:0 0 8px}
+    h1{font-size:1.4rem}
+    .as-body{font-size:1rem;font-weight:400;line-height:1.7}
+    .as-body h1,.as-body h2,.as-body h3{font-size:1rem;font-weight:400;margin:0 0 6px}
+    .md-content h1,.md-content h2,.md-content h3{font-size:1rem;font-weight:600;margin:0 0 8px}
+    .md-content p{margin:0.35rem 0}
+    .section-sep{margin:16px 0 10px;border:0;border-top:1px solid #cbd5e1}
+    .section-gap{height:6px}
+  </style>
+  </head><body>
+  <div class="print-header"><div>${escapeHtml(headerLeft)}</div><div class="right">${escapeHtml(headerRight)}</div></div>
+  ${bodyHtml}
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\/script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"><\/script>
+  <script>
+    function __renderPrintMath(){
+      if(window.renderMathInElement){
+        renderMathInElement(document.body, { delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}], throwOnError:false });
+      }
+      setTimeout(function(){ window.focus(); window.print(); }, 250);
+    }
+    window.addEventListener('load', function(){ setTimeout(__renderPrintMath, 120); });
+  <\/script>
+  </body></html>`);
+  w.document.close();
 }
 function exportCardPdf(level, pid, idx, tabId){
-  if(level==='detail'){
+  let title='카드'; let html='';
+  let headerLeft=''; let headerRight='';
+  if(level==='home'){
+    const sub = DATA.home.subjects[idx];
+    title=sub?.name||'홈페이지 카드';
+    headerLeft = `${title}`;
+    headerRight = sub?.badge || '';
+    html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(sub?.examInfo || '')}`;
+  } else if(level==='detail'){
     const c = DATA.details?.[pid]?.cards?.[idx];
     if(!c) return;
-    const html = `<h1>${c.title||'카드'}</h1><p>${c.scope||''}</p><div>${(c.qbox||'').replace(/\n/g,'<br>')}</div>`;
-    return openPrintWindow(c.title||'카드', html);
-  }
-  if(level==='module'){
+    title=c.title||'카드';
+    headerLeft = `${findSubjectNameByDetailId(pid)} > ${title}`;
+    headerRight = c.badge || '';
+    html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}`;
+  } else if(level==='module_theory'){
+    const mod = DATA.modules?.[pid];
+    const tab = mod?.tabs?.find(t=>t.id===tabId);
+    const parent = findDetailCardByModuleId(pid);
+    const homeTitle = parent ? findSubjectNameByDetailId(parent.detailId) : '홈페이지 카드';
+    const detailTitle = parent?.card?.title || mod?.title || 'module 카드';
+    title = tab?.label || '이론 카드';
+    headerLeft = `${homeTitle} > ${detailTitle} > ${title}`;
+    html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(tab?.theoryNote || '')}`;
+  } else if(level==='module'){
     const mod = DATA.modules?.[pid];
     const tab = mod?.tabs?.find(t=>t.id===tabId) || mod?.tabs?.[0];
     const q = tab?.questions?.[idx];
     if(!q) return;
-    const html = `<h1>${(q.text||'문항').slice(0,40)}</h1><p>${q.src||''}</p><div>${(q.userNote||'').replace(/\n/g,'<br>')}</div>`;
-    return openPrintWindow((q.text||'문항').slice(0,40), html);
+    title=(q.text||'문항').slice(0,40);
+    const parent = findDetailCardByModuleId(pid);
+    const homeTitle = parent ? findSubjectNameByDetailId(parent.detailId) : '홈페이지 카드';
+    const detailTitle = parent?.card?.title || mod?.title || 'module 카드';
+    headerLeft = `${homeTitle} > ${detailTitle} > ${(tab?.label || '기출문제')}`;
+    headerRight = q.src || '';
+    html = `<div class="md-content as-body">${renderMarkdown(q.text || '')}</div>${q.userNote ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(q.userNote)}` : ''}`;
   }
+  openPrintWindow(title, html, { headerLeft, headerRight });
 }
 function exportPagePdf(level, id){
   if(level==='detail'){
     const d = DATA.details?.[id];
     if(!d) return;
-    const html = `<h1>${d.title||''}</h1><p>${d.subtitle||''}</p>` + (d.cards||[]).map(c=>`<hr><h2>${c.title||''}</h2><p>${c.scope||''}</p><div>${(c.qbox||'').replace(/\n/g,'<br>')}</div>`).join('');
+    const html = `<h1>${escapeHtml(d.title||'')}</h1>${renderMdOrText(d.subtitle||'')}` + (d.cards||[]).map(c=>`<hr><h2>${escapeHtml(c.title||'')}</h2>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}`).join('');
     return openPrintWindow(d.title||'상세', html);
   }
   if(level==='module'){
     const m = DATA.modules?.[id];
     if(!m) return;
-    const html = `<h1>${m.title||''}</h1><p>${m.subtitle||''}</p>` + (m.tabs||[]).map(t=>`<hr><h2>${t.label||''}</h2><div>${(t.theoryNote||'').replace(/\n/g,'<br>')}</div>${(t.questions||[]).map(q=>`<h3>${q.text||''}</h3><p>${q.src||''}</p>`).join('')}`).join('');
+    const html = `<h1>${escapeHtml(m.title||'')}</h1>${renderMdOrText(m.subtitle||'')}` + (m.tabs||[]).map(t=>`<hr><h2>${escapeHtml(t.label||'')}</h2>${renderMdOrText(t.theoryNote||'')}${(t.questions||[]).map(q=>`<div class="section-gap"></div><div class="md-content as-body">${renderMarkdown(q.text||'')}</div>${q.src ? `<div style="color:#64748b;font-size:0.9rem;">${escapeHtml(q.src)}</div>` : ''}${q.userNote ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(q.userNote)}` : ''}`).join('')}`).join('');
     return openPrintWindow(m.title||'모듈', html);
   }
 }
@@ -1427,6 +1495,10 @@ function renderHome() {
   const homeBadges = [...new Set((DATA.home.subjects||[]).map(s=>String(s.badge||'').trim()).filter(b=>b))];
   const homeFiltered = (HOME_BADGE_FILTER==='all') ? (DATA.home.subjects||[]) : (DATA.home.subjects||[]).filter(s=>badgeTags(s.badge).includes(HOME_BADGE_FILTER) || String(s.badge||'').trim()===HOME_BADGE_FILTER);
   const selectedCount = getSelectedIndices('home', 'home', null).length;
+  const homeAllSelected = homeFiltered.length > 0 && homeFiltered.every(sub => {
+    const realIdx = (DATA.home.subjects||[]).findIndex(x=>x.id===sub.id);
+    return realIdx >= 0 && isCardSelected('home', 'home', realIdx, null);
+  });
   APP.style.display = '';
   ERR_SCREEN.style.display = 'none';
 
@@ -1453,7 +1525,7 @@ function renderHome() {
     </div>
 
     <div class="bulk-bar">
-      <label class="chk-wrap" style="cursor:pointer;"><input type="checkbox" onchange="selectAllCurrent('home','home',null,this.checked)"><span>현재 목록 전체 선택</span></label>
+      <label class="chk-wrap" style="cursor:pointer;"><input type="checkbox" ${homeAllSelected?'checked':''} onchange="selectAllCurrent('home','home',null,this.checked)"><span>현재 목록 전체 선택</span></label>
       <span style="color:var(--text-sub);">선택 ${selectedCount}개</span>
       <button class="btn btn-outline btn-danger" onclick="deleteSelectedCards('home','home',null)">선택 삭제</button>
       <button class="btn btn-outline" onclick="clearSelectionAndRender()">선택 해제</button>
@@ -1477,6 +1549,7 @@ function renderHome() {
             <div class="card-actions">
 
               <button class="btn btn-icon" onclick="duplicateSubject(${realIdx});event.stopPropagation()">📑</button>
+              <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('home','home',${realIdx},'');event.stopPropagation()">🧾</button>
               <button class="btn btn-icon" onclick="openEditModal('subject','home',${realIdx});event.stopPropagation()">✏️</button>
               <button class="btn btn-icon btn-danger" onclick="deleteCard('subject','home',${realIdx});event.stopPropagation()">🗑</button>
             </div>
@@ -1555,6 +1628,7 @@ function renderDetail(sid) {
   const selectedBadge = DETAIL_BADGE_FILTER[sid] || 'all';
   const activeBadge = (selectedBadge === 'all' || badgeList.includes(selectedBadge)) ? selectedBadge : 'all';
   const selectedCount = getSelectedIndices('detail', sid, null).length;
+  const detailAllSelected = (detail.cards||[]).length > 0 && (detail.cards||[]).every((_, i)=>isCardSelected('detail', sid, i, null));
 
   DETAIL_BADGE_FILTER[sid] = activeBadge;
 
@@ -1569,7 +1643,7 @@ function renderDetail(sid) {
     </div>
     ${renderStickyHeader('진행률', stats.pct, stats.timeStr)}
     <div class="bulk-bar">
-      <label class="chk-wrap" style="cursor:pointer;"><input type="checkbox" onchange="selectAllCurrent('detail','${sid}',null,this.checked)"><span>전체 선택</span></label>
+      <label class="chk-wrap" style="cursor:pointer;"><input type="checkbox" ${detailAllSelected?'checked':''} onchange="selectAllCurrent('detail','${sid}',null,this.checked)"><span>전체 선택</span></label>
       <span style="color:var(--text-sub);">선택 ${selectedCount}개</span>
       <button class="btn btn-outline" onclick="moveSelectedCards('detail','${sid}',null)">선택 이동</button>
       <button class="btn btn-outline btn-danger" onclick="deleteSelectedCards('detail','${sid}',null)">선택 삭제</button>
@@ -1595,6 +1669,7 @@ function renderModule(mid) {
   const stats = calcModuleStats(mid);
   const theoryId = `theory-${mid}-${tid}`;
   const selectedCount = getSelectedIndices('module', mid, tid).length;
+  const moduleAllSelected = (tab.questions||[]).length > 0 && (tab.questions||[]).every((_, i)=>isCardSelected('module', mid, i, tid));
 
   // Question source filter (badge-like): keep ORIGINAL indices so edit/delete/move targets remain correct
   const qSel = getModuleQSrcFilter(mid, tid);
@@ -1624,7 +1699,7 @@ function renderModule(mid) {
     </div>
 
     <div class="bulk-bar">
-      <label class="chk-wrap" style="cursor:pointer;"><input type="checkbox" onchange="selectAllCurrent('module','${mid}','${tid}',this.checked)"><span>현재 탭 전체 선택</span></label>
+      <label class="chk-wrap" style="cursor:pointer;"><input type="checkbox" ${moduleAllSelected?'checked':''} onchange="selectAllCurrent('module','${mid}','${tid}',this.checked)"><span>현재 탭 전체 선택</span></label>
       <span style="color:var(--text-sub);">선택 ${selectedCount}개</span>
       <button class="btn btn-outline" onclick="moveSelectedCards('module','${mid}','${tid}')">선택 이동</button>
       <button class="btn btn-outline btn-danger" onclick="deleteSelectedCards('module','${mid}','${tid}')">선택 삭제</button>
@@ -1640,6 +1715,7 @@ function renderModule(mid) {
         </div>
         <div class="card-actions" style="opacity:1;">
           <button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveTheory('${mid}','${tid}');event.stopPropagation()">↪</button>
+          <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('module_theory','${mid}',0,'${tid}');event.stopPropagation()">🧾</button>
           <button class="btn btn-icon btn-danger" onclick="deleteTab('${mid}','${tid}');event.stopPropagation()">🗑</button>
         </div>
       </div>
