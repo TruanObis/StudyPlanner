@@ -2,6 +2,9 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Inmonite's Study Helper</title>
 
@@ -512,7 +515,7 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
       </span>
 
       <div style="display:flex; align-items:center; gap:6px;">
-        <button class="nav-today" onclick="goToday(); event.stopPropagation();" title="오늘(논리적 오늘)로 이동">오늘로</button>
+        <button class="nav-today" onclick="goToday(); event.stopPropagation();" title="오늘(KST)로 이동">오늘로</button>
         <button class="nav-btn" onclick="changeSidebarDate(1)">❯</button>
       </div>
     </div>
@@ -624,6 +627,9 @@ function renderMarkdown(text){
 let DATA = null;
 const STORAGE_KEY = 'universal_planner_v28_data';
 const THEME_KEY = 'universal_planner_theme';
+const APP_BUILD_ID = '2026-06-30-kst-today-cache-bust-1';
+const APP_VERSION_URL = 'app_version.json';
+const APP_UPDATE_RELOAD_KEY = 'studyplanner_app_update_reload';
 const ASSET_DB_NAME = 'studyplanner_assets_v1';
 const ASSET_STORE = 'assets';
 const ASSET_ID_PREFIX = 'app://asset/';
@@ -1166,6 +1172,38 @@ function showToast(msg, ms){
     el.classList.add('show');
     clearTimeout(window.__toastTimer);
     window.__toastTimer = setTimeout(()=>{ el.classList.remove('show'); }, ms || 1200);
+  }catch(e){}
+}
+
+async function checkForAppUpdate({silent = true} = {}){
+  try{
+    if(location.protocol === 'file:') return;
+    const res = await fetch(`${APP_VERSION_URL}?ts=${Date.now()}`, { cache: 'no-store' });
+    if(!res.ok) return;
+    const info = await res.json();
+    const remoteBuild = String(info.buildId || info.version || '').trim();
+    if(!remoteBuild) return;
+
+    window.__STUDY_PLANNER_BUILD_ID__ = APP_BUILD_ID;
+    if(remoteBuild === APP_BUILD_ID){
+      sessionStorage.removeItem(APP_UPDATE_RELOAD_KEY);
+      return;
+    }
+
+    const reloadKey = `${APP_BUILD_ID}->${remoteBuild}`;
+    if(sessionStorage.getItem(APP_UPDATE_RELOAD_KEY) === reloadKey){
+      if(!silent) showToast('새 버전 확인됨: 잠시 후 다시 새로고침해 주세요.', 2500);
+      return;
+    }
+
+    sessionStorage.setItem(APP_UPDATE_RELOAD_KEY, reloadKey);
+    showToast('새 버전으로 갱신합니다...', 1200);
+    setTimeout(() => {
+      const url = new URL(location.href);
+      url.searchParams.set('appv', remoteBuild);
+      url.searchParams.set('ts', Date.now().toString());
+      location.replace(url.toString());
+    }, 250);
   }catch(e){}
 }
 
@@ -4743,6 +4781,8 @@ async function init(){
 
   updateClock();
   setInterval(updateClock, 1000);
+  checkForAppUpdate();
+  setInterval(() => checkForAppUpdate(), 5 * 60 * 1000);
 
   window.addEventListener('hashchange', ()=> renderRouter(true));
   renderRouter();
