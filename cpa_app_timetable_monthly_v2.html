@@ -1259,6 +1259,7 @@ const PDF_EXPORT_SCALE = 2;
 const PDF_EXPORT_TARGET_CHUNK_PAGES = 50;
 const PDF_EXPORT_MAX_CANVAS_DIMENSION = 30000;
 const PDF_EXPORT_MAX_CANVAS_AREA = 120000000;
+const PDF_EXPORT_AVOID_BREAK_SELECTOR = '.print-subsection,.link-toc,.print-note,.md-content p,.md-content li,.md-content blockquote,.md-content pre,.md-content table,.md-content img,h2,h3,h4';
 let PDF_EXPORT_LIB_PROMISE = null;
 function safePdfFilename(title){
   const safe = String(title || APP_NAME || 'studyplanner')
@@ -1396,18 +1397,35 @@ function getPdfLayout(pdf, doc){
 function applyPdfPageBreakSpacers(doc, contentHeightPx){
   doc.querySelectorAll('.pdf-page-break-spacer').forEach(el => el.remove());
   const docTop = () => doc.getBoundingClientRect().top;
-  Array.from(doc.querySelectorAll('.print-page')).forEach(el => {
-    const rawTop = Math.max(0, el.getBoundingClientRect().top - docTop());
-    if(rawTop < 1) return;
-    const remainder = rawTop % contentHeightPx;
-    const pad = remainder > 1 ? contentHeightPx - remainder : 0;
-    if(pad <= 1) return;
+  function insertSpacerBefore(el, pad){
     const spacer = document.createElement('div');
     spacer.className = 'pdf-page-break-spacer';
     spacer.style.height = `${pad}px`;
     spacer.style.breakAfter = 'avoid';
     spacer.style.pageBreakAfter = 'avoid';
     el.parentNode.insertBefore(spacer, el);
+  }
+  Array.from(doc.querySelectorAll('.print-page')).forEach(el => {
+    const rawTop = Math.max(0, el.getBoundingClientRect().top - docTop());
+    if(rawTop < 1) return;
+    const remainder = rawTop % contentHeightPx;
+    const pad = remainder > 1 ? contentHeightPx - remainder : 0;
+    if(pad <= 1) return;
+    insertSpacerBefore(el, pad);
+  });
+  Array.from(doc.querySelectorAll(PDF_EXPORT_AVOID_BREAK_SELECTOR)).forEach(el => {
+    if(el.classList?.contains('pdf-page-break-spacer')) return;
+    const rect = el.getBoundingClientRect();
+    const height = rect.height || 0;
+    if(height <= 8 || height >= contentHeightPx * 0.88) return;
+    const top = Math.max(0, rect.top - docTop());
+    const bottom = top + height;
+    const topPage = Math.floor(top / contentHeightPx);
+    const bottomPage = Math.floor((bottom - 1) / contentHeightPx);
+    if(topPage === bottomPage) return;
+    const remainder = top % contentHeightPx;
+    const pad = contentHeightPx - remainder;
+    if(pad > 1 && pad < contentHeightPx * 0.9) insertSpacerBefore(el, pad);
   });
 }
 function createPdfPositionResolver(pdf, doc){
@@ -1437,6 +1455,19 @@ function createPdfPositionResolver(pdf, doc){
       return pointFromRect(el.getBoundingClientRect());
     }
   };
+}
+function canvasSliceToDataUrl(canvas, sourceY, sourceHeight){
+  const h = Math.max(1, Math.min(Math.round(sourceHeight), canvas.height - Math.round(sourceY)));
+  const y = Math.max(0, Math.round(sourceY));
+  const pageCanvas = document.createElement('canvas');
+  pageCanvas.width = canvas.width;
+  pageCanvas.height = h;
+  const ctx = pageCanvas.getContext('2d');
+  ctx.drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+  const dataUrl = pageCanvas.toDataURL('image/jpeg', 0.96);
+  pageCanvas.width = 0;
+  pageCanvas.height = 0;
+  return { dataUrl, heightPx: h };
 }
 async function renderPdfBodyPages(pdf, doc){
   const layout = getPdfLayout(pdf, doc);
@@ -1470,14 +1501,15 @@ async function renderPdfBodyPages(pdf, doc){
       windowWidth: Math.ceil(docRect.width),
       windowHeight: Math.ceil(chunkHeightPx)
     });
-    const imgData = canvas.toDataURL('image/jpeg', 0.96);
-    const chunkHeightMm = chunkHeightPx * pxToMm;
     for(let offset=0; offset<pagesInChunk; offset++){
       const pageIndex = chunkStart + offset;
       if(pageIndex > 0) pdf.addPage();
-      const pageAlias = `pdf-chunk-${chunkStart}`;
-      const pageOffsetMm = offset * contentHeightPx * pxToMm;
-      pdf.addImage(imgData, 'JPEG', margin.left, margin.top - pageOffsetMm, contentWidth, chunkHeightMm, pageAlias, 'FAST');
+      const sourceY = offset * contentHeightPx * PDF_EXPORT_SCALE;
+      const sourceHeight = Math.min(contentHeightPx * PDF_EXPORT_SCALE, canvas.height - sourceY);
+      if(sourceHeight <= 0) continue;
+      const pageSlice = canvasSliceToDataUrl(canvas, sourceY, sourceHeight);
+      const sliceHeightMm = Math.min(contentHeight, (pageSlice.heightPx / PDF_EXPORT_SCALE) * pxToMm);
+      pdf.addImage(pageSlice.dataUrl, 'JPEG', margin.left, margin.top, contentWidth, sliceHeightMm, undefined, 'FAST');
     }
     canvas.width = 0;
     canvas.height = 0;
