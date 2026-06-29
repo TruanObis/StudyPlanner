@@ -171,6 +171,8 @@
     }
 
     .tabs { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 20px; padding-bottom: 5px; flex-wrap: wrap; }
+    .bulk-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:-8px 0 16px; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--card-bg); }
+    .card-selected { outline: 2px solid var(--primary); outline-offset: 1px; }
     .tab-btn { flex: 0 0 auto; padding: 8px 16px; border-radius: 20px; border: 1px solid var(--line); background: var(--card-bg); color: var(--text-sub); font-weight: 700; cursor:pointer; transition:0.2s; }
     .tab-btn:hover { border-color: var(--primary); color: var(--primary); }
     .tab-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
@@ -218,6 +220,12 @@
     .time-slot { background: var(--input-bg); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; padding: 10px; transition: 0.2s; cursor: pointer; }
     .time-slot:hover { border-color: var(--primary); background: rgba(37, 99, 235, 0.02); }
     .time-slot.drag-over { border-color: var(--primary); background: rgba(37,99,235,0.05); transform: scale(1.02); }
+    .time-slot.slot-dragging { opacity: 0.65; }
+
+    .slot-head { font-size:0.85rem; font-weight:700; color:var(--text-sub); margin-bottom:8px; }
+    .slot-head-actions { display:flex; align-items:center; gap:2px; }
+    .slot-drag-handle { cursor: grab; user-select:none; font-size:0.95rem; padding:2px 6px; border-radius:6px; }
+    .slot-drag-handle:active { cursor: grabbing; }
 
     .sb-card { background: var(--card-bg); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: grab; display:flex; flex-direction:column; }
     .sb-card:active { cursor: grabbing; }
@@ -625,7 +633,6 @@ const __assetUrlCache = new Map();
 const __assetLoadPending = new Set();
 let __assetRerenderScheduled = false;
 
-
 function openAssetDb() {
   if (__assetDbPromise) return __assetDbPromise;
   __assetDbPromise = new Promise((resolve, reject) => {
@@ -743,8 +750,8 @@ function createMdToolbar(textarea) {
     ['</>', '코드', () => insertAtSelection(textarea, '`', '`')],
     ['링크', '링크', () => insertAtSelection(textarea, '[텍스트](https://)')],
     ['H1', '제목', () => insertAtSelection(textarea, '# ')],
-    ['• 목록', '목록', () => insertAtSelection(textarea, '- ')],
-    ['☑ 체크', '체크리스트', () => insertAtSelection(textarea, '- [ ] ')]
+    ['목록', '목록', () => insertAtSelection(textarea, '- ')],
+    ['체크', '체크리스트', () => insertAtSelection(textarea, '- [ ] ')]
   ].forEach(([label, title, action]) => {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -766,7 +773,7 @@ function createMdToolbar(textarea) {
   const imgBtn = document.createElement('button');
   imgBtn.type = 'button';
   imgBtn.className = 'btn btn-outline';
-  imgBtn.textContent = '🖼 이미지';
+  imgBtn.textContent = '이미지';
   imgBtn.onclick = () => fileInput.click();
   bar.appendChild(imgBtn);
   bar.appendChild(fileInput);
@@ -780,6 +787,7 @@ function setupMarkdownEditors() {
     ta.parentElement.insertBefore(createMdToolbar(ta), ta);
   });
 }
+
 
 /* === 이미지 클릭 시 원본 보기 (새 탭) === */
 document.addEventListener('click', function(e){
@@ -834,6 +842,7 @@ let selectorMode = 'add'; // 'add' | 'move_detail' | 'move_question'
 let moveState = null;
 let editState = null;
 let selectorState = { date: null, slotIdx: null, stack: [] };
+let selectedCards = new Set();
 let ticker = null;
 
 // Prevent accidental drag from interactive controls (checkbox/button/etc.)
@@ -874,6 +883,160 @@ document.addEventListener('pointercancel', __restoreTmpDraggable, true);
    CORE UTILITIES
 ========================= */
 function uid(prefix){ return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`; }
+function getSelectionKey(level, pid, idx, tabId){ return `${level}:${pid||''}:${tabId||''}:${idx}`; }
+function isCardSelected(level, pid, idx, tabId){ return selectedCards.has(getSelectionKey(level, pid, idx, tabId)); }
+function toggleCardSelection(level, pid, idx, tabId, checked){
+  const key = getSelectionKey(level, pid, idx, tabId);
+  if(checked) selectedCards.add(key);
+  else selectedCards.delete(key);
+}
+function clearSelectedInView(level, pid, tabId){
+  const prefix = `${level}:${pid||''}:${tabId||''}:`;
+  selectedCards.forEach(k=>{ if(k.startsWith(prefix)) selectedCards.delete(k); });
+}
+function getSelectedIndices(level, pid, tabId){
+  const prefix = `${level}:${pid||''}:${tabId||''}:`;
+  return [...selectedCards]
+    .filter(k=>k.startsWith(prefix))
+    .map(k=>Number(k.split(':').pop()))
+    .filter(n=>Number.isFinite(n))
+    .sort((a,b)=>a-b);
+}
+
+function escapeHtml(s='') {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function renderMdOrText(text) {
+  return `<div class="md-content">${renderMarkdown(text || '')}</div>`;
+}
+function findSubjectNameByDetailId(detailId) {
+  return DATA.home.subjects.find(s => s.id === detailId)?.name || '홈페이지 카드';
+}
+function findDetailCardByModuleId(mid) {
+  for (const [detailId, detail] of Object.entries(DATA.details || {})) {
+    const card = (detail.cards || []).find(c => c.module === mid);
+    if (card) return { detailId, card };
+  }
+  return null;
+}
+function doneMark(done){ return done ? '☑' : '☐'; }
+function renderModuleChecklist(mid){
+  const mod = DATA.modules?.[mid];
+  if(!mod) return '';
+  const tabs = mod.tabs || [];
+  if(!tabs.length) return '';
+  return `<div class="section-gap"></div><h3>체크리스트</h3>` + tabs.map(tab => {
+    const qHtml = (tab.questions||[]).map((q, qi) => `<li>${doneMark(!!q.done)} ${escapeHtml((q.src||'').trim().slice(0, 50) || (q.text||'').replace(/<[^>]*>/g,'').trim().slice(0, 50) || '(내용 없음)')}</li>`).join('');
+    return `<div class="section-gap"></div><div><strong>${doneMark(!!tab.done)} ${escapeHtml(tab.label || '탭')}</strong></div>${qHtml ? `<ul>${qHtml}</ul>` : ''}`;
+  }).join('');
+}
+function openPrintWindow(title, bodyHtml, opts = {}){
+  const headerLeft = opts.headerLeft || '';
+  const headerRight = opts.headerRight || '';
+  const w=window.open('', '_blank');
+  if(!w) return alert('팝업이 차단되어 PDF 내보내기를 실행할 수 없습니다.');
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <style>
+    html{font-size:65%;}
+    body{font-family:Pretendard,sans-serif;padding:24px;line-height:1.6;color:#0f172a}
+    .print-header{display:flex;justify-content:space-between;align-items:flex-start;color:#475569;font-size:12px;margin-bottom:18px}
+    .print-header .right{text-align:right}
+    h1,h2,h3{margin:0 0 8px}
+    h1{font-size:1.4rem}
+    .as-body{font-size:1rem;font-weight:400;line-height:1.7}
+    .as-body h1,.as-body h2,.as-body h3{font-size:1rem;font-weight:400;margin:0 0 6px}
+    .md-content h1,.md-content h2,.md-content h3{font-size:1rem;font-weight:600;margin:0 0 8px}
+    .md-content p{margin:0.35rem 0}
+    .section-sep{margin:16px 0 10px;border:0;border-top:1px solid #cbd5e1}
+    .section-gap{height:6px}
+  </style>
+  </head><body>
+  <div class="print-header"><div>${escapeHtml(headerLeft)}</div><div class="right">${escapeHtml(headerRight)}</div></div>
+  ${bodyHtml}
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"><\/script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"><\/script>
+  <script>
+    function __renderPrintMath(){
+      if(window.renderMathInElement){
+        renderMathInElement(document.body, { delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}], throwOnError:false });
+      }
+      setTimeout(function(){ window.focus(); window.print(); }, 250);
+    }
+    window.addEventListener('load', function(){ setTimeout(__renderPrintMath, 120); });
+  <\/script>
+  </body></html>`);
+  w.document.close();
+}
+function exportCardPdf(level, pid, idx, tabId){
+  let title='카드'; let html='';
+  let headerLeft=''; let headerRight='';
+  if(level==='home'){
+    const sub = DATA.home.subjects[idx];
+    title=sub?.name||'홈페이지 카드';
+    headerLeft = `${title}`;
+    headerRight = sub?.badge || '';
+    html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(sub?.examInfo || '')}${(DATA.details?.[sub?.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>체크리스트</h3><ul>${(DATA.details?.[sub?.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`;
+  } else if(level==='detail'){
+    const c = DATA.details?.[pid]?.cards?.[idx];
+    if(!c) return;
+    title=c.title||'카드';
+    headerLeft = `${findSubjectNameByDetailId(pid)} > ${title}`;
+    headerRight = c.badge || '';
+    html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}${renderModuleChecklist(c.module)}`;
+  } else if(level==='module_theory'){
+    const mod = DATA.modules?.[pid];
+    const tab = mod?.tabs?.find(t=>t.id===tabId);
+    const parent = findDetailCardByModuleId(pid);
+    const homeTitle = parent ? findSubjectNameByDetailId(parent.detailId) : '홈페이지 카드';
+    const detailTitle = parent?.card?.title || mod?.title || 'module 카드';
+    title = tab?.label || '이론 카드';
+    headerLeft = `${homeTitle} > ${detailTitle} > ${title}`;
+    html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(tab?.theoryNote || '')}`;
+  } else if(level==='module'){
+    const mod = DATA.modules?.[pid];
+    const tab = mod?.tabs?.find(t=>t.id===tabId) || mod?.tabs?.[0];
+    const q = tab?.questions?.[idx];
+    if(!q) return;
+    title=(q.text||'문항').slice(0,40);
+    const parent = findDetailCardByModuleId(pid);
+    const homeTitle = parent ? findSubjectNameByDetailId(parent.detailId) : '홈페이지 카드';
+    const detailTitle = parent?.card?.title || mod?.title || 'module 카드';
+    headerLeft = `${homeTitle} > ${detailTitle} > ${(tab?.label || '기출문제')}`;
+    headerRight = q.src || '';
+    html = `<div class="md-content as-body">${renderMarkdown(q.text || '')}</div>${q.userNote ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(q.userNote)}` : ''}`;
+  }
+  openPrintWindow(title, html, { headerLeft, headerRight });
+}
+function exportPagePdf(level, id){
+  if(level==='home'){
+    const headerRight = HOME_BADGE_FILTER==='all' ? '' : `${HOME_BADGE_FILTER}`;
+    const list = (HOME_BADGE_FILTER==='all') ? (DATA.home.subjects||[]) : (DATA.home.subjects||[]).filter(s=>badgeTags(s.badge).includes(HOME_BADGE_FILTER) || String(s.badge||'').trim()===HOME_BADGE_FILTER);
+    const html = `<h1>${escapeHtml(DATA.home.title||APP_NAME)}</h1>${renderMdOrText(DATA.home.subtitle||'')}` + list.map(sub=>`<hr><h2>${escapeHtml(sub.name||'')}</h2>${renderMdOrText(sub.examInfo||'')}${(DATA.details?.[sub.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>체크리스트</h3><ul>${(DATA.details?.[sub.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`).join('');
+    return openPrintWindow(DATA.home.title||'홈', html, { headerRight });
+  }
+  if(level==='detail'){
+    const d = DATA.details?.[id];
+    if(!d) return;
+    const activeFilter = DETAIL_BADGE_FILTER?.[id] || 'all';
+    const cards = (d.cards||[]).filter(c => activeFilter==='all' ? true : badgeTags(c.badge).includes(activeFilter));
+    const headerRight = activeFilter==='all' ? '' : `${activeFilter}`;
+    const html = `<h1>${escapeHtml(d.title||'')}</h1>${renderMdOrText(d.subtitle||'')}` + cards.map(c=>`<hr><h2>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</h2>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}${renderModuleChecklist(c.module)}`).join('');
+    return openPrintWindow(d.title||'상세', html, { headerRight });
+  }
+  if(level==='module'){
+    const m = DATA.modules?.[id];
+    if(!m) return;
+    const html = `<h1>${escapeHtml(m.title||'')}</h1>${renderMdOrText(m.subtitle||'')}` + (m.tabs||[]).map(t=>`<hr><h2>${escapeHtml(t.label||'')}</h2>${renderMdOrText(t.theoryNote||'')}${(t.questions||[]).map(q=>`<div class="section-gap"></div><div class="md-content as-body">${renderMarkdown(q.text||'')}</div>${q.src ? `<div style="color:#64748b;font-size:0.9rem;">${escapeHtml(q.src)}</div>` : ''}${q.userNote ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(q.userNote)}` : ''}`).join('')}`).join('');
+    return openPrintWindow(m.title||'모듈', html);
+  }
+}
 
 function toYMDLocal(dt){
   const y = dt.getFullYear();
@@ -1148,7 +1311,7 @@ window.loadJsonFile = function(e) {
       const parsed = JSON.parse(evt.target.result);
       const backupAssets = parsed && parsed.__assets;
       if (parsed && parsed.__assets) delete parsed.__assets;
-      DATA = convertIncomingData(parsed);
+      DATA = parsed;
       normalizeData();
       if (backupAssets && backupAssets.length) await importAssetsFromBackup(backupAssets);
       saveData();
@@ -1170,10 +1333,10 @@ async function hardReset(){
   DATA = baseData();
 
   try {
-    const res = await fetch('New_Default.json');
+    const res = await fetch('cpa_content_v2.json');
     if(res.ok) {
       const json = await res.json();
-      DATA = convertIncomingData(json);
+      DATA = {...DATA, ...json};
     }
   } catch (e) {}
 
@@ -1187,7 +1350,7 @@ window.resetData = hardReset;
 
 function baseData(){
   return {
-    meta: { appTitle: "2026 CPA Master Planner V2", version: "2.0" },
+    meta: { version: "2.6" },
     home: {
       title: "2026 CPA 합격 플래너",
       subtitle: "과목별 진도와 시간을 체계적으로 관리하세요",
@@ -1200,103 +1363,10 @@ function baseData(){
   };
 }
 
-function convertIncomingData(raw){
-  if(!raw || typeof raw !== 'object') return baseData();
-
-  // New schema: { meta, schedule, curriculum }
-  if(Array.isArray(raw.curriculum) || raw.schedule){
-    const next = baseData();
-
-    if(raw.meta && typeof raw.meta === 'object'){
-      next.meta = {...next.meta, ...raw.meta};
-    }
-
-    const schedule = (raw.schedule && typeof raw.schedule === 'object') ? raw.schedule : {};
-    if(Array.isArray(schedule.dDays)) next.home.dDays = schedule.dDays;
-    if(schedule.dailyHistory && typeof schedule.dailyHistory === 'object') next.dailyHistory = schedule.dailyHistory;
-
-    const curriculum = Array.isArray(raw.curriculum) ? raw.curriculum : [];
-    next.home.subjects = curriculum.map(s=>({
-      id: s.id || uid('s'),
-      name: s.name || '새 과목',
-      examInfo: s.examInfo || '',
-      badge: s.badge || '',
-      done: !!s.progress?.done,
-      time: Number(s.progress?.time) || 0,
-      today: Number(s.progress?.today) || 0
-    }));
-
-    curriculum.forEach((s, sIdx)=>{
-      const sid = next.home.subjects[sIdx].id;
-      const cards = Array.isArray(s.cards) ? s.cards : [];
-      next.details[sid] = {
-        id: sid,
-        title: s.name || '새 과목',
-        subtitle: s.examInfo || '',
-        cards: cards.map(c=>{
-          const card = {
-            id: c.id || uid('c'),
-            title: c.title || '새 카드',
-            scope: c.scope || '',
-            qbox: c.qbox || '',
-            done: !!c.progress?.done,
-            time: Number(c.progress?.time) || 0,
-            isRunning: !!c.progress?.isRunning
-          };
-
-          const mod = (c.module && typeof c.module === 'object') ? c.module : null;
-          if(mod){
-            const mid = mod.id || uid('m');
-            card.module = mid;
-            if(!next.modules[mid]){
-              const tabs = Array.isArray(mod.tabs) ? mod.tabs : [];
-              next.modules[mid] = {
-                id: mid,
-                title: c.title || '모듈',
-                subtitle: c.scope || '',
-                backTo: `#/detail/${sid}`,
-                activeTab: mod.activeTab || tabs[0]?.id || '',
-                tabs: tabs.map(t=>(
-                  {
-                    id: t.id || uid('t'),
-                    label: t.label || '이론',
-                    theoryNote: t.theoryNote || '',
-                    done: !!t.progress?.done,
-                    time: Number(t.progress?.time) || 0,
-                    isRunning: !!t.progress?.isRunning,
-                    questions: (Array.isArray(t.questions) ? t.questions : []).map(q=>({
-                      id: q.id || uid('q'),
-                      src: q.src || '',
-                      text: q.text || '',
-                      userNote: q.userNote || '',
-                      done: !!q.progress?.done,
-                      time: Number(q.progress?.time) || 0,
-                      isRunning: !!q.progress?.isRunning
-                    }))
-                  }
-                ))
-              };
-            }
-          }
-
-          return card;
-        })
-      };
-    });
-
-    return next;
-  }
-
-  return raw;
-}
-
 function normalizeData(){
-  const baseHome = baseData().home;
   if(!DATA || typeof DATA !== 'object') DATA = baseData();
-  if(!DATA.meta) DATA.meta = {appTitle:'2026 CPA Master Planner V2',version:'2.0'};
+  if(!DATA.meta) DATA.meta = {version:"2.6"};
   if(!DATA.home) DATA.home = baseData().home;
-  if(typeof DATA.home.title !== 'string' || !DATA.home.title.trim()) DATA.home.title = baseHome.title;
-  if(typeof DATA.home.subtitle !== 'string' || !DATA.home.subtitle.trim()) DATA.home.subtitle = baseHome.subtitle;
   if(!Array.isArray(DATA.home.subjects)) DATA.home.subjects = [];
   if(!Array.isArray(DATA.home.dDays)) DATA.home.dDays = [];
   if(!DATA.details) DATA.details = {};
@@ -1667,6 +1737,11 @@ function renderHome() {
   const ddays = DATA.home.dDays || [];
   const homeBadges = [...new Set((DATA.home.subjects||[]).map(s=>String(s.badge||'').trim()).filter(b=>b))];
   const homeFiltered = (HOME_BADGE_FILTER==='all') ? (DATA.home.subjects||[]) : (DATA.home.subjects||[]).filter(s=>badgeTags(s.badge).includes(HOME_BADGE_FILTER) || String(s.badge||'').trim()===HOME_BADGE_FILTER);
+  const selectedCount = getSelectedIndices('home', 'home', null).length;
+  const homeAllSelected = homeFiltered.length > 0 && homeFiltered.every(sub => {
+    const realIdx = (DATA.home.subjects||[]).findIndex(x=>x.id===sub.id);
+    return realIdx >= 0 && isCardSelected('home', 'home', realIdx, null);
+  });
   APP.style.display = '';
   ERR_SCREEN.style.display = 'none';
 
@@ -1681,6 +1756,7 @@ function renderHome() {
       <div style="margin-top:10px;">
         <button class="btn btn-outline" onclick="triggerImport()">📂</button>
         <button class="btn btn-outline" onclick="exportData()">💾</button>
+        <button class="btn btn-outline" onclick="exportPagePdf('home','home')" title="현재 필터 기준 페이지 PDF">🖨️</button>
         <button class="btn btn-outline" onclick="resetAccumulatedTime('all')" title="누적 시간 전체 초기화">⏱</button>
         <button class="btn btn-outline" style="color:#ef4444;" onclick="hardReset()">🗑</button>
       </div>
@@ -1693,15 +1769,24 @@ function renderHome() {
       ${homeBadges.map(b=>`<button class="tab-btn ${HOME_BADGE_FILTER===b?'active':''}" onclick="setHomeBadgeFilter('${b}',this)">${b}</button>`).join('')}
     </div>
 
+    <div class="bulk-bar">
+      <label class="chk-wrap" style="cursor:pointer;"><input type="checkbox" ${homeAllSelected?'checked':''} onchange="selectAllCurrent('home','home',null,this.checked)"><span>현재 목록 전체 선택</span></label>
+      <span style="color:var(--text-sub);">선택 ${selectedCount}개</span>
+      <button class="btn btn-outline btn-danger" onclick="deleteSelectedCards('home','home',null)">선택 삭제</button>
+      <button class="btn btn-outline" onclick="clearSelectionAndRender()">선택 해제</button>
+    </div>
+
     <div class="grid" id="homeGrid">
       ${homeFiltered.map((sub, idx) => {
         const realIdx = (DATA.home.subjects||[]).findIndex(x=>x.id===sub.id);
         const dStats = calcSubjectStats(sub.id);
         const cards = DATA.details[sub.id] ? DATA.details[sub.id].cards : [];
+        const selected = isCardSelected('home', 'home', realIdx, null);
         return `
-        <div class="card" id="card-${sub.id}" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'home',null,${realIdx})" data-index="${realIdx}">
+        <div class="card ${selected?'card-selected':''}" id="card-${sub.id}" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'home',null,${realIdx})" data-index="${realIdx}">
           <div class="card-top">
             <div style="display:flex; align-items:center; gap:8px;">
+              <input type="checkbox" ${selected?'checked':''} onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" onchange="toggleCardSelection('home','home',${realIdx},null,this.checked); renderRouter(true)">
               <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" title="드래그하여 시간표로">⋮⋮</span>
               <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsStr(sub.name||'(제목 없음)')}', '#/?focus=${sub.id}');">📋</button>
               <span class="badge">${sub.badge||''}</span>
@@ -1709,6 +1794,7 @@ function renderHome() {
             <div class="card-actions">
 
               <button class="btn btn-icon" onclick="duplicateSubject(${realIdx});event.stopPropagation()">📑</button>
+              <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('home','home',${realIdx},'');event.stopPropagation()">🖨️</button>
               <button class="btn btn-icon" onclick="openEditModal('subject','home',${realIdx});event.stopPropagation()">✏️</button>
               <button class="btn btn-icon btn-danger" onclick="deleteCard('subject','home',${realIdx});event.stopPropagation()">🗑</button>
             </div>
@@ -1787,18 +1873,28 @@ function renderDetail(sid) {
   const badgeList = [...new Set((detail.cards||[]).map(c=>badgeTags(c.badge)).flat())];
   const selectedBadge = DETAIL_BADGE_FILTER[sid] || 'all';
   const activeBadge = (selectedBadge === 'all' || badgeList.includes(selectedBadge)) ? selectedBadge : 'all';
+  const selectedCount = getSelectedIndices('detail', sid, null).length;
+  const detailAllSelected = (detail.cards||[]).length > 0 && (detail.cards||[]).every((_, i)=>isCardSelected('detail', sid, i, null));
 
   DETAIL_BADGE_FILTER[sid] = activeBadge;
 
-  const esc = (s)=>String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const esc = (s)=>String(s).replace(/\\/g,'\\\\').replace(/'/g,"\'");
 
   APP.innerHTML = `
     <div style="margin-bottom:20px;"><button class="btn btn-outline" onclick="location.hash='#/'">← 홈</button></div>
     <div style="margin-bottom:20px;">
       <h1 class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.title||'(제목 없음)'}</h1>
       <p class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.subtitle||''}</p>
+      <button class="btn btn-outline" style="margin-top:10px;" onclick="exportPagePdf('detail','${sid}')">🖨️ 페이지 PDF</button>
     </div>
     ${renderStickyHeader('진행률', stats.pct, stats.timeStr)}
+    <div class="bulk-bar">
+      <label class="chk-wrap" style="cursor:pointer;"><input type="checkbox" ${detailAllSelected?'checked':''} onchange="selectAllCurrent('detail','${sid}',null,this.checked)"><span>전체 선택</span></label>
+      <span style="color:var(--text-sub);">선택 ${selectedCount}개</span>
+      <button class="btn btn-outline" onclick="moveSelectedCards('detail','${sid}',null)">선택 이동</button>
+      <button class="btn btn-outline btn-danger" onclick="deleteSelectedCards('detail','${sid}',null)">선택 삭제</button>
+      <button class="btn btn-outline" onclick="clearSelectionAndRender()">선택 해제</button>
+    </div>
     <div class="tabs">
       <button class="tab-btn ${activeBadge==='all'?'active':''}" onclick="filterCards('all',this,'${sid}')">전체</button>
       ${badgeList.map(b=>`<button class="tab-btn ${activeBadge===b?'active':''}" onclick="filterCards('${esc(b)}',this,'${sid}')">${b}</button>`).join('')}
@@ -1811,12 +1907,15 @@ function renderDetail(sid) {
   scheduleMathRender();
 }
 
+
 function renderModule(mid) {
   const mod = DATA.modules[mid];
   const tid = mod.activeTab||mod.tabs[0].id;
   const tab = mod.tabs.find(t=>t.id===tid)||mod.tabs[0];
   const stats = calcModuleStats(mid);
   const theoryId = `theory-${mid}-${tid}`;
+  const selectedCount = getSelectedIndices('module', mid, tid).length;
+  const moduleAllSelected = (tab.questions||[]).length > 0 && (tab.questions||[]).every((_, i)=>isCardSelected('module', mid, i, tid));
 
   // Question source filter (badge-like): keep ORIGINAL indices so edit/delete/move targets remain correct
   const qSel = getModuleQSrcFilter(mid, tid);
@@ -1836,12 +1935,21 @@ function renderModule(mid) {
 
     <h1 class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.title||'(모듈)'}</h1>
     <p class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.subtitle||''}</p>
+    <button class="btn btn-outline" style="margin-bottom:12px;" onclick="exportPagePdf('module','${mid}')">🖨️ 페이지 PDF</button>
 
     ${renderStickyHeader('모듈 진행률', stats.pct, stats.timeStr)}
 
     <div class="tabs">
       ${mod.tabs.map(t=>`<button class="tab-btn ${t.id===tid?'active':''}" onclick="switchTab('${mid}','${t.id}')">${t.label}</button>`).join('')}
       <button class="tab-btn" onclick="openEditModal('tab_add','${mid}');event.stopPropagation()">+</button>
+    </div>
+
+    <div class="bulk-bar">
+      <label class="chk-wrap" style="cursor:pointer;"><input type="checkbox" ${moduleAllSelected?'checked':''} onchange="selectAllCurrent('module','${mid}','${tid}',this.checked)"><span>현재 탭 전체 선택</span></label>
+      <span style="color:var(--text-sub);">선택 ${selectedCount}개</span>
+      <button class="btn btn-outline" onclick="moveSelectedCards('module','${mid}','${tid}')">선택 이동</button>
+      <button class="btn btn-outline btn-danger" onclick="deleteSelectedCards('module','${mid}','${tid}')">선택 삭제</button>
+      <button class="btn btn-outline" onclick="clearSelectionAndRender()">선택 해제</button>
     </div>
 
     <div class="card" draggable="true" ondragstart="handleDragStart(event, 'theory', '${tid}', '${mid}')" id="card-${theoryId}" style="margin-bottom:30px;">
@@ -1853,6 +1961,7 @@ function renderModule(mid) {
         </div>
         <div class="card-actions" style="opacity:1;">
           <button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveTheory('${mid}','${tid}');event.stopPropagation()">↪</button>
+          <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('module_theory','${mid}',0,'${tid}');event.stopPropagation()">🖨️</button>
           <button class="btn btn-icon btn-danger" onclick="deleteTab('${mid}','${tid}');event.stopPropagation()">🗑</button>
         </div>
       </div>
@@ -1910,6 +2019,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
   const copyHash = isMod
     ? buildCardHash('question', item.id, pid, null)
     : buildCardHash('detail', sid, pid, null);
+  const selected = isCardSelected(level, pid, idx, tabId);
 
   if (!isMod && item.module && DATA.modules[item.module]) {
     const ms = calcModuleStats(item.module);
@@ -1938,9 +2048,10 @@ function renderCardItem(item, level, pid, idx, tabId) {
   }
 
   return `
-    <div class="card ${!isMod&&item.module?'clickable':''}" data-index="${idx}" id="card-${sid}" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'${level}','${pid}',${idx},'${tabSafe}')">
+    <div class="card ${!isMod&&item.module?'clickable':''} ${selected?'card-selected':''}" data-index="${idx}" id="card-${sid}" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'${level}','${pid}',${idx},'${tabSafe}')">
       <div class="card-top">
         <div style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" ${selected?'checked':''} onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" onchange="toggleCardSelection('${level}','${pid}',${idx},'${tabSafe}',this.checked); renderRouter(true)">
           <span class="drag-handle" draggable="true" ondragstart="${dragStartCode}" title="드래그하여 시간표로">⋮⋮</span>
           <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsStr(copyTitle)}', '${jsStr(copyHash)}');">📋</button>
           <span class="badge">${isMod?(item.src||'문항'):(item.badge||'Topic')}</span>
@@ -1949,9 +2060,10 @@ function renderCardItem(item, level, pid, idx, tabId) {
           ${level==='detail' ? `<button class="btn btn-icon" title="다른 과목으로 이동" onclick="openMoveDetailCard('${pid}',${idx});event.stopPropagation()">↪</button>` : ''}
           ${isMod ? `<button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveQuestion('${pid}','${tabSafe}',${idx});event.stopPropagation()">↪</button>` : ''}
 
-          <button class="btn btn-icon" onclick="duplicateCard('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">📑</button>
-          <button class="btn btn-icon" onclick="(('${level}'==='detail')?openEditModal('detail','${pid}',${idx}):openEditModal('module','${pid}',${idx},'${tabId}'));event.stopPropagation()">✏️</button>
-          <button class="btn btn-icon btn-danger" onclick="(('${level}'==='detail')?deleteCard('detail','${pid}',${idx}):deleteCard('module','${pid}',${idx},'${tabId}'));event.stopPropagation()">🗑</button>
+          <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">🖨️</button>
+          <button class="btn btn-icon" onclick="duplicateCard('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">📑</button>
+          <button class="btn btn-icon" onclick="(('${level}'==='detail')?openEditModal('detail','${pid}',${idx}):openEditModal('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">✏️</button>
+          <button class="btn btn-icon btn-danger" onclick="(('${level}'==='detail')?deleteCard('detail','${pid}',${idx}):deleteCard('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">🗑</button>
         </div>
       </div>
 
@@ -1970,9 +2082,9 @@ function renderCardItem(item, level, pid, idx, tabId) {
           <span class="note-label-small">📝 오답 노트</span>
           <div id="view-${sid}" class="note-view md-content" data-empty="${!item.userNote}" onclick="toggleNoteView('${sid}')">${renderMarkdown(item.userNote||"")}</div>
           <div id="edit-${sid}" class="note-edit">
-            <textarea id="ta-${sid}" class="note-textarea md-editable" data-autosave="1" data-kind="card" data-mid="${pid}" data-tabid="${tabId}" data-idx="${idx}">${item.userNote||''}</textarea>
+            <textarea id="ta-${sid}" class="note-textarea md-editable" data-autosave="1" data-kind="card" data-mid="${pid}" data-tabid="${tabSafe}" data-idx="${idx}">${item.userNote||''}</textarea>
             <div style="text-align:right;margin-top:5px;">
-              <button class="btn btn-primary" onclick="saveNoteText('card','${pid}',${idx},'${tabId}','${sid}')">저장</button>
+              <button class="btn btn-primary" onclick="saveNoteText('card','${pid}',${idx},'${tabSafe}','${sid}')">저장</button>
             </div>
           </div>
         </div>` : ''
@@ -1982,14 +2094,14 @@ function renderCardItem(item, level, pid, idx, tabId) {
         <label class="chk-wrap">
           <input type="checkbox" ${isDone?'checked':''} draggable="false" ondragstart="return false"
             onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
-            onchange="toggleCheck(this,'${level}','${pid}',${idx},'${tabId}')">
+            onchange="toggleCheck(this,'${level}','${pid}',${idx},'${tabSafe}')">
           <span>완료</span>
         </label>
         <div class="flex-center" style="gap:5px;">
-          <button class="btn btn-icon" onclick="editTime('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">✏️</button>
-          <button class="btn btn-icon" title="누적 시간 초기화" onclick="resetAccumulatedTime('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">⏱</button>
+          <button class="btn btn-icon" onclick="editTime('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">✏️</button>
+          <button class="btn btn-icon" title="누적 시간 초기화" onclick="resetAccumulatedTime('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">⏱</button>
           <div class="timer-display" id="time-disp-${sid}">${formatTime(totalTime)}</div>
-          <button class="btn btn-outline" style="${item.isRunning?'color:red':''}" onclick="toggleTimer('${level}','${pid}',${idx},'${tabId}');event.stopPropagation()">${item.isRunning?'❚❚':'▶'}</button>
+          <button class="btn btn-outline" style="${item.isRunning?'color:red':''}" onclick="toggleTimer('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">${item.isRunning?'❚❚':'▶'}</button>
         </div>
       </div>
     </div>`;
@@ -2219,10 +2331,25 @@ function renderDailySidebar() {
   const container = document.getElementById('dailySlots');
 
   container.innerHTML = (daily.slots||[]).map((slot, sIdx) => `
-    <div class="time-slot" ondragover="allowDrop(event)" ondrop="dropOnSlot(event, '${VIEW_DATE}', ${sIdx})">
-      <div class="flex-between" style="font-size:0.85rem; font-weight:700; color:var(--text-sub); margin-bottom:8px;">
+    <div class="time-slot"
+      ondragover="allowDrop(event)"
+      ondrop="dropOnSlot(event, '${VIEW_DATE}', ${sIdx})">
+      <div class="flex-between slot-head">
         <span>${slot.label}</span>
-        <button class="btn btn-icon" style="font-size:0.7rem;" onclick="removeSlot('${VIEW_DATE}', ${sIdx}); event.stopPropagation();">🗑</button>
+        <div class="slot-head-actions">
+          <span class="slot-drag-handle"
+            draggable="true"
+            title="시간 블록 순서 이동"
+            ondragstart="handleSlotDragStart(event, ${sIdx})"
+            ondragend="handleSlotDragEnd(event)"
+            onpointerdown="event.stopPropagation()"
+            onmousedown="event.stopPropagation()">⋮⋮</span>
+          <button class="btn btn-icon" style="font-size:0.8rem;" title="블록 이름 수정"
+            onpointerdown="event.stopPropagation()"
+            onmousedown="event.stopPropagation()"
+            onclick="editDailySlotLabel('${VIEW_DATE}', ${sIdx}); event.stopPropagation();">✏️</button>
+          <button class="btn btn-icon" style="font-size:0.7rem;" onclick="removeSlot('${VIEW_DATE}', ${sIdx}); event.stopPropagation();">🗑</button>
+        </div>
       </div>
       <div class="ts-content" style="min-height:30px;">
         ${(slot.cardIds||[]).map((ref, cIdx) => renderSidebarCard(ref, VIEW_DATE, sIdx, cIdx)).join('')}
@@ -2656,7 +2783,21 @@ function dropOnSlot(ev, date, sIdx) {
     if(!raw) return;
     const data = JSON.parse(raw);
 
-    if(data.source === 'sidebar') {
+    if(data.source === 'slot') {
+      const daily = DATA.dailyHistory?.[date];
+      if(!daily || !Array.isArray(daily.slots)) return;
+
+      const fromIdx = Number(data.sIdx);
+      const toIdx = Number(sIdx);
+      if(Number.isNaN(fromIdx) || Number.isNaN(toIdx) || fromIdx === toIdx) return;
+
+      const [moved] = daily.slots.splice(fromIdx, 1);
+      if(!moved) return;
+      daily.slots.splice(toIdx, 0, moved);
+
+      saveData();
+      renderDailySidebar();
+    } else if(data.source === 'sidebar') {
       const daily = DATA.dailyHistory?.[date];
       if(!daily) return;
       const srcSlot = daily.slots?.[data.sIdx];
@@ -2850,11 +2991,27 @@ function renderSidebarCard(ref, date, sIdx, cIdx) {
     </div>`;
 }
 
-
-function handleSidebarDragStart(ev, sIdx, cIdx) {
-  ev.dataTransfer.setData("application/json", JSON.stringify({ source:'sidebar', sIdx, cIdx }));
+function getSlotElementFromEvent(ev){
+  const node = ev?.currentTarget || ev?.target;
+  if(!node) return null;
+  if(typeof node.closest === 'function') return node.closest('.time-slot');
+  if(node.parentElement && typeof node.parentElement.closest === 'function') return node.parentElement.closest('.time-slot');
+  return null;
 }
 
+function handleSlotDragStart(ev, sIdx){
+  if(ev.dataTransfer){
+    ev.dataTransfer.effectAllowed = 'move';
+    ev.dataTransfer.setData('application/json', JSON.stringify({ source:'slot', sIdx }));
+  }
+  const slotEl = getSlotElementFromEvent(ev);
+  if(slotEl) slotEl.classList.add('slot-dragging');
+}
+
+function handleSlotDragEnd(ev){
+  const slotEl = getSlotElementFromEvent(ev);
+  if(slotEl) slotEl.classList.remove('slot-dragging');
+}
 
 
 function addToSlot(date, sIdx, ref) {
@@ -2928,6 +3085,20 @@ function addDailySlot() {
     saveData(); renderDailySidebar();
   }
 }
+function editDailySlotLabel(date, sIdx){
+  const slot = DATA.dailyHistory?.[date]?.slots?.[sIdx];
+  if(!slot) return;
+
+  const newLabel = prompt('블록 제목을 입력하세요:', slot.label || '');
+  if(newLabel === null) return;
+  const trimmed = newLabel.trim();
+  if(!trimmed) return;
+
+  slot.label = trimmed;
+  saveData();
+  renderDailySidebar();
+}
+
 function removeSlot(d,i) {
   if(confirm('삭제?')){
     DATA.dailyHistory[d].slots.splice(i,1);
@@ -3830,6 +4001,92 @@ function modalDeleteAction(){
   closeModal();
 }
 
+function clearSelectionAndRender(){
+  selectedCards.clear();
+  renderRouter(true);
+}
+
+function selectAllCurrent(level, pid, tabId, checked){
+  if(level==='home'){
+    const list = (HOME_BADGE_FILTER==='all')
+      ? (DATA.home?.subjects||[])
+      : (DATA.home?.subjects||[]).filter(s=>badgeTags(s.badge).includes(HOME_BADGE_FILTER) || String(s.badge||'').trim()===HOME_BADGE_FILTER);
+    list.forEach((s)=>{
+      const i = (DATA.home?.subjects||[]).findIndex(x=>x.id===s.id);
+      if(i>=0) toggleCardSelection('home', 'home', i, null, checked);
+    });
+  }else if(level==='detail'){
+    const list = DATA.details?.[pid]?.cards || [];
+    list.forEach((_,i)=>toggleCardSelection(level, pid, i, null, checked));
+  }else if(level==='module'){
+    const mod = DATA.modules?.[pid];
+    const tab = mod?.tabs?.find(t=>t.id===tabId) || mod?.tabs?.[0];
+    (tab?.questions||[]).forEach((_,i)=>toggleCardSelection(level, pid, i, tabId, checked));
+  }
+  renderRouter(true);
+}
+
+function deleteSelectedCards(level, pid, tabId){
+  const selected = getSelectedIndices(level, pid, tabId);
+  if(!selected.length) return alert('선택된 카드가 없습니다.');
+  if(!confirm(`선택한 ${selected.length}개 카드를 삭제하시겠습니까?`)) return;
+
+  if(level==='home'){
+    [...selected].sort((a,b)=>b-a).forEach(i=>{
+      const s = DATA.home?.subjects?.[i];
+      if(!s) return;
+      const sid = s.id;
+      const d = DATA.details?.[sid];
+      if(d){
+        (d.cards||[]).forEach(c=>{ if(c.module && DATA.modules?.[c.module]) delete DATA.modules[c.module]; });
+        delete DATA.details[sid];
+      }
+      DATA.home.subjects.splice(i,1);
+      purgeDailyRefs(ref=> (ref.type==='subject' && ref.id===sid) || (ref.pid===sid));
+    });
+  }else if(level==='detail'){
+    const list = DATA.details?.[pid]?.cards || [];
+    [...selected].sort((a,b)=>b-a).forEach(i=>{
+      const c = list[i];
+      if(!c) return;
+      if(c.module && DATA.modules?.[c.module]) delete DATA.modules[c.module];
+      list.splice(i,1);
+      purgeDailyRefs(ref=> (ref.type==='detail' && ref.id===c.id && String(ref.pid)===String(pid)));
+    });
+  }else if(level==='module'){
+    const mod = DATA.modules?.[pid];
+    const tab = mod?.tabs?.find(t=>t.id===tabId) || mod?.tabs?.[0];
+    if(!tab || !Array.isArray(tab.questions)) return;
+    [...selected].sort((a,b)=>b-a).forEach(i=>{
+      const q = tab.questions[i];
+      if(!q) return;
+      tab.questions.splice(i,1);
+      purgeDailyRefs(ref=> (ref.type==='question' && ref.id===q.id && String(ref.pid)===String(pid)));
+    });
+  }
+
+  clearSelectedInView(level, pid, tabId);
+  saveData();
+  renderRouter(true);
+  renderDailySidebar();
+}
+
+function moveSelectedCards(level, pid, tabId){
+  const selected = getSelectedIndices(level, pid, tabId);
+  if(!selected.length) return alert('선택된 카드가 없습니다.');
+  if(level==='detail'){
+    selectorMode = 'move_detail';
+    moveState = { fromSid: pid, multi: selected };
+  }else if(level==='module'){
+    selectorMode = 'move_question';
+    moveState = { fromMid: pid, fromTabId: tabId, multi: selected };
+  }else return;
+
+  selectorState = { date: null, slotIdx: null, stack: [{level:'root', id:null, title:'이동할 과목 선택'}] };
+  document.getElementById('selectorModal').style.display = 'flex';
+  renderSelectorUI();
+}
+
 function deleteCard(mode, pid, idx, tabId){
   if(!confirm('삭제하시겠습니까? (연결된 하위 데이터도 함께 삭제될 수 있습니다)')) return;
 
@@ -4257,37 +4514,42 @@ function __updateDailyRefs(pred, mut){
 
 function openMoveDetailCard(fromSid, fromIdx){
   selectorMode = 'move_detail';
-  moveState = { fromSid, fromIdx };
+  moveState = { fromSid, fromIdx, multi: null };
   selectorState = { date: null, slotIdx: null, stack: [{level:'root', id:null, title:'이동할 과목 선택'}] };
   document.getElementById('selectorModal').style.display = 'flex';
   renderSelectorUI();
 }
 
 function selectorMoveDetail(targetSid){
-  if(!moveState || !moveState.fromSid || moveState.fromIdx == null) return;
+  if(!moveState || !moveState.fromSid) return;
   const fromSid = moveState.fromSid;
-  const fromIdx = moveState.fromIdx;
   if(String(targetSid) === String(fromSid)) return;
 
   const fromDetail = DATA.details?.[fromSid];
   if(!fromDetail || !Array.isArray(fromDetail.cards)) return;
-  const card = fromDetail.cards.splice(fromIdx, 1)[0];
-  if(!card) return;
+
+  const multi = Array.isArray(moveState.multi) && moveState.multi.length
+    ? [...new Set(moveState.multi)].sort((a,b)=>a-b)
+    : [moveState.fromIdx];
 
   if(!DATA.details[targetSid]) DATA.details[targetSid] = { id: targetSid, cards: [] };
   if(!Array.isArray(DATA.details[targetSid].cards)) DATA.details[targetSid].cards = [];
-  DATA.details[targetSid].cards.push(card);
 
-  // Update module back reference if exists
-  if(card.module && DATA.modules?.[card.module]){
-    DATA.modules[card.module].backTo = `#/detail/${targetSid}`;
-  }
+  const movedCards = [];
+  [...multi].sort((a,b)=>b-a).forEach(i=>{
+    const card = fromDetail.cards.splice(i, 1)[0];
+    if(card) movedCards.push(card);
+  });
+  movedCards.reverse().forEach(card=>DATA.details[targetSid].cards.push(card));
 
-  // Update timetable refs (detail)
-  __updateDailyRefs(
-    ref => (ref.type==='detail' && ref.id===card.id && String(ref.pid)===String(fromSid)),
-    ref => { ref.pid = targetSid; }
-  );
+  movedCards.forEach(card=>{
+    if(card.module && DATA.modules?.[card.module]) DATA.modules[card.module].backTo = `#/detail/${targetSid}`;
+    __updateDailyRefs(
+      ref => (ref.type==='detail' && ref.id===card.id && String(ref.pid)===String(fromSid)),
+      ref => { ref.pid = targetSid; }
+    );
+  });
+  clearSelectedInView('detail', fromSid, null);
 
   saveData();
   closeSelectorModal();
@@ -4300,7 +4562,7 @@ function selectorMoveDetail(targetSid){
 
 function openMoveQuestion(fromMid, fromTabId, fromQIdx){
   selectorMode = 'move_question';
-  moveState = { fromMid, fromTabId, fromQIdx };
+  moveState = { fromMid, fromTabId, fromQIdx, multi: null };
   selectorState = { date: null, slotIdx: null, stack: [{level:'root', id:null, title:'이동할 과목 선택'}] };
   document.getElementById('selectorModal').style.display = 'flex';
   renderSelectorUI();
@@ -4318,7 +4580,6 @@ function selectorMoveQuestion(destMid, destTabId){
   if(!moveState || !moveState.fromMid) return;
   const fromMid = moveState.fromMid;
   const fromTabId = moveState.fromTabId;
-  const fromQIdx = moveState.fromQIdx;
 
   if(String(destMid)===String(fromMid) && String(destTabId||'')===String(fromTabId||'')) return;
 
@@ -4333,15 +4594,24 @@ function selectorMoveQuestion(destMid, destTabId){
   if(!Array.isArray(srcTab.questions)) srcTab.questions = [];
   if(!Array.isArray(dstTab.questions)) dstTab.questions = [];
 
-  const q = srcTab.questions.splice(fromQIdx, 1)[0];
-  if(!q) return;
-  dstTab.questions.push(q);
+  const multi = Array.isArray(moveState.multi) && moveState.multi.length
+    ? [...new Set(moveState.multi)].sort((a,b)=>a-b)
+    : [moveState.fromQIdx];
 
-  // Update timetable refs (question)
-  __updateDailyRefs(
-    ref => (ref.type==='question' && ref.id===q.id && String(ref.pid)===String(fromMid)),
-    ref => { ref.pid = destMid; }
-  );
+  const moved = [];
+  [...multi].sort((a,b)=>b-a).forEach(i=>{
+    const q = srcTab.questions.splice(i, 1)[0];
+    if(q) moved.push(q);
+  });
+  moved.reverse().forEach(q=>dstTab.questions.push(q));
+
+  moved.forEach(q=>{
+    __updateDailyRefs(
+      ref => (ref.type==='question' && ref.id===q.id && String(ref.pid)===String(fromMid)),
+      ref => { ref.pid = destMid; }
+    );
+  });
+  clearSelectedInView('module', fromMid, fromTabId);
 
   saveData();
   closeSelectorModal();
@@ -4411,18 +4681,15 @@ async function init(){
 
   const raw = localStorage.getItem(STORAGE_KEY);
   if(raw){
-    try{
-      const parsed = JSON.parse(raw);
-      DATA = parsed;
-    }
+    try{ DATA = JSON.parse(raw); }
     catch(e){ DATA = baseData(); }
   } else {
     DATA = baseData();
     try{
-      const res = await fetch('New_Default.json');
+      const res = await fetch('cpa_content_v2.json');
       if(res.ok){
         const json = await res.json();
-        DATA = convertIncomingData(json);
+        DATA = {...DATA, ...json};
       }
     }catch(e){}
   }

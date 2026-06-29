@@ -160,6 +160,8 @@
     .form-group { margin-bottom: 16px; }
     .form-group label { display: block; margin-bottom: 6px; font-weight: 700; font-size: 0.9rem; color: var(--text); }
     .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--input-bg); color: var(--text); }
+    .md-toolbar { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+    .md-toolbar .btn { padding:4px 8px; font-size:0.78rem; }
 
     .highlighted { animation: highlight 1.5s ease-out; }
     @keyframes highlight {
@@ -537,7 +539,7 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
     <div class="form-group" id="grpTitleInput"><label id="lblTitle">제목</label><input type="text" id="editTitle"></div>
     <div class="form-group" id="grpTitleTA" style="display:none;"><label id="lblTitle2">제목</label><textarea id="editTitleTA" rows="8" class="autogrow"></textarea></div>
     <div class="form-group"><label id="lblDesc">내용</label><textarea id="editDesc" rows="3"></textarea></div>
-    <div class="form-group" id="grpQBox"><label>팁 (Markdown)</label><textarea id="editQBox" rows="2" style="background:var(--input-bg); font-size:0.9rem;"></textarea></div>
+    <div class="form-group" id="grpQBox"><label>팁 (Markdown)</label><textarea id="editQBox" rows="2" class="md-editable" style="background:var(--input-bg); font-size:0.9rem;"></textarea></div>
     <div class="form-group" id="grpBadge"><label>배지</label><input type="text" id="editBadge"></div>
     <div style="display:flex; justify-content:flex-end; gap:10px;">
       <button id="modalDeleteBtn" class="btn btn-outline" style="display:none; border-color:var(--danger); color:var(--danger);" onclick="modalDeleteAction()">삭제</button>
@@ -614,7 +616,7 @@ function normalizeMarkdownAsterisks(text){
 }
 function renderMarkdown(text){
   if (!window.marked || typeof marked.parse !== 'function') return text || '';
-  return marked.parse(normalizeMarkdownAsterisks(text || ''));
+  return marked.parse(resolveAssetMarkdownRefs(normalizeMarkdownAsterisks(text || '')));
 }
 /* =========================
    DATA / STATE
@@ -622,7 +624,169 @@ function renderMarkdown(text){
 let DATA = null;
 const STORAGE_KEY = 'universal_planner_v28_data';
 const THEME_KEY = 'universal_planner_theme';
+const ASSET_DB_NAME = 'studyplanner_assets_v1';
+const ASSET_STORE = 'assets';
+const ASSET_ID_PREFIX = 'app://asset/';
 const APP = document.getElementById('app');
+let __assetDbPromise = null;
+const __assetUrlCache = new Map();
+const __assetLoadPending = new Set();
+let __assetRerenderScheduled = false;
+
+function openAssetDb() {
+  if (__assetDbPromise) return __assetDbPromise;
+  __assetDbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(ASSET_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      const store = db.createObjectStore(ASSET_STORE, { keyPath: 'id' });
+      store.createIndex('hash', 'hash', { unique: false });
+      store.createIndex('createdAt', 'createdAt', { unique: false });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return __assetDbPromise;
+}
+
+function txRequest(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function sha256Hex(blob) {
+  const ab = await blob.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', ab);
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function saveAssetBlob(file) {
+  const db = await openAssetDb();
+  const hash = await sha256Hex(file);
+  const tx = db.transaction(ASSET_STORE, 'readwrite');
+  const store = tx.objectStore(ASSET_STORE);
+  const existing = await txRequest(store.index('hash').get(hash));
+  if (existing && existing.id) return existing.id;
+  const id = `a_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  await txRequest(store.put({
+    id, name: file.name, type: file.type || 'application/octet-stream',
+    size: file.size || 0, hash, createdAt: Date.now(), blob: file
+  }));
+  return id;
+}
+
+async function getAssetRecord(id) {
+  const db = await openAssetDb();
+  const tx = db.transaction(ASSET_STORE, 'readonly');
+  return txRequest(tx.objectStore(ASSET_STORE).get(id));
+}
+
+async function listAssetRecords() {
+  const db = await openAssetDb();
+  const tx = db.transaction(ASSET_STORE, 'readonly');
+  return txRequest(tx.objectStore(ASSET_STORE).getAll());
+}
+
+async function getAssetObjectUrl(assetId) {
+  if (__assetUrlCache.has(assetId)) return __assetUrlCache.get(assetId);
+  const rec = await getAssetRecord(assetId);
+  if (!rec || !rec.blob) return '';
+  const url = URL.createObjectURL(rec.blob);
+  __assetUrlCache.set(assetId, url);
+  return url;
+}
+
+function queueAssetResolve(assetId) {
+  if (__assetLoadPending.has(assetId)) return;
+  __assetLoadPending.add(assetId);
+  getAssetObjectUrl(assetId)
+    .then(() => {
+      if (__assetRerenderScheduled) return;
+      __assetRerenderScheduled = true;
+      setTimeout(() => {
+        __assetRerenderScheduled = false;
+        renderRouter(true);
+      }, 0);
+    })
+    .finally(() => __assetLoadPending.delete(assetId));
+}
+
+function resolveAssetMarkdownRefs(text){
+  return String(text || '').replace(/app:\/\/asset\/([A-Za-z0-9_-]+)/g, (_, assetId) => {
+    const url = __assetUrlCache.get(assetId) || '';
+    if (!url) queueAssetResolve(assetId);
+    return url;
+  });
+}
+
+function insertAtSelection(textarea, before, after = '') {
+  if (!textarea) return;
+  const start = textarea.selectionStart || 0;
+  const end = textarea.selectionEnd || 0;
+  const selected = textarea.value.slice(start, end);
+  textarea.setRangeText(`${before}${selected}${after}`, start, end, 'end');
+  textarea.focus();
+}
+
+async function onMdImagePick(textarea, file) {
+  if (!file || !file.type.startsWith('image/')) {
+    alert('이미지 파일만 첨부할 수 있습니다.');
+    return;
+  }
+  const assetId = await saveAssetBlob(file);
+  const alt = (file.name || 'img').replace(/\.[^.]+$/, '');
+  insertAtSelection(textarea, `![${alt}](${ASSET_ID_PREFIX}${assetId})`);
+  if (textarea.classList.contains('note-textarea')) queueNoteDraftAutosave(textarea);
+}
+
+function createMdToolbar(textarea) {
+  const bar = document.createElement('div');
+  bar.className = 'md-toolbar';
+  [
+    ['B', '굵게', () => insertAtSelection(textarea, '**', '**')],
+    ['I', '기울임', () => insertAtSelection(textarea, '*', '*')],
+    ['</>', '코드', () => insertAtSelection(textarea, '`', '`')],
+    ['링크', '링크', () => insertAtSelection(textarea, '[텍스트](https://)')],
+    ['H1', '제목', () => insertAtSelection(textarea, '# ')],
+    ['목록', '목록', () => insertAtSelection(textarea, '- ')],
+    ['체크', '체크리스트', () => insertAtSelection(textarea, '- [ ] ')]
+  ].forEach(([label, title, action]) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-outline';
+    btn.textContent = label;
+    btn.title = title;
+    btn.onclick = action;
+    bar.appendChild(btn);
+  });
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/*';
+  fileInput.style.display = 'none';
+  fileInput.onchange = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) await onMdImagePick(textarea, file);
+    e.target.value = '';
+  };
+  const imgBtn = document.createElement('button');
+  imgBtn.type = 'button';
+  imgBtn.className = 'btn btn-outline';
+  imgBtn.textContent = '이미지';
+  imgBtn.onclick = () => fileInput.click();
+  bar.appendChild(imgBtn);
+  bar.appendChild(fileInput);
+  return bar;
+}
+
+function setupMarkdownEditors() {
+  document.querySelectorAll('textarea.md-editable').forEach(ta => {
+    if (ta.dataset.toolbarReady === '1') return;
+    ta.dataset.toolbarReady = '1';
+    ta.parentElement.insertBefore(createMdToolbar(ta), ta);
+  });
+}
 
 
 /* === 이미지 클릭 시 원본 보기 (새 탭) === */
@@ -1080,20 +1244,76 @@ function saveData(){
 
 function triggerImport() { document.getElementById('fileInput').click(); }
 
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [meta, base64] = String(dataUrl || '').split(',');
+  const mime = (/data:(.*?);base64/.exec(meta || '') || [])[1] || 'application/octet-stream';
+  const binary = atob(base64 || '');
+  const arr = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+async function importAssetsFromBackup(items) {
+  if (!Array.isArray(items) || !items.length) return;
+  const db = await openAssetDb();
+  const tx = db.transaction(ASSET_STORE, 'readwrite');
+  const store = tx.objectStore(ASSET_STORE);
+  for (const item of items) {
+    if (!item || !item.id || !item.dataUrl) continue;
+    await txRequest(store.put({
+      id: item.id,
+      name: item.name || item.id,
+      type: item.type || 'application/octet-stream',
+      size: item.size || 0,
+      hash: item.hash || '',
+      createdAt: item.createdAt || Date.now(),
+      blob: dataUrlToBlob(item.dataUrl)
+    }));
+  }
+}
+
 function exportData() {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(DATA, null, 2)], { type: "application/json" }));
-  a.download = `planner_backup_${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
+  (async () => {
+    const payload = JSON.parse(JSON.stringify(DATA));
+    const assets = await listAssetRecords();
+    if (assets.length) {
+      payload.__assets = await Promise.all(assets.map(async a => ({
+        id: a.id,
+        name: a.name,
+        type: a.type,
+        size: a.size,
+        hash: a.hash,
+        createdAt: a.createdAt,
+        dataUrl: await blobToDataUrl(a.blob)
+      })));
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+    a.download = `planner_backup_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+  })().catch(err => alert('백업 저장 실패: ' + err.message));
 }
 
 window.loadJsonFile = function(e) {
   const f = e.target.files[0]; if (!f) return;
   const r = new FileReader();
-  r.onload = function(evt) {
+  r.onload = async function(evt) {
     try {
-      DATA = JSON.parse(evt.target.result);
+      const parsed = JSON.parse(evt.target.result);
+      const backupAssets = parsed && parsed.__assets;
+      if (parsed && parsed.__assets) delete parsed.__assets;
+      DATA = parsed;
       normalizeData();
+      if (backupAssets && backupAssets.length) await importAssetsFromBackup(backupAssets);
       saveData();
       renderRouter();
       renderDailySidebar();
@@ -1274,6 +1494,7 @@ function router(keepScroll = false) {
 
     setTimeout(() => {
       applyMath();
+      setupMarkdownEditors();
 
       if (route.focus && !keepScroll) {
         const el = document.getElementById(`card-${route.focus}`);
@@ -1747,7 +1968,7 @@ function renderModule(mid) {
 
       <div id="view-theory-${tid}" class="note-view md-content" data-empty="${!tab.theoryNote}" onclick="toggleNoteView('theory-${tid}')">${renderMarkdown(tab.theoryNote||"")}</div>
       <div id="edit-theory-${tid}" class="note-edit">
-        <textarea id="ta-theory-${tid}" class="note-textarea">${tab.theoryNote||''}</textarea>
+        <textarea id="ta-theory-${tid}" class="note-textarea md-editable" data-autosave="1" data-kind="theory" data-mid="${mid}" data-tid="${tid}">${tab.theoryNote||''}</textarea>
         <div style="text-align:right;margin-top:5px;">
           <button class="btn btn-primary" onclick="saveNoteText('theory','${mid}',null,'${tid}','theory-${tid}')">저장</button>
         </div>
@@ -1861,7 +2082,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
           <span class="note-label-small">📝 오답 노트</span>
           <div id="view-${sid}" class="note-view md-content" data-empty="${!item.userNote}" onclick="toggleNoteView('${sid}')">${renderMarkdown(item.userNote||"")}</div>
           <div id="edit-${sid}" class="note-edit">
-            <textarea id="ta-${sid}" class="note-textarea">${item.userNote||''}</textarea>
+            <textarea id="ta-${sid}" class="note-textarea md-editable" data-autosave="1" data-kind="card" data-mid="${pid}" data-tabid="${tabSafe}" data-idx="${idx}">${item.userNote||''}</textarea>
             <div style="text-align:right;margin-top:5px;">
               <button class="btn btn-primary" onclick="saveNoteText('card','${pid}',${idx},'${tabSafe}','${sid}')">저장</button>
             </div>
@@ -3386,6 +3607,65 @@ function toggleNoteView(id){
   edit.style.display = isEditing ? 'none' : 'block';
   view.style.display = isEditing ? 'block' : 'none';
 }
+
+const noteAutosaveTimers = new WeakMap();
+
+function persistNoteDraftFromTextarea(ta){
+  if(!ta || ta.dataset.autosave !== '1') return false;
+  const kind = ta.dataset.kind;
+  const mid = ta.dataset.mid;
+  if(kind === 'theory'){
+    const tid = ta.dataset.tid;
+    const mod = DATA.modules?.[mid];
+    if(!mod) return false;
+    const tab = (mod.tabs||[]).find(t => String(t.id)===String(tid));
+    if(!tab) return false;
+    tab.theoryNote = ta.value || '';
+    saveData();
+    return true;
+  }
+  if(kind === 'card'){
+    const tabId = ta.dataset.tabid;
+    const idx = Number(ta.dataset.idx);
+    const mod = DATA.modules?.[mid];
+    if(!mod || Number.isNaN(idx)) return false;
+    const tab = (mod.tabs||[]).find(t => String(t.id)===String(tabId)) || (mod.tabs||[])[0];
+    const q = tab?.questions?.[idx];
+    if(!q) return false;
+    q.userNote = ta.value || '';
+    saveData();
+    return true;
+  }
+  return false;
+}
+
+function queueNoteDraftAutosave(ta){
+  if(!ta || ta.dataset.autosave !== '1') return;
+  const prev = noteAutosaveTimers.get(ta);
+  if(prev) clearTimeout(prev);
+  const timer = setTimeout(() => {
+    persistNoteDraftFromTextarea(ta);
+    noteAutosaveTimers.delete(ta);
+  }, 300);
+  noteAutosaveTimers.set(ta, timer);
+}
+
+document.addEventListener('input', (ev) => {
+  const ta = ev.target;
+  if(!(ta instanceof HTMLTextAreaElement)) return;
+  if(ta.classList.contains('note-textarea')) queueNoteDraftAutosave(ta);
+});
+
+window.addEventListener('beforeunload', () => {
+  document.querySelectorAll('textarea.note-textarea[data-autosave="1"]').forEach((ta) => {
+    const timer = noteAutosaveTimers.get(ta);
+    if(timer){
+      clearTimeout(timer);
+      noteAutosaveTimers.delete(ta);
+    }
+    persistNoteDraftFromTextarea(ta);
+  });
+});
 
 function saveNoteText(kind, mid, idx, tid, sid){
   try{
