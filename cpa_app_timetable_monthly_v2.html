@@ -165,6 +165,9 @@
     .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--input-bg); color: var(--text); }
     .md-toolbar { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
     .md-toolbar .btn { padding:4px 8px; font-size:0.78rem; }
+    .asset-usage { display:inline-flex; align-items:center; gap:6px; margin-left:6px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; background:var(--card-bg); color:var(--text-sub); font-size:0.8rem; font-weight:700; vertical-align:middle; }
+    .asset-usage.warn { color:#b45309; border-color:#f59e0b; background:rgba(245,158,11,0.08); }
+    .asset-usage.danger { color:var(--danger); border-color:var(--danger); background:rgba(239,68,68,0.08); }
 
     .highlighted { animation: highlight 1.5s ease-out; }
     @keyframes highlight {
@@ -633,11 +636,20 @@ const APP_UPDATE_RELOAD_KEY = 'studyplanner_app_update_reload';
 const ASSET_DB_NAME = 'studyplanner_assets_v1';
 const ASSET_STORE = 'assets';
 const ASSET_ID_PREFIX = 'app://asset/';
+const IMAGE_OPTIMIZE_MAX_DIMENSION = 1800;
+const IMAGE_OPTIMIZE_QUALITY = 0.82;
+const IMAGE_OPTIMIZE_MIN_SAVINGS = 0.96;
+const IMAGE_LARGE_WARN_BYTES = 5 * 1024 * 1024;
+const STORAGE_WARN_RATIO = 0.82;
+const STORAGE_DANGER_RATIO = 0.92;
+const STORAGE_RESERVE_BYTES = 50 * 1024 * 1024;
+const STORAGE_UNKNOWN_WARN_BYTES = 200 * 1024 * 1024;
 const APP = document.getElementById('app');
 let __assetDbPromise = null;
 const __assetUrlCache = new Map();
 const __assetLoadPending = new Set();
 let __assetRerenderScheduled = false;
+let __assetStorageInfo = null;
 
 function openAssetDb() {
   if (__assetDbPromise) return __assetDbPromise;
@@ -668,7 +680,7 @@ async function sha256Hex(blob) {
   return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function saveAssetBlob(file) {
+async function saveAssetBlob(file, meta = {}) {
   const db = await openAssetDb();
   const hash = await sha256Hex(file);
   const tx = db.transaction(ASSET_STORE, 'readwrite');
@@ -678,7 +690,7 @@ async function saveAssetBlob(file) {
   const id = `a_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   await txRequest(store.put({
     id, name: file.name, type: file.type || 'application/octet-stream',
-    size: file.size || 0, hash, createdAt: Date.now(), blob: file
+    size: file.size || 0, hash, createdAt: Date.now(), blob: file, ...meta
   }));
   return id;
 }
@@ -693,6 +705,177 @@ async function listAssetRecords() {
   const db = await openAssetDb();
   const tx = db.transaction(ASSET_STORE, 'readonly');
   return txRequest(tx.objectStore(ASSET_STORE).getAll());
+}
+
+function formatBytes(bytes){
+  const n = Number(bytes || 0);
+  if(!Number.isFinite(n) || n <= 0) return '0 B';
+  const units = ['B','KB','MB','GB'];
+  let value = n;
+  let idx = 0;
+  while(value >= 1024 && idx < units.length - 1){
+    value /= 1024;
+    idx++;
+  }
+  return `${value >= 10 || idx === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[idx]}`;
+}
+
+function replaceFileExt(name, ext){
+  const base = String(name || 'image').replace(/\.[^.]+$/, '') || 'image';
+  return `${base}.${ext}`;
+}
+
+function canvasToBlob(canvas, type, quality){
+  return new Promise(resolve => canvas.toBlob(resolve, type, quality));
+}
+
+function loadImageElement(file){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('이미지를 읽을 수 없습니다.'));
+    };
+    img.src = url;
+  });
+}
+
+async function optimizeImageFile(file){
+  const original = file;
+  const type = String(file?.type || '').toLowerCase();
+  if(!type.startsWith('image/') || type === 'image/svg+xml' || type === 'image/gif') {
+    return { file: original, optimized:false, skipped:true, originalSize: original?.size || 0, finalSize: original?.size || 0 };
+  }
+  try{
+    const img = await loadImageElement(file);
+    const width = img.naturalWidth || img.width || 0;
+    const height = img.naturalHeight || img.height || 0;
+    if(!width || !height) return { file: original, optimized:false, originalSize: original.size || 0, finalSize: original.size || 0 };
+    const scale = Math.min(1, IMAGE_OPTIMIZE_MAX_DIMENSION / Math.max(width, height));
+    const targetWidth = Math.max(1, Math.round(width * scale));
+    const targetHeight = Math.max(1, Math.round(height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext('2d', { alpha: true });
+    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+    const blob = await canvasToBlob(canvas, 'image/webp', IMAGE_OPTIMIZE_QUALITY);
+    canvas.width = 0;
+    canvas.height = 0;
+    if(!blob) return { file: original, optimized:false, originalSize: original.size || 0, finalSize: original.size || 0, width, height };
+    const shouldUse = blob.size < (file.size || 0) * IMAGE_OPTIMIZE_MIN_SAVINGS;
+    if(!shouldUse) return { file: original, optimized:false, originalSize: file.size || 0, finalSize: file.size || 0, width, height };
+    const optimized = new File([blob], replaceFileExt(file.name, 'webp'), { type:'image/webp', lastModified: Date.now() });
+    return {
+      file: optimized,
+      optimized: true,
+      originalName: file.name,
+      originalSize: file.size || 0,
+      finalSize: optimized.size || 0,
+      width,
+      height,
+      targetWidth,
+      targetHeight
+    };
+  }catch(e){
+    return { file: original, optimized:false, originalSize: original?.size || 0, finalSize: original?.size || 0, error:e };
+  }
+}
+
+async function getAssetStorageStats(){
+  const db = await openAssetDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ASSET_STORE, 'readonly');
+    const req = tx.objectStore(ASSET_STORE).openCursor();
+    let count = 0;
+    let bytes = 0;
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if(!cursor) return resolve({ count, bytes });
+      const rec = cursor.value || {};
+      count++;
+      bytes += Number(rec.size || rec.blob?.size || 0);
+      cursor.continue();
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function getStorageEstimate(){
+  try{
+    if(navigator.storage?.estimate) return await navigator.storage.estimate();
+  }catch(e){}
+  return {};
+}
+
+async function refreshAssetStorageUsage({force=false, updateDom=true} = {}){
+  const now = Date.now();
+  if(!force && __assetStorageInfo && now - __assetStorageInfo.updatedAt < 30000){
+    if(updateDom) updateAssetUsageBadge();
+    return __assetStorageInfo;
+  }
+  const [assets, estimate] = await Promise.all([
+    getAssetStorageStats().catch(()=>({count:0, bytes:0})),
+    getStorageEstimate()
+  ]);
+  __assetStorageInfo = {
+    assetCount: assets.count || 0,
+    assetBytes: assets.bytes || 0,
+    usage: Number(estimate.usage || 0),
+    quota: Number(estimate.quota || 0),
+    updatedAt: now
+  };
+  if(updateDom) updateAssetUsageBadge();
+  return __assetStorageInfo;
+}
+
+function renderAssetUsageBadge(){
+  const info = __assetStorageInfo;
+  if(!info) return `<button id="assetUsageBadge" class="asset-usage" onclick="showAssetStorageDetails()">이미지 저장소 계산 중</button>`;
+  const ratio = info.quota ? info.usage / info.quota : 0;
+  const level = ratio >= STORAGE_DANGER_RATIO ? 'danger' : (ratio >= STORAGE_WARN_RATIO ? 'warn' : '');
+  const pct = info.quota ? ` · 전체 ${Math.round(ratio*100)}%` : '';
+  return `<button id="assetUsageBadge" class="asset-usage ${level}" onclick="showAssetStorageDetails()" title="클릭해서 이미지 저장소 사용량 새로고침">이미지 ${info.assetCount}개 · ${formatBytes(info.assetBytes)}${pct}</button>`;
+}
+
+function updateAssetUsageBadge(){
+  const el = document.getElementById('assetUsageBadge');
+  if(!el || !__assetStorageInfo) return;
+  const info = __assetStorageInfo;
+  const ratio = info.quota ? info.usage / info.quota : 0;
+  el.className = `asset-usage ${ratio >= STORAGE_DANGER_RATIO ? 'danger' : (ratio >= STORAGE_WARN_RATIO ? 'warn' : '')}`;
+  el.textContent = `이미지 ${info.assetCount}개 · ${formatBytes(info.assetBytes)}${info.quota ? ` · 전체 ${Math.round(ratio*100)}%` : ''}`;
+}
+
+async function showAssetStorageDetails(){
+  const info = await refreshAssetStorageUsage({force:true});
+  const quotaLine = info.quota ? `전체 브라우저 저장소: ${formatBytes(info.usage)} / ${formatBytes(info.quota)} (${Math.round((info.usage/info.quota)*100)}%)` : '전체 브라우저 저장소 한도: 확인 불가';
+  alert(`이미지 저장소\n\n이미지: ${info.assetCount}개\n이미지 용량: ${formatBytes(info.assetBytes)}\n${quotaLine}\n\n이미지는 이 브라우저의 IndexedDB에 저장됩니다.`);
+}
+
+async function confirmAssetStorageCapacity(file){
+  const info = await refreshAssetStorageUsage({force:true, updateDom:true});
+  const size = Number(file?.size || 0);
+  const messages = [];
+  if(size >= IMAGE_LARGE_WARN_BYTES) messages.push(`이번 이미지가 큽니다: ${formatBytes(size)}`);
+  if(info.quota){
+    const projectedUsage = (info.usage || 0) + size;
+    const projectedRatio = projectedUsage / info.quota;
+    const remaining = info.quota - projectedUsage;
+    if(projectedRatio >= STORAGE_WARN_RATIO || remaining < STORAGE_RESERVE_BYTES){
+      messages.push(`저장 후 예상 사용량: ${formatBytes(projectedUsage)} / ${formatBytes(info.quota)} (${Math.round(projectedRatio*100)}%)`);
+      messages.push(`예상 남은 용량: ${formatBytes(Math.max(0, remaining))}`);
+    }
+  } else if((info.assetBytes || 0) + size >= STORAGE_UNKNOWN_WARN_BYTES){
+    messages.push(`이미지 저장소가 커지고 있습니다: 약 ${formatBytes((info.assetBytes || 0) + size)}`);
+  }
+  if(!messages.length) return true;
+  return confirm(`${messages.join('\n')}\n\n계속 저장할까요?`);
 }
 
 async function getAssetObjectUrl(assetId) {
@@ -741,10 +924,37 @@ async function onMdImagePick(textarea, file) {
     alert('이미지 파일만 첨부할 수 있습니다.');
     return;
   }
-  const assetId = await saveAssetBlob(file);
-  const alt = (file.name || 'img').replace(/\.[^.]+$/, '');
-  insertAtSelection(textarea, `![${alt}](${ASSET_ID_PREFIX}${assetId})`);
-  if (textarea.classList.contains('note-textarea')) queueNoteDraftAutosave(textarea);
+  try{
+    showToast('이미지 최적화 중...', 0);
+    const optimized = await optimizeImageFile(file);
+    const uploadFile = optimized.file || file;
+    const canSave = await confirmAssetStorageCapacity(uploadFile);
+    if(!canSave){
+      hideToast();
+      return;
+    }
+    const assetId = await saveAssetBlob(uploadFile, {
+      optimized: !!optimized.optimized,
+      originalName: optimized.originalName || file.name || '',
+      originalSize: optimized.originalSize || file.size || 0,
+      originalWidth: optimized.width || 0,
+      originalHeight: optimized.height || 0,
+      width: optimized.targetWidth || optimized.width || 0,
+      height: optimized.targetHeight || optimized.height || 0
+    });
+    const alt = (file.name || 'img').replace(/\.[^.]+$/, '');
+    insertAtSelection(textarea, `![${alt}](${ASSET_ID_PREFIX}${assetId})`);
+    if (textarea.classList.contains('note-textarea')) queueNoteDraftAutosave(textarea);
+    await refreshAssetStorageUsage({force:true, updateDom:true});
+    const msg = optimized.optimized
+      ? `이미지 첨부됨 (${formatBytes(optimized.originalSize)} → ${formatBytes(optimized.finalSize)})`
+      : `이미지 첨부됨 (${formatBytes(uploadFile.size)})`;
+    showToast(msg, 1800);
+  }catch(err){
+    console.error(err);
+    hideToast();
+    alert('이미지 첨부 중 오류가 발생했습니다.');
+  }
 }
 
 function createMdToolbar(textarea) {
@@ -1782,14 +1992,15 @@ async function importAssetsFromBackup(items) {
   const store = tx.objectStore(ASSET_STORE);
   for (const item of items) {
     if (!item || !item.id || !item.dataUrl) continue;
+    const blob = dataUrlToBlob(item.dataUrl);
     await txRequest(store.put({
       id: item.id,
       name: item.name || item.id,
       type: item.type || 'application/octet-stream',
-      size: item.size || 0,
+      size: item.size || blob.size || 0,
       hash: item.hash || '',
       createdAt: item.createdAt || Date.now(),
-      blob: dataUrlToBlob(item.dataUrl)
+      blob
     }));
   }
 }
@@ -1827,6 +2038,7 @@ window.loadJsonFile = function(e) {
       DATA = parsed;
       normalizeData();
       if (backupAssets && backupAssets.length) await importAssetsFromBackup(backupAssets);
+      await refreshAssetStorageUsage({force:true, updateDom:true});
       saveData();
       renderRouter();
       renderDailySidebar();
@@ -2272,6 +2484,7 @@ function renderHome() {
         <button class="btn btn-outline" onclick="exportPagePdf('home','home')" title="현재 필터 기준 페이지 PDF">🖨️</button>
         <button class="btn btn-outline" onclick="resetAccumulatedTime('all')" title="누적 시간 전체 초기화">⏱</button>
         <button class="btn btn-outline" style="color:#ef4444;" onclick="hardReset()">🗑</button>
+        ${renderAssetUsageBadge()}
       </div>
     </header>
 
@@ -2349,6 +2562,7 @@ function renderHome() {
       <div class="card ghost-card flex-center" onclick="openAddModal('subject','home')"><div class="ghost-plus">+</div></div>
     </div>
   `;
+  refreshAssetStorageUsage({updateDom:true}).catch(()=>{});
   scheduleMathRender();
 }
 
