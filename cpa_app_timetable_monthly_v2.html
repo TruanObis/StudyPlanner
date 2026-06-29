@@ -1092,8 +1092,7 @@ function toYMDLocal(dt){
 
 function getLogicalDate(now = new Date()) {
   const parts = getKstParts(now);
-  const kstDate = ymdFromParts(parts);
-  return parts.hour < 4 ? addDaysYMD(kstDate, -1) : kstDate;
+  return ymdFromParts(parts);
 }
 
 function updateClock(now = new Date()) {
