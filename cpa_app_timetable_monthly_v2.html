@@ -1038,29 +1038,74 @@ function exportPagePdf(level, id){
   }
 }
 
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function pad2(n){ return String(n).padStart(2, '0'); }
+
+function getKstParts(dt = new Date()){
+  const shifted = new Date(dt.getTime() + KST_OFFSET_MS);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
+    second: shifted.getUTCSeconds(),
+    weekday: shifted.getUTCDay()
+  };
+}
+
+function ymdFromParts(parts){
+  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+}
+
+function parseYMD(dateStr){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr || '').trim());
+  if(!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  if(dt.getUTCFullYear() !== year || dt.getUTCMonth() !== month - 1 || dt.getUTCDate() !== day) return null;
+  return { year, month, day };
+}
+
+function ymdToUtcDayMs(dateStr){
+  const p = parseYMD(dateStr);
+  return p ? Date.UTC(p.year, p.month - 1, p.day) : NaN;
+}
+
+function ymdFromUtcDayMs(ms){
+  const dt = new Date(ms);
+  return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth()+1)}-${pad2(dt.getUTCDate())}`;
+}
+
+function addDaysYMD(dateStr, offset){
+  const ms = ymdToUtcDayMs(dateStr);
+  return Number.isNaN(ms) ? getLogicalDate() : ymdFromUtcDayMs(ms + offset * DAY_MS);
+}
+
 function toYMDLocal(dt){
-  const y = dt.getFullYear();
-  const m = String(dt.getMonth()+1).padStart(2,'0');
-  const d = String(dt.getDate()).padStart(2,'0');
-  return `${y}-${m}-${d}`;
+  return ymdFromParts(getKstParts(dt));
 }
 
-function getLogicalDate() {
-  const n = new Date();
-  if (n.getHours() < 4) n.setDate(n.getDate() - 1);
-  return toYMDLocal(n);
+function getLogicalDate(now = new Date()) {
+  const parts = getKstParts(now);
+  const kstDate = ymdFromParts(parts);
+  return parts.hour < 4 ? addDaysYMD(kstDate, -1) : kstDate;
 }
 
-function updateClock() {
-  const n = new Date();
+function updateClock(now = new Date()) {
+  const parts = getKstParts(now);
   const timeEl = document.getElementById('clockTime');
   const dateEl = document.getElementById('clockDate');
-  if (timeEl) timeEl.innerText = n.toTimeString().split(' ')[0];
+  if (timeEl) timeEl.innerText = `${pad2(parts.hour)}:${pad2(parts.minute)}:${pad2(parts.second)}`;
   if (dateEl) {
     const days = ['일','월','화','수','목','금','토'];
-    dateEl.innerText = `${n.getFullYear()}.${n.getMonth()+1}.${n.getDate()} (${days[n.getDay()]})`;
+    dateEl.innerText = `${parts.year}.${parts.month}.${parts.day} (${days[parts.weekday]})`;
   }
-  return n;
+  return now;
 }
 
 function ensureDailyHistoryBase(){
@@ -1152,10 +1197,10 @@ function copyCardMdLink(title, hash){
    D-DAY (TOP RIGHT, MAX 10)
 ========================= */
 function calcDDayLabel(dateStr){
-  const target = new Date(dateStr + 'T00:00:00');
-  const base = new Date(getLogicalDate() + 'T00:00:00');
-  if(Number.isNaN(target.getTime())) return 'D-?';
-  const diff = Math.round((target.getTime() - base.getTime()) / 86400000);
+  const target = ymdToUtcDayMs(dateStr);
+  const base = ymdToUtcDayMs(getLogicalDate());
+  if(Number.isNaN(target) || Number.isNaN(base)) return 'D-?';
+  const diff = Math.round((target - base) / DAY_MS);
   if(diff > 0) return `D-${diff}`;
   if(diff === 0) return 'D-Day';
   return `D+${Math.abs(diff)}`;
@@ -1168,8 +1213,8 @@ function updateDDayPanel(){
   const ddays = Array.isArray(DATA.home.dDays)
     ? DATA.home.dDays.map((d, index) => ({ ...d, __index: index }))
         .sort((a, b) => {
-          const aTime = a?.date ? new Date(`${a.date}T00:00:00`).getTime() : Number.POSITIVE_INFINITY;
-          const bTime = b?.date ? new Date(`${b.date}T00:00:00`).getTime() : Number.POSITIVE_INFINITY;
+          const aTime = a?.date ? ymdToUtcDayMs(a.date) : Number.POSITIVE_INFINITY;
+          const bTime = b?.date ? ymdToUtcDayMs(b.date) : Number.POSITIVE_INFINITY;
           const safeATime = Number.isNaN(aTime) ? Number.POSITIVE_INFINITY : aTime;
           const safeBTime = Number.isNaN(bTime) ? Number.POSITIVE_INFINITY : bTime;
           if(safeATime === safeBTime) return a.__index - b.__index;
@@ -1298,7 +1343,7 @@ function exportData() {
     }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
-    a.download = `planner_backup_${new Date().toISOString().slice(0,10)}.json`;
+    a.download = `planner_backup_${toYMDLocal(new Date())}.json`;
     a.click();
   })().catch(err => alert('백업 저장 실패: ' + err.message));
 }
@@ -2385,9 +2430,7 @@ function toggleSidebar() {
 }
 
 function changeSidebarDate(offset) {
-  const dt = new Date(VIEW_DATE);
-  dt.setDate(dt.getDate() + offset);
-  VIEW_DATE = dt.toISOString().split('T')[0];
+  VIEW_DATE = addDaysYMD(VIEW_DATE || getLogicalDate(), offset);
   ensureDailyData(VIEW_DATE);
   renderDailySidebar();
 }
@@ -2421,8 +2464,7 @@ function jumpSidebarDate(){
   const s = val.trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return alert('형식이 올바르지 않습니다. 예: 2026-01-16');
 
-  const d = new Date(s + 'T00:00:00');
-  if(Number.isNaN(d.getTime())) return alert('유효하지 않은 날짜입니다.');
+  if(!parseYMD(s)) return alert('유효하지 않은 날짜입니다.');
 
   VIEW_DATE = s;
   ensureDailyData(VIEW_DATE);
@@ -2438,9 +2480,9 @@ let __calState = { year: 0, month: 0, selected: null };
 
 function openCalendarModal(e){
   if(e) e.stopPropagation();
-  const base = new Date((VIEW_DATE || getLogicalDate()) + 'T00:00:00');
-  __calState.year = base.getFullYear();
-  __calState.month = base.getMonth();
+  const base = parseYMD(VIEW_DATE || getLogicalDate()) || parseYMD(getLogicalDate());
+  __calState.year = base.year;
+  __calState.month = base.month - 1;
   __calState.selected = VIEW_DATE || getLogicalDate();
   const picker = document.getElementById('calDatePicker');
   if(picker) picker.value = __calState.selected;
@@ -2468,11 +2510,12 @@ function calJumpToPicked(){
   const picker = document.getElementById('calDatePicker');
   if(!picker || !picker.value) return;
   const s = picker.value;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return;
+  if(!parseYMD(s)) return;
   calSelectDate(s, true);
 }
 
 function calSelectDate(dateStr, closeAfter){
+  if(!parseYMD(dateStr)) return;
   __calState.selected = dateStr;
   VIEW_DATE = dateStr;
   ensureDailyData(VIEW_DATE);
@@ -2489,11 +2532,9 @@ function renderCalendarModal(){
 
   const y = __calState.year;
   const m = __calState.month;
-  const first = new Date(y, m, 1);
-  const startDow = first.getDay();
-  const daysInMonth = new Date(y, m+1, 0).getDate();
+  const startDow = new Date(Date.UTC(y, m, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(y, m+1, 0)).getUTCDate();
 
-  const pad2 = (n)=>String(n).padStart(2,'0');
   const monthLabel = document.getElementById('calMonthLabel');
   if(monthLabel) monthLabel.innerText = `${y}-${pad2(m+1)}`;
 
@@ -4313,7 +4354,7 @@ function exportAnki(mid){
   const blob = new Blob([rows.join('\n')], {type:'text/tab-separated-values;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `anki_${mid}_${new Date().toISOString().slice(0,10)}.tsv`;
+  a.download = `anki_${mid}_${toYMDLocal(new Date())}.tsv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
