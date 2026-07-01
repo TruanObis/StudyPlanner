@@ -605,7 +605,7 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
   </div>
 </div>
 
-<input type="file" id="fileInput" accept=".json" style="display:none" onchange="loadJsonFile(event)">
+<input type="file" id="fileInput" accept=".json,.pdf,application/json,application/pdf" style="display:none" onchange="loadJsonFile(event)">
 
 <script>
 // Markdown: 단일 줄바꿈(Enter)을 <br>로 렌더링
@@ -1127,6 +1127,9 @@ function escapeHtml(s='') {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+function clonePlain(value){
+  return JSON.parse(JSON.stringify(value ?? null));
+}
 function renderMdOrText(text) {
   return `<div class="md-content">${renderMarkdown(text || '')}</div>`;
 }
@@ -1260,9 +1263,13 @@ const PDF_EXPORT_TARGET_CHUNK_PAGES = 50;
 const PDF_EXPORT_MAX_CANVAS_DIMENSION = 30000;
 const PDF_EXPORT_MAX_CANVAS_AREA = 120000000;
 const PDF_EXPORT_AVOID_BREAK_SELECTOR = '.print-subsection,.link-toc,.print-note,.md-content p,.md-content li,.md-content blockquote,.md-content pre,.md-content table,.md-content img,h2,h3,h4';
+const PDF_RESTORE_SCHEMA = 'studyplanner-pdf-payload-v1';
+const PDF_RESTORE_BEGIN = '%%STUDYPLANNER_PAYLOAD_BEGIN';
+const PDF_RESTORE_END = '%%STUDYPLANNER_PAYLOAD_END';
 let PDF_EXPORT_LIB_PROMISE = null;
 function safePdfFilename(title){
-  const safe = String(title || APP_NAME || 'studyplanner')
+  const appName = (typeof APP_NAME !== 'undefined' && APP_NAME) ? APP_NAME : 'studyplanner';
+  const safe = String(title || appName)
     .replace(/[\\/:*?"<>|]+/g, '_')
     .replace(/\s+/g, ' ')
     .trim()
@@ -1621,7 +1628,13 @@ async function exportPdfDocument(title, bodyHtml, opts = {}){
     await renderPdfBodyPages(pdf, doc);
     addInternalPdfLinks(pdf, doc);
     addPdfOutlines(pdf, doc, outlineItems);
-    pdf.save(safePdfFilename(title));
+    showToast('PDF 복원 데이터 삽입 중...', 0);
+    const restorePayload = typeof opts.restorePayload === 'function'
+      ? await opts.restorePayload()
+      : opts.restorePayload;
+    const pdfBlob = pdf.output('blob');
+    const finalBlob = restorePayload ? await appendPdfRestorePayload(pdfBlob, restorePayload) : pdfBlob;
+    downloadBlob(finalBlob, safePdfFilename(title));
     host.remove();
     showToast('PDF 저장 완료', 1600);
   }catch(err){
@@ -1635,12 +1648,17 @@ function exportCardPdf(level, pid, idx, tabId, withChildren=false){
   let title='카드'; let html='';
   let headerLeft=''; let headerRight='';
   let outlineChildren=[];
+  let restoreKind = 'card';
+  let restoreData = null;
   if(level==='home'){
     const sub = DATA.home.subjects[idx];
+    if(!sub) return;
     title=sub?.name||'홈페이지 카드';
     headerLeft = `${title}`;
     headerRight = sub?.badge || '';
     html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(sub?.examInfo || '')}${(DATA.details?.[sub?.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>체크리스트</h3><ul>${(DATA.details?.[sub?.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`;
+    restoreKind = 'subject-card';
+    restoreData = buildDetailRestoreData(sub.id, null, title);
     if(withChildren){
       html += renderSubjectChildPdf(sub);
       outlineChildren = buildSubjectPdfOutlineChildren(sub);
@@ -1652,6 +1670,8 @@ function exportCardPdf(level, pid, idx, tabId, withChildren=false){
     headerLeft = `${findSubjectNameByDetailId(pid)} > ${title}`;
     headerRight = c.badge || '';
     html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}${renderModuleChecklist(c.module)}`;
+    restoreKind = 'detail-card';
+    restoreData = buildDetailRestoreData(pid, [c], title);
     if(withChildren){
       html += renderModuleChildPdf(c.module);
       outlineChildren = c.module ? [buildModulePdfOutline(c.module)] : [];
@@ -1659,12 +1679,15 @@ function exportCardPdf(level, pid, idx, tabId, withChildren=false){
   } else if(level==='module_theory'){
     const mod = DATA.modules?.[pid];
     const tab = mod?.tabs?.find(t=>t.id===tabId);
+    if(!mod || !tab) return;
     const parent = findDetailCardByModuleId(pid);
     const homeTitle = parent ? findSubjectNameByDetailId(parent.detailId) : '홈페이지 카드';
     const detailTitle = parent?.card?.title || mod?.title || 'module 카드';
     title = tab?.label || '이론 카드';
     headerLeft = `${homeTitle} > ${detailTitle} > ${title}`;
     html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(tab?.theoryNote || '')}`;
+    restoreKind = 'module-theory-card';
+    restoreData = buildModuleSubsetRestoreData(pid, tabId, null);
   } else if(level==='module'){
     const mod = DATA.modules?.[pid];
     const tab = mod?.tabs?.find(t=>t.id===tabId) || mod?.tabs?.[0];
@@ -1677,16 +1700,29 @@ function exportCardPdf(level, pid, idx, tabId, withChildren=false){
     headerLeft = `${homeTitle} > ${detailTitle} > ${(tab?.label || '기출문제')}`;
     headerRight = q.src || '';
     html = `<div class="md-content as-body">${renderMarkdown(q.text || '')}</div>${q.userNote ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(q.userNote)}` : ''}`;
+    restoreKind = 'question-card';
+    restoreData = buildModuleSubsetRestoreData(pid, tab?.id, idx);
   }
-  exportPdfDocument(title, html, { headerLeft, headerRight, outline: [pdfOutlineItem(title, 'pdf-root', outlineChildren)] });
+  exportPdfDocument(title, html, {
+    headerLeft,
+    headerRight,
+    outline: [pdfOutlineItem(title, 'pdf-root', outlineChildren)],
+    restorePayload: () => buildPdfRestorePayload(restoreKind, title, restoreData, { level, pid, idx, tabId, withChildren })
+  });
 }
 function exportPagePdf(level, id){
   if(level==='home'){
     const headerRight = HOME_BADGE_FILTER==='all' ? '' : `${HOME_BADGE_FILTER}`;
     const list = (HOME_BADGE_FILTER==='all') ? (DATA.home.subjects||[]) : (DATA.home.subjects||[]).filter(s=>badgeTags(s.badge).includes(HOME_BADGE_FILTER) || String(s.badge||'').trim()===HOME_BADGE_FILTER);
-    const html = `<h1>${escapeHtml(DATA.home.title||APP_NAME)}</h1>${renderMdOrText(DATA.home.subtitle||'')}${renderHomePageToc(list)}${list.map((sub, si) => renderSubjectPageSection(sub, si)).join('')}`;
-    const outline = [pdfOutlineItem(DATA.home.title||APP_NAME, 'pdf-root', list.map((sub, si) => buildSubjectPdfOutline(sub, si)))];
-    return exportPdfDocument(DATA.home.title||'홈', html, { headerRight, outline });
+    const appTitle = DATA.home.title || document.title || 'StudyPlanner';
+    const html = `<h1>${escapeHtml(appTitle)}</h1>${renderMdOrText(DATA.home.subtitle||'')}${renderHomePageToc(list)}${list.map((sub, si) => renderSubjectPageSection(sub, si)).join('')}`;
+    const outline = [pdfOutlineItem(appTitle, 'pdf-root', list.map((sub, si) => buildSubjectPdfOutline(sub, si)))];
+    const title = DATA.home.title || '홈';
+    return exportPdfDocument(title, html, {
+      headerRight,
+      outline,
+      restorePayload: () => buildPdfRestorePayload('home-page', title, buildSubjectsRestoreData(list, title), { level, id, filter: HOME_BADGE_FILTER })
+    });
   }
   if(level==='detail'){
     const d = DATA.details?.[id];
@@ -1697,7 +1733,12 @@ function exportPagePdf(level, id){
     const sub = (DATA.home.subjects||[]).find(s=>s.id===id) || { id, name:d.title || '상세 페이지', examInfo:d.subtitle || '' };
     const html = `<h1>${escapeHtml(d.title||'상세 페이지')}</h1>${renderMdOrText(d.subtitle||'')}${renderSubjectChildPdf(sub, cards)}`;
     const outline = [pdfOutlineItem(d.title||'상세 페이지', 'pdf-root', buildSubjectPdfOutlineChildren(sub, cards))];
-    return exportPdfDocument(d.title||'상세', html, { headerRight, outline });
+    const title = d.title || '상세';
+    return exportPdfDocument(title, html, {
+      headerRight,
+      outline,
+      restorePayload: () => buildPdfRestorePayload('detail-page', title, buildDetailRestoreData(id, cards, title), { level, id, filter: activeFilter })
+    });
   }
   if(level==='module'){
     const m = DATA.modules?.[id];
@@ -1705,7 +1746,11 @@ function exportPagePdf(level, id){
     const html = `<h1>${escapeHtml(m.title||'모듈')}</h1>${renderMdOrText(m.subtitle||'')}${renderModuleChildPdf(id)}`;
     const moduleOutline = buildModulePdfOutline(id);
     const outline = [pdfOutlineItem(m.title||'모듈', 'pdf-root', moduleOutline?.children || [])];
-    return exportPdfDocument(m.title||'모듈', html, { outline });
+    const title = m.title || '모듈';
+    return exportPdfDocument(title, html, {
+      outline,
+      restorePayload: () => buildPdfRestorePayload('module-page', title, buildModuleSubsetRestoreData(id), { level, id })
+    });
   }
 }
 
@@ -2037,30 +2082,448 @@ async function importAssetsFromBackup(items) {
   }
 }
 
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+function collectAssetIdsFromObject(value) {
+  const ids = new Set();
+  const text = JSON.stringify(value || {});
+  text.replace(/app:\/\/asset\/([A-Za-z0-9_-]+)/g, (_, id) => {
+    ids.add(id);
+    return _;
+  });
+  return ids;
+}
+
+async function buildAssetBackupItems(assetIds = null) {
+  const wanted = assetIds instanceof Set ? assetIds : null;
+  const assets = await listAssetRecords();
+  return Promise.all(assets
+    .filter(a => !wanted || wanted.has(a.id))
+    .map(async a => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      size: a.size || a.blob?.size || 0,
+      hash: a.hash,
+      createdAt: a.createdAt,
+      dataUrl: await blobToDataUrl(a.blob)
+    })));
+}
+
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(base64) {
+  const binary = atob(String(base64 || '').replace(/\s+/g, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function gzipBytes(bytes) {
+  if (!window.CompressionStream) return null;
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function ungzipBytes(bytes) {
+  if (!window.DecompressionStream) throw new Error('이 브라우저는 PDF 복원 데이터 압축 해제를 지원하지 않습니다.');
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function encodePdfRestorePayload(payload) {
+  const raw = new TextEncoder().encode(JSON.stringify(payload));
+  let encoding = 'json-base64';
+  let bytes = raw;
+  try {
+    const gz = await gzipBytes(raw);
+    if (gz && gz.byteLength < raw.byteLength) {
+      encoding = 'gzip-base64';
+      bytes = gz;
+    }
+  } catch (e) {}
+  return `\n${PDF_RESTORE_BEGIN}\n${encoding}\n${bytesToBase64(bytes)}\n${PDF_RESTORE_END}\n`;
+}
+
+async function appendPdfRestorePayload(pdfBlob, payload) {
+  if (!payload) return pdfBlob;
+  const encoded = await encodePdfRestorePayload(payload);
+  return new Blob([pdfBlob, encoded], { type: 'application/pdf' });
+}
+
+function asciiBytes(text) {
+  return new TextEncoder().encode(text);
+}
+
+function indexOfBytes(haystack, needle, start = 0) {
+  outer:
+  for (let i = Math.max(0, start); i <= haystack.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+function lastIndexOfBytes(haystack, needle) {
+  outer:
+  for (let i = haystack.length - needle.length; i >= 0; i--) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+async function decodePdfRestorePayloadBytes(bytes) {
+  const beginBytes = asciiBytes(PDF_RESTORE_BEGIN);
+  const endBytes = asciiBytes(PDF_RESTORE_END);
+  const begin = lastIndexOfBytes(bytes, beginBytes);
+  if (begin < 0) return null;
+  const payloadStart = begin + beginBytes.length;
+  const end = indexOfBytes(bytes, endBytes, payloadStart);
+  if (end < 0) return null;
+  const text = new TextDecoder().decode(bytes.slice(payloadStart, end)).trim();
+  const firstLineEnd = text.indexOf('\n');
+  if (firstLineEnd < 0) throw new Error('PDF 복원 데이터 형식이 올바르지 않습니다.');
+  const encoding = text.slice(0, firstLineEnd).trim();
+  const b64 = text.slice(firstLineEnd + 1).replace(/\s+/g, '');
+  let dataBytes = base64ToBytes(b64);
+  if (encoding === 'gzip-base64') dataBytes = await ungzipBytes(dataBytes);
+  else if (encoding !== 'json-base64') throw new Error('지원하지 않는 PDF 복원 데이터 형식입니다.');
+  return JSON.parse(new TextDecoder().decode(dataBytes));
+}
+
+async function readPdfRestorePayloadFile(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return decodePdfRestorePayloadBytes(bytes);
+}
+
+function makeEmptyRestoreData(title = '') {
+  return {
+    meta: { version: '2.6', source: 'studyplanner-pdf' },
+    home: { title: title || 'PDF 가져오기', subtitle: '', subjects: [], dDays: [] },
+    details: {},
+    modules: {},
+    dailyHistory: {}
+  };
+}
+
+function appendSubjectToRestoreData(partial, subject, cardsOverride = null) {
+  if (!partial || !subject) return partial;
+  const sub = clonePlain(subject);
+  if (!sub.id) sub.id = uid('s');
+  partial.home.subjects.push(sub);
+  const sourceDetail = DATA.details?.[sub.id] || {
+    id: sub.id,
+    title: sub.name || '상세 페이지',
+    subtitle: sub.examInfo || '',
+    cards: []
+  };
+  const detail = clonePlain(sourceDetail);
+  detail.id = sub.id;
+  if (Array.isArray(cardsOverride)) detail.cards = clonePlain(cardsOverride);
+  if (!Array.isArray(detail.cards)) detail.cards = [];
+  partial.details[sub.id] = detail;
+  detail.cards.forEach(card => {
+    if (card?.module && DATA.modules?.[card.module]) {
+      partial.modules[card.module] = clonePlain(DATA.modules[card.module]);
+    }
+  });
+  return partial;
+}
+
+function buildSubjectsRestoreData(subjects, title = '') {
+  const partial = makeEmptyRestoreData(title);
+  (subjects || []).forEach(sub => appendSubjectToRestoreData(partial, sub));
+  return partial;
+}
+
+function buildDetailRestoreData(subjectId, cardsOverride = null, title = '') {
+  const subject = (DATA.home?.subjects || []).find(s => s.id === subjectId) || {
+    id: subjectId,
+    name: DATA.details?.[subjectId]?.title || '상세 페이지',
+    examInfo: DATA.details?.[subjectId]?.subtitle || ''
+  };
+  const partial = makeEmptyRestoreData(title || subject.name || '상세 페이지');
+  appendSubjectToRestoreData(partial, subject, cardsOverride);
+  return partial;
+}
+
+function buildModuleWrapperRestoreData(moduleId, moduleOverride = null, titleOverride = '') {
+  const mod = clonePlain(moduleOverride || DATA.modules?.[moduleId]);
+  if (!mod) return makeEmptyRestoreData(titleOverride || '모듈');
+  mod.id = mod.id || moduleId || uid('m');
+  const sid = `pdf_subject_${mod.id}`;
+  const cardId = `pdf_card_${mod.id}`;
+  const partial = makeEmptyRestoreData(titleOverride || mod.title || '모듈');
+  partial.home.subjects.push({
+    id: sid,
+    name: titleOverride || mod.title || '가져온 모듈',
+    examInfo: mod.subtitle || '',
+    badge: 'PDF',
+    done: false,
+    time: 0,
+    today: 0
+  });
+  partial.details[sid] = {
+    id: sid,
+    title: titleOverride || mod.title || '가져온 모듈',
+    subtitle: mod.subtitle || '',
+    cards: [{
+      id: cardId,
+      title: mod.title || '모듈',
+      scope: mod.subtitle || '',
+      badge: 'PDF',
+      done: false,
+      time: 0,
+      today: 0,
+      module: mod.id
+    }]
+  };
+  partial.modules[mod.id] = mod;
+  return partial;
+}
+
+function buildModuleSubsetRestoreData(moduleId, tabId = null, questionIndex = null) {
+  const mod = clonePlain(DATA.modules?.[moduleId]);
+  if (!mod) return makeEmptyRestoreData('모듈');
+  if (tabId) {
+    const sourceTab = (mod.tabs || []).find(t => t.id === tabId);
+    if (!sourceTab) return makeEmptyRestoreData(mod.title || '모듈');
+    const tab = clonePlain(sourceTab);
+    if (Number.isInteger(questionIndex)) {
+      const question = sourceTab.questions?.[questionIndex];
+      if (!question) return makeEmptyRestoreData(tab.label || mod.title || '문항');
+      tab.questions = [clonePlain(question)];
+    }
+    mod.tabs = [tab];
+    mod.activeTab = tab.id;
+  }
+  return buildModuleWrapperRestoreData(moduleId, mod, mod.title || '모듈');
+}
+
+async function buildPdfRestorePayload(kind, title, partialData, extra = {}) {
+  const data = clonePlain(partialData || makeEmptyRestoreData(title));
+  const assetIds = collectAssetIdsFromObject(data);
+  return {
+    schema: PDF_RESTORE_SCHEMA,
+    app: document.title || 'StudyPlanner',
+    buildId: APP_BUILD_ID,
+    exportedAt: new Date().toISOString(),
+    kind,
+    title,
+    extra,
+    data,
+    __assets: await buildAssetBackupItems(assetIds)
+  };
+}
+
+function scrubImportedRuntimeState(value) {
+  if (Array.isArray(value)) {
+    value.forEach(scrubImportedRuntimeState);
+  } else if (value && typeof value === 'object') {
+    Object.keys(value).forEach(key => {
+      if (key === 'isRunning') value[key] = false;
+      else scrubImportedRuntimeState(value[key]);
+    });
+  }
+  return value;
+}
+
+function prepareImportedPlannerSubset(partialData) {
+  const src = clonePlain(partialData || {});
+  scrubImportedRuntimeState(src);
+  const sourceModules = src.modules || {};
+  let sourceSubjects = Array.isArray(src.home?.subjects) ? src.home.subjects : [];
+  if (!sourceSubjects.length) {
+    sourceSubjects = Object.keys(sourceModules).map(mid => ({
+      id: `pdf_subject_${mid}`,
+      name: sourceModules[mid]?.title || '가져온 모듈',
+      examInfo: sourceModules[mid]?.subtitle || '',
+      badge: 'PDF',
+      __moduleOnly: mid
+    }));
+  }
+  const sourceDetails = src.details || {};
+  const result = { subjects: [], details: {}, modules: {} };
+  const moduleMap = new Map();
+
+  function mapModuleId(oldMid) {
+    if (!oldMid || !sourceModules[oldMid]) return null;
+    if (!moduleMap.has(oldMid)) moduleMap.set(oldMid, uid('m'));
+    return moduleMap.get(oldMid);
+  }
+
+  sourceSubjects.forEach((subject, si) => {
+    const oldSid = subject.id || `subject_${si}`;
+    const newSid = uid('s');
+    const ns = clonePlain(subject);
+    delete ns.__moduleOnly;
+    ns.id = newSid;
+    ns.isRunning = false;
+    result.subjects.push(ns);
+
+    let sourceDetail = sourceDetails[oldSid];
+    if (!sourceDetail && subject.__moduleOnly) {
+      const mid = subject.__moduleOnly;
+      sourceDetail = {
+        id: oldSid,
+        title: subject.name || sourceModules[mid]?.title || '가져온 모듈',
+        subtitle: subject.examInfo || sourceModules[mid]?.subtitle || '',
+        cards: [{
+          id: `pdf_card_${mid}`,
+          title: sourceModules[mid]?.title || '모듈',
+          scope: sourceModules[mid]?.subtitle || '',
+          badge: 'PDF',
+          done: false,
+          time: 0,
+          module: mid
+        }]
+      };
+    }
+    if (!sourceDetail) {
+      sourceDetail = { id: oldSid, title: ns.name || '상세 페이지', subtitle: ns.examInfo || '', cards: [] };
+    }
+    const nd = clonePlain(sourceDetail);
+    nd.id = newSid;
+    nd.cards = (nd.cards || []).map(card => {
+      const nc = clonePlain(card);
+      nc.id = uid('c');
+      nc.isRunning = false;
+      if (nc.module) {
+        const mapped = mapModuleId(nc.module);
+        nc.module = mapped || null;
+      }
+      return nc;
+    });
+    result.details[newSid] = nd;
+  });
+
+  moduleMap.forEach((newMid, oldMid) => {
+    const sourceModule = sourceModules[oldMid];
+    if (!sourceModule) return;
+    const nm = clonePlain(sourceModule);
+    const tabMap = new Map();
+    nm.id = newMid;
+    nm.isRunning = false;
+    nm.tabs = (nm.tabs || []).map((tab, ti) => {
+      const oldTid = tab.id || `tab_${ti}`;
+      const newTid = uid('t');
+      tabMap.set(oldTid, newTid);
+      const nt = clonePlain(tab);
+      nt.id = newTid;
+      nt.isRunning = false;
+      nt.questions = (nt.questions || []).map(q => {
+        const nq = clonePlain(q);
+        nq.id = uid('q');
+        nq.isRunning = false;
+        return nq;
+      });
+      return nt;
+    });
+    nm.activeTab = tabMap.get(nm.activeTab) || nm.tabs[0]?.id || null;
+    result.modules[newMid] = nm;
+  });
+
+  Object.entries(result.details).forEach(([sid, detail]) => {
+    (detail.cards || []).forEach(card => {
+      if (card.module && result.modules[card.module]) {
+        result.modules[card.module].backTo = `#/detail/${sid}`;
+      }
+    });
+  });
+
+  return result;
+}
+
+async function importStudyPlannerPdfPayload(payload, fileName = '') {
+  if (!payload || payload.schema !== PDF_RESTORE_SCHEMA || !payload.data) {
+    throw new Error('StudyPlanner 복원 데이터가 들어있는 PDF가 아닙니다.');
+  }
+  const prepared = prepareImportedPlannerSubset(payload.data);
+  const subjectCount = prepared.subjects.length;
+  const cardCount = Object.values(prepared.details).reduce((sum, d) => sum + (d.cards || []).length, 0);
+  const moduleCount = Object.keys(prepared.modules).length;
+  if (!subjectCount && !cardCount && !moduleCount) throw new Error('가져올 카드 구조가 없습니다.');
+
+  const ok = confirm(
+    `StudyPlanner PDF 복원 데이터를 찾았습니다.\n\n` +
+    `파일: ${fileName || payload.title || 'PDF'}\n` +
+    `과목/페이지: ${subjectCount}개\n카드: ${cardCount}개\n모듈: ${moduleCount}개\n이미지: ${(payload.__assets || []).length}개\n\n` +
+    `현재 데이터에 새 카드로 추가할까요?`
+  );
+  if (!ok) return;
+
+  if (payload.__assets?.length) await importAssetsFromBackup(payload.__assets);
+  if (!DATA.home) DATA.home = baseData().home;
+  if (!Array.isArray(DATA.home.subjects)) DATA.home.subjects = [];
+  DATA.home.subjects.push(...prepared.subjects);
+  DATA.details = { ...(DATA.details || {}), ...prepared.details };
+  DATA.modules = { ...(DATA.modules || {}), ...prepared.modules };
+  normalizeData();
+  await refreshAssetStorageUsage({force:true, updateDom:true});
+  saveData();
+  location.hash = '#/';
+  renderRouter();
+  renderDailySidebar();
+  showToast('PDF에서 카드 구조를 가져왔습니다.', 1800);
+}
+
 function exportData() {
   (async () => {
-    const payload = JSON.parse(JSON.stringify(DATA));
-    const assets = await listAssetRecords();
-    if (assets.length) {
-      payload.__assets = await Promise.all(assets.map(async a => ({
-        id: a.id,
-        name: a.name,
-        type: a.type,
-        size: a.size,
-        hash: a.hash,
-        createdAt: a.createdAt,
-        dataUrl: await blobToDataUrl(a.blob)
-      })));
-    }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
-    a.download = `planner_backup_${toYMDLocal(new Date())}.json`;
-    a.click();
+    const payload = clonePlain(DATA);
+    const assets = await buildAssetBackupItems();
+    if (assets.length) payload.__assets = assets;
+    downloadBlob(
+      new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }),
+      `planner_backup_${toYMDLocal(new Date())}.json`
+    );
   })().catch(err => alert('백업 저장 실패: ' + err.message));
 }
 
 window.loadJsonFile = function(e) {
   const f = e.target.files[0]; if (!f) return;
+  const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '');
+  if (isPdf) {
+    (async () => {
+      try {
+        showToast('PDF 복원 데이터 확인 중...', 0);
+        const payload = await readPdfRestorePayloadFile(f);
+        hideToast();
+        if (!payload) {
+          alert('이 PDF에는 StudyPlanner 복원 데이터가 없습니다.\n\n복원 가능한 PDF는 이 앱에서 새로 내보낸 파일이어야 합니다.');
+          return;
+        }
+        await importStudyPlannerPdfPayload(payload, f.name);
+      } catch (err) {
+        console.error(err);
+        hideToast();
+        alert(err.message || 'PDF 가져오기 중 오류가 발생했습니다.');
+      } finally {
+        e.target.value = '';
+      }
+    })();
+    return;
+  }
   const r = new FileReader();
   r.onload = async function(evt) {
     try {
@@ -2511,9 +2974,9 @@ function renderHome() {
       <h1 class="editable block" data-placeholder="" onclick="openEditModal('app_info','home')">${DATA.home.title||''}</h1>
       <p class="editable block" data-placeholder="" onclick="openEditModal('app_info','home')" style="color:var(--text-sub)">${DATA.home.subtitle||''}</p>
       <div style="margin-top:10px;">
-        <button class="btn btn-outline" onclick="triggerImport()">📂</button>
+        <button class="btn btn-outline" onclick="triggerImport()" title="JSON/PDF 가져오기">📂</button>
         <button class="btn btn-outline" onclick="exportData()">💾</button>
-        <button class="btn btn-outline" onclick="exportPagePdf('home','home')" title="현재 필터 기준 페이지 PDF">🖨️</button>
+        <button class="btn btn-outline" onclick="exportPagePdf('home','home')" title="현재 필터 기준 복원 가능 PDF">🖨️</button>
         <button class="btn btn-outline" onclick="resetAccumulatedTime('all')" title="누적 시간 전체 초기화">⏱</button>
         <button class="btn btn-outline" style="color:#ef4444;" onclick="hardReset()">🗑</button>
         ${renderAssetUsageBadge()}
@@ -2552,8 +3015,8 @@ function renderHome() {
             <div class="card-actions">
 
               <button class="btn btn-icon" onclick="duplicateSubject(${realIdx});event.stopPropagation()">📑</button>
-              <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('home','home',${realIdx},'');event.stopPropagation()">🖨️</button>
-              <button class="btn btn-icon" title="하위 페이지 포함 PDF" onclick="exportCardPdf('home','home',${realIdx},'',true);event.stopPropagation()">🔗</button>
+              <button class="btn btn-icon" title="복원 가능 카드 PDF" onclick="exportCardPdf('home','home',${realIdx},'');event.stopPropagation()">🖨️</button>
+              <button class="btn btn-icon" title="하위 페이지 포함 복원 가능 PDF" onclick="exportCardPdf('home','home',${realIdx},'',true);event.stopPropagation()">🔗</button>
               <button class="btn btn-icon" onclick="openEditModal('subject','home',${realIdx});event.stopPropagation()">✏️</button>
               <button class="btn btn-icon btn-danger" onclick="deleteCard('subject','home',${realIdx});event.stopPropagation()">🗑</button>
             </div>
@@ -2645,7 +3108,7 @@ function renderDetail(sid) {
     <div style="margin-bottom:20px;">
       <h1 class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.title||'(제목 없음)'}</h1>
       <p class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.subtitle||''}</p>
-      <button class="btn btn-outline" style="margin-top:10px;" onclick="exportPagePdf('detail','${sid}')">🖨️ 페이지 PDF</button>
+      <button class="btn btn-outline" style="margin-top:10px;" onclick="exportPagePdf('detail','${sid}')" title="복원 가능 페이지 PDF">🖨️ 페이지 PDF</button>
     </div>
     ${renderStickyHeader('진행률', stats.pct, stats.timeStr)}
     <div class="bulk-bar">
@@ -2695,7 +3158,7 @@ function renderModule(mid) {
 
     <h1 class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.title||'(모듈)'}</h1>
     <p class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.subtitle||''}</p>
-    <button class="btn btn-outline" style="margin-bottom:12px;" onclick="exportPagePdf('module','${mid}')">🖨️ 페이지 PDF</button>
+    <button class="btn btn-outline" style="margin-bottom:12px;" onclick="exportPagePdf('module','${mid}')" title="복원 가능 페이지 PDF">🖨️ 페이지 PDF</button>
 
     ${renderStickyHeader('모듈 진행률', stats.pct, stats.timeStr)}
 
@@ -2721,7 +3184,7 @@ function renderModule(mid) {
         </div>
         <div class="card-actions" style="opacity:1;">
           <button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveTheory('${mid}','${tid}');event.stopPropagation()">↪</button>
-          <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('module_theory','${mid}',0,'${tid}');event.stopPropagation()">🖨️</button>
+          <button class="btn btn-icon" title="복원 가능 카드 PDF" onclick="exportCardPdf('module_theory','${mid}',0,'${tid}');event.stopPropagation()">🖨️</button>
           <button class="btn btn-icon btn-danger" onclick="deleteTab('${mid}','${tid}');event.stopPropagation()">🗑</button>
         </div>
       </div>
@@ -2820,8 +3283,8 @@ function renderCardItem(item, level, pid, idx, tabId) {
           ${level==='detail' ? `<button class="btn btn-icon" title="다른 과목으로 이동" onclick="openMoveDetailCard('${pid}',${idx});event.stopPropagation()">↪</button>` : ''}
           ${isMod ? `<button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveQuestion('${pid}','${tabSafe}',${idx});event.stopPropagation()">↪</button>` : ''}
 
-          <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">🖨️</button>
-          ${level==='detail' && item.module && DATA.modules?.[item.module] ? `<button class="btn btn-icon" title="하위 페이지 포함 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}',true);event.stopPropagation()">🔗</button>` : ''}
+          <button class="btn btn-icon" title="복원 가능 카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">🖨️</button>
+          ${level==='detail' && item.module && DATA.modules?.[item.module] ? `<button class="btn btn-icon" title="하위 페이지 포함 복원 가능 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}',true);event.stopPropagation()">🔗</button>` : ''}
           <button class="btn btn-icon" onclick="duplicateCard('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">📑</button>
           <button class="btn btn-icon" onclick="(('${level}'==='detail')?openEditModal('detail','${pid}',${idx}):openEditModal('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">✏️</button>
           <button class="btn btn-icon btn-danger" onclick="(('${level}'==='detail')?deleteCard('detail','${pid}',${idx}):deleteCard('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">🗑</button>
