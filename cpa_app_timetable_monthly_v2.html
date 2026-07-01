@@ -1628,12 +1628,20 @@ async function exportPdfDocument(title, bodyHtml, opts = {}){
     await renderPdfBodyPages(pdf, doc);
     addInternalPdfLinks(pdf, doc);
     addPdfOutlines(pdf, doc, outlineItems);
-    showToast('PDF 복원 데이터 삽입 중...', 0);
-    const restorePayload = typeof opts.restorePayload === 'function'
-      ? await opts.restorePayload()
-      : opts.restorePayload;
     const pdfBlob = pdf.output('blob');
-    const finalBlob = restorePayload ? await appendPdfRestorePayload(pdfBlob, restorePayload) : pdfBlob;
+    let finalBlob = pdfBlob;
+    if(opts.restorePayload){
+      try{
+        showToast('PDF 복원 데이터 삽입 중...', 0);
+        const restorePayload = typeof opts.restorePayload === 'function'
+          ? await opts.restorePayload()
+          : opts.restorePayload;
+        if(restorePayload) finalBlob = await appendPdfRestorePayload(pdfBlob, restorePayload);
+      }catch(payloadErr){
+        console.warn('PDF restore payload skipped:', payloadErr);
+        showToast('복원 데이터 없이 PDF를 저장합니다.', 1600);
+      }
+    }
     downloadBlob(finalBlob, safePdfFilename(title));
     host.remove();
     showToast('PDF 저장 완료', 1600);
@@ -1658,7 +1666,7 @@ function exportCardPdf(level, pid, idx, tabId, withChildren=false){
     headerRight = sub?.badge || '';
     html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(sub?.examInfo || '')}${(DATA.details?.[sub?.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>체크리스트</h3><ul>${(DATA.details?.[sub?.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`;
     restoreKind = 'subject-card';
-    restoreData = buildDetailRestoreData(sub.id, null, title);
+    restoreData = buildDetailRestoreData(sub.id, withChildren ? null : [], title);
     if(withChildren){
       html += renderSubjectChildPdf(sub);
       outlineChildren = buildSubjectPdfOutlineChildren(sub);
@@ -1671,7 +1679,7 @@ function exportCardPdf(level, pid, idx, tabId, withChildren=false){
     headerRight = c.badge || '';
     html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}${renderModuleChecklist(c.module)}`;
     restoreKind = 'detail-card';
-    restoreData = buildDetailRestoreData(pid, [c], title);
+    restoreData = buildDetailRestoreData(pid, [cloneDetailCardForRestorePayload(c, { includeModule: withChildren })], title);
     if(withChildren){
       html += renderModuleChildPdf(c.module);
       outlineChildren = c.module ? [buildModulePdfOutline(c.module)] : [];
@@ -2037,9 +2045,23 @@ function toggleDarkMode(){
 /* =========================
    STORAGE / IMPORT EXPORT
 ========================= */
-function saveData(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }catch(e){}
+let __saveDataFailureNotified = false;
+function saveData(options = {}){
+  const notify = options.notify !== false;
+  let stored = true;
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+    __saveDataFailureNotified = false;
+  }catch(e){
+    stored = false;
+    console.error('Planner save failed:', e);
+    if(notify && !__saveDataFailureNotified){
+      __saveDataFailureNotified = true;
+      alert('브라우저 저장 공간이 부족해서 변경사항이 저장되지 않았습니다. 백업을 내보낸 뒤 이미지나 데이터를 정리해 주세요.');
+    }
+  }
   try{ rebuildIndex(); }catch(e){}
+  return stored;
 }
 
 function triggerImport() { document.getElementById('fileInput').click(); }
@@ -2062,16 +2084,36 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([arr], { type: mime });
 }
 
-async function importAssetsFromBackup(items) {
-  if (!Array.isArray(items) || !items.length) return;
+async function nextAvailableAssetId() {
+  let id = uid('a');
+  while(await getAssetRecord(id)) id = uid('a');
+  return id;
+}
+
+async function importAssetsFromBackup(items, options = {}) {
+  const remapConflicts = !!options.remapConflicts;
+  const idMap = new Map();
   const db = await openAssetDb();
-  const tx = db.transaction(ASSET_STORE, 'readwrite');
-  const store = tx.objectStore(ASSET_STORE);
+  if (!Array.isArray(items) || !items.length) return idMap;
   for (const item of items) {
     if (!item || !item.id || !item.dataUrl) continue;
     const blob = dataUrlToBlob(item.dataUrl);
+    const existing = remapConflicts ? await getAssetRecord(item.id) : null;
+    let id = item.id;
+    if(existing){
+      const incomingHash = String(item.hash || '');
+      const existingHash = String(existing.hash || '');
+      if(incomingHash && existingHash && incomingHash === existingHash){
+        idMap.set(item.id, item.id);
+        continue;
+      }
+      id = await nextAvailableAssetId();
+    }
+    idMap.set(item.id, id);
+    const tx = db.transaction(ASSET_STORE, 'readwrite');
+    const store = tx.objectStore(ASSET_STORE);
     await txRequest(store.put({
-      id: item.id,
+      id,
       name: item.name || item.id,
       type: item.type || 'application/octet-stream',
       size: item.size || blob.size || 0,
@@ -2080,6 +2122,7 @@ async function importAssetsFromBackup(items) {
       blob
     }));
   }
+  return idMap;
 }
 
 function downloadBlob(blob, filename) {
@@ -2101,6 +2144,22 @@ function collectAssetIdsFromObject(value) {
     return _;
   });
   return ids;
+}
+
+function rewriteAssetRefsInObject(value, idMap) {
+  if(!idMap || !idMap.size) return value;
+  if(typeof value === 'string'){
+    return value.replace(/app:\/\/asset\/([A-Za-z0-9_-]+)/g, (match, id) => {
+      const next = idMap.get(id);
+      return next && next !== id ? `${ASSET_ID_PREFIX}${next}` : match;
+    });
+  }
+  if(Array.isArray(value)){
+    value.forEach((item, idx) => { value[idx] = rewriteAssetRefsInObject(item, idMap); });
+  } else if(value && typeof value === 'object'){
+    Object.keys(value).forEach(key => { value[key] = rewriteAssetRefsInObject(value[key], idMap); });
+  }
+  return value;
 }
 
 async function buildAssetBackupItems(assetIds = null) {
@@ -2257,6 +2316,12 @@ function buildSubjectsRestoreData(subjects, title = '') {
   return partial;
 }
 
+function cloneDetailCardForRestorePayload(card, { includeModule = false } = {}) {
+  const out = clonePlain(card);
+  if(!includeModule) out.module = null;
+  return out;
+}
+
 function buildDetailRestoreData(subjectId, cardsOverride = null, title = '') {
   const subject = (DATA.home?.subjects || []).find(s => s.id === subjectId) || {
     id: subjectId,
@@ -2314,6 +2379,8 @@ function buildModuleSubsetRestoreData(moduleId, tabId = null, questionIndex = nu
       const question = sourceTab.questions?.[questionIndex];
       if (!question) return makeEmptyRestoreData(tab.label || mod.title || '문항');
       tab.questions = [clonePlain(question)];
+    } else {
+      tab.questions = [];
     }
     mod.tabs = [tab];
     mod.activeTab = tab.id;
@@ -2337,6 +2404,25 @@ async function buildPdfRestorePayload(kind, title, partialData, extra = {}) {
   };
 }
 
+function sanitizeImportedPdfString(text) {
+  return String(text || '')
+    .replace(/\0/g, '')
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
+    .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<\/?[^>]+>/g, '');
+}
+
+function sanitizeImportedPdfData(value) {
+  if(typeof value === 'string') return sanitizeImportedPdfString(value);
+  if(Array.isArray(value)){
+    value.forEach((item, idx) => { value[idx] = sanitizeImportedPdfData(item); });
+  } else if(value && typeof value === 'object'){
+    Object.keys(value).forEach(key => { value[key] = sanitizeImportedPdfData(value[key]); });
+  }
+  return value;
+}
+
 function scrubImportedRuntimeState(value) {
   if (Array.isArray(value)) {
     value.forEach(scrubImportedRuntimeState);
@@ -2350,7 +2436,7 @@ function scrubImportedRuntimeState(value) {
 }
 
 function prepareImportedPlannerSubset(partialData) {
-  const src = clonePlain(partialData || {});
+  const src = sanitizeImportedPdfData(clonePlain(partialData || {}));
   scrubImportedRuntimeState(src);
   const sourceModules = src.modules || {};
   let sourceSubjects = Array.isArray(src.home?.subjects) ? src.home.subjects : [];
@@ -2473,7 +2559,10 @@ async function importStudyPlannerPdfPayload(payload, fileName = '') {
   );
   if (!ok) return;
 
-  if (payload.__assets?.length) await importAssetsFromBackup(payload.__assets);
+  if (payload.__assets?.length) {
+    const assetIdMap = await importAssetsFromBackup(payload.__assets, { remapConflicts:true });
+    rewriteAssetRefsInObject(prepared, assetIdMap);
+  }
   if (!DATA.home) DATA.home = baseData().home;
   if (!Array.isArray(DATA.home.subjects)) DATA.home.subjects = [];
   DATA.home.subjects.push(...prepared.subjects);
@@ -2481,11 +2570,11 @@ async function importStudyPlannerPdfPayload(payload, fileName = '') {
   DATA.modules = { ...(DATA.modules || {}), ...prepared.modules };
   normalizeData();
   await refreshAssetStorageUsage({force:true, updateDom:true});
-  saveData();
+  const saved = saveData();
   location.hash = '#/';
   renderRouter();
   renderDailySidebar();
-  showToast('PDF에서 카드 구조를 가져왔습니다.', 1800);
+  showToast(saved ? 'PDF에서 카드 구조를 가져왔습니다.' : '가져왔지만 브라우저 저장에 실패했습니다.', saved ? 1800 : 3200);
 }
 
 function exportData() {
@@ -2534,10 +2623,10 @@ window.loadJsonFile = function(e) {
       normalizeData();
       if (backupAssets && backupAssets.length) await importAssetsFromBackup(backupAssets);
       await refreshAssetStorageUsage({force:true, updateDom:true});
-      saveData();
+      const saved = saveData();
       renderRouter();
       renderDailySidebar();
-      alert("성공");
+      alert(saved ? "성공" : "불러왔지만 브라우저 저장에 실패했습니다.");
     } catch (err) {
       alert(err.message);
     }
