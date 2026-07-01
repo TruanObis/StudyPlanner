@@ -80,15 +80,15 @@ Automated (feasible without a framework): unit-test `bytesToBase64`/`base64ToByt
 
 ## Promotion Checklist
 
-- [ ] Finding 1 fixed: payload failure falls back to plain PDF download.
-- [ ] Finding 2 addressed: imported strings escaped/sanitized at render or on import.
-- [ ] Finding 3: quota failure surfaced to user.
-- [ ] Finding 4: payload scope trimmed to visual scope or explicitly labeled — decision recorded.
-- [ ] Finding 5: asset hash check before overwrite.
+- [x] Finding 1 fixed: payload failure falls back to plain PDF download.
+- [x] Finding 2 addressed: imported strings escaped/sanitized at render or on import.
+- [x] Finding 3: quota failure surfaced to user.
+- [x] Finding 4: payload scope trimmed to visual scope or explicitly labeled — decision recorded.
+- [x] Finding 5: asset hash check before overwrite.
 - [ ] Full test plan above passes in Chrome, Firefox, Safari (incl. one older-Safari import check).
-- [ ] UX copy: warn that re-saving/editing the PDF elsewhere strips restore data.
-- [ ] Diff v2→monthly reviewed to confirm only this feature moves.
-- [ ] README / in-app help updated for the 📂 button's new `.pdf` support.
+- [x] UX copy: warn that re-saving/editing the PDF elsewhere strips restore data.
+- [x] Diff v2→monthly reviewed to confirm only this feature moves.
+- [x] README / in-app help updated for the 📂 button's new `.pdf` support.
 
 ## Codex Follow-up Notes
 

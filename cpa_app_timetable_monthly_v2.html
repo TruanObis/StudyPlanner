@@ -1630,21 +1630,29 @@ async function exportPdfDocument(title, bodyHtml, opts = {}){
     addPdfOutlines(pdf, doc, outlineItems);
     const pdfBlob = pdf.output('blob');
     let finalBlob = pdfBlob;
+    let restoreAttached = false;
+    let restoreSkipped = false;
     if(opts.restorePayload){
       try{
         showToast('PDF 복원 데이터 삽입 중...', 0);
         const restorePayload = typeof opts.restorePayload === 'function'
           ? await opts.restorePayload()
           : opts.restorePayload;
-        if(restorePayload) finalBlob = await appendPdfRestorePayload(pdfBlob, restorePayload);
+        if(restorePayload){
+          finalBlob = await appendPdfRestorePayload(pdfBlob, restorePayload);
+          restoreAttached = finalBlob !== pdfBlob;
+        }
       }catch(payloadErr){
         console.warn('PDF restore payload skipped:', payloadErr);
-        showToast('복원 데이터 없이 PDF를 저장합니다.', 1600);
+        restoreSkipped = true;
       }
     }
     downloadBlob(finalBlob, safePdfFilename(title));
     host.remove();
-    showToast('PDF 저장 완료', 1600);
+    const doneMsg = restoreAttached
+      ? 'PDF 저장 완료 · 다른 앱에서 다시 저장하면 복원 데이터가 사라질 수 있습니다.'
+      : (restoreSkipped ? 'PDF 저장 완료 · 복원 데이터는 포함되지 않았습니다.' : 'PDF 저장 완료');
+    showToast(doneMsg, restoreAttached ? 3600 : 1800);
   }catch(err){
     console.error(err);
     if(host) host.remove();
@@ -2555,6 +2563,7 @@ async function importStudyPlannerPdfPayload(payload, fileName = '') {
     `StudyPlanner PDF 복원 데이터를 찾았습니다.\n\n` +
     `파일: ${fileName || payload.title || 'PDF'}\n` +
     `과목/페이지: ${subjectCount}개\n카드: ${cardCount}개\n모듈: ${moduleCount}개\n이미지: ${(payload.__assets || []).length}개\n\n` +
+    `PDF 편집기에서 다시 저장하거나 압축한 파일은 복원 데이터가 사라질 수 있습니다.\n\n` +
     `현재 데이터에 새 카드로 추가할까요?`
   );
   if (!ok) return;
@@ -2571,7 +2580,8 @@ async function importStudyPlannerPdfPayload(payload, fileName = '') {
   normalizeData();
   await refreshAssetStorageUsage({force:true, updateDom:true});
   const saved = saveData();
-  location.hash = '#/';
+  const firstImportedSubjectId = prepared.subjects[0]?.id || '';
+  location.hash = firstImportedSubjectId ? `#/?focus=${firstImportedSubjectId}` : '#/';
   renderRouter();
   renderDailySidebar();
   showToast(saved ? 'PDF에서 카드 구조를 가져왔습니다.' : '가져왔지만 브라우저 저장에 실패했습니다.', saved ? 1800 : 3200);
@@ -2599,7 +2609,7 @@ window.loadJsonFile = function(e) {
         const payload = await readPdfRestorePayloadFile(f);
         hideToast();
         if (!payload) {
-          alert('이 PDF에는 StudyPlanner 복원 데이터가 없습니다.\n\n복원 가능한 PDF는 이 앱에서 새로 내보낸 파일이어야 합니다.');
+          alert('이 PDF에는 StudyPlanner 복원 데이터가 없습니다.\n\n복원 가능한 PDF는 이 앱에서 새로 내보낸 파일이어야 합니다.\nPDF 편집기에서 다시 저장하거나 압축한 파일은 복원 데이터가 제거될 수 있습니다.');
           return;
         }
         await importStudyPlannerPdfPayload(payload, f.name);

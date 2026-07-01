@@ -65,6 +65,14 @@ Use the import button to restore a previously exported JSON backup.
 
 Backups may include attached image data, so backup files can become large when many images are attached.
 
+## Experimental V2 PDF Restore
+
+`cpa_app_timetable_monthly_v2.html` includes an experimental restorable PDF workflow.
+
+PDFs exported from the v2 app can include StudyPlanner restore data, so the same import button can read either JSON backups or compatible StudyPlanner PDFs.
+
+This is currently a staging feature. If a PDF is edited, compressed, merged, OCR-processed, or saved again in another PDF app, the restore data may be removed even though the PDF still opens visually.
+
 ## If the App Shows a Blank Screen
 
 Open the browser developer console and run:
