@@ -9,7 +9,8 @@
   <title>Inmonite's Study Helper</title>
 
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.7/dist/purify.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
@@ -605,7 +606,7 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
   </div>
 </div>
 
-<input type="file" id="fileInput" accept=".json" style="display:none" onchange="loadJsonFile(event)">
+<input type="file" id="fileInput" accept=".json,.pdf,application/json,application/pdf" style="display:none" onchange="loadJsonFile(event)">
 
 <script>
 // Markdown: 단일 줄바꿈(Enter)을 <br>로 렌더링
@@ -614,6 +615,7 @@ if (window.marked && typeof marked.setOptions === 'function') {
 }
 const MARKDOWN_SPECIAL_CHAR_FIX = /([\[\]()!@#$%^&\\=+`'"~-])(\*{1,3})(?=\S)/g;
 const MARKDOWN_TRAILING_BOLD_FIX = /(\*{2,3}[^*]+?\*{2,3})(?=\S)/g;
+const MARKDOWN_ALLOWED_URI = /^(?:(?:https?|mailto|tel|blob|app):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i;
 function normalizeMarkdownAsterisks(text){
   if (!text) return '';
   return String(text)
@@ -621,8 +623,18 @@ function normalizeMarkdownAsterisks(text){
     .replace(MARKDOWN_TRAILING_BOLD_FIX, '$1\u200B');
 }
 function renderMarkdown(text){
-  if (!window.marked || typeof marked.parse !== 'function') return text || '';
-  return marked.parse(resolveAssetMarkdownRefs(normalizeMarkdownAsterisks(text || '')));
+  const source = resolveAssetMarkdownRefs(normalizeMarkdownAsterisks(text || ''));
+  if (!window.marked || typeof marked.parse !== 'function') {
+    return escapeHtml(source).replace(/\n/g, '<br>');
+  }
+  const rendered = marked.parse(source);
+  if (!window.DOMPurify || typeof DOMPurify.sanitize !== 'function') {
+    return escapeHtml(source).replace(/\n/g, '<br>');
+  }
+  return DOMPurify.sanitize(rendered, {
+    USE_PROFILES: { html: true },
+    ALLOWED_URI_REGEXP: MARKDOWN_ALLOWED_URI
+  });
 }
 /* =========================
    DATA / STATE
@@ -630,7 +642,7 @@ function renderMarkdown(text){
 let DATA = null;
 const STORAGE_KEY = 'universal_planner_v28_data';
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-06-30-kst-today-cache-bust-1';
+const APP_BUILD_ID = '2026-07-14-data-timer-pdf-hardening-1';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = 'studyplanner_app_update_reload';
 const ASSET_DB_NAME = 'studyplanner_assets_v1';
@@ -674,6 +686,14 @@ function txRequest(req) {
   });
 }
 
+function txDone(tx) {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted.'));
+    tx.onerror = () => reject(tx.error || new Error('IndexedDB transaction failed.'));
+  });
+}
+
 async function sha256Hex(blob) {
   const ab = await blob.arrayBuffer();
   const digest = await crypto.subtle.digest('SHA-256', ab);
@@ -683,15 +703,17 @@ async function sha256Hex(blob) {
 async function saveAssetBlob(file, meta = {}) {
   const db = await openAssetDb();
   const hash = await sha256Hex(file);
-  const tx = db.transaction(ASSET_STORE, 'readwrite');
-  const store = tx.objectStore(ASSET_STORE);
-  const existing = await txRequest(store.index('hash').get(hash));
+  const lookupTx = db.transaction(ASSET_STORE, 'readonly');
+  const existing = await txRequest(lookupTx.objectStore(ASSET_STORE).index('hash').get(hash));
   if (existing && existing.id) return existing.id;
   const id = `a_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  await txRequest(store.put({
+  const tx = db.transaction(ASSET_STORE, 'readwrite');
+  const done = txDone(tx);
+  tx.objectStore(ASSET_STORE).put({
     id, name: file.name, type: file.type || 'application/octet-stream',
     size: file.size || 0, hash, createdAt: Date.now(), blob: file, ...meta
-  }));
+  });
+  await done;
   return id;
 }
 
@@ -705,6 +727,37 @@ async function listAssetRecords() {
   const db = await openAssetDb();
   const tx = db.transaction(ASSET_STORE, 'readonly');
   return txRequest(tx.objectStore(ASSET_STORE).getAll());
+}
+
+function revokeAssetObjectUrl(assetId){
+  const url = __assetUrlCache.get(assetId);
+  if(url) URL.revokeObjectURL(url);
+  __assetUrlCache.delete(assetId);
+}
+
+async function deleteAssetRecords(assetIds){
+  const ids = [...new Set(assetIds || [])].filter(Boolean);
+  if(!ids.length) return 0;
+  const db = await openAssetDb();
+  const tx = db.transaction(ASSET_STORE, 'readwrite');
+  const done = txDone(tx);
+  const store = tx.objectStore(ASSET_STORE);
+  ids.forEach(id => store.delete(id));
+  await done;
+  ids.forEach(revokeAssetObjectUrl);
+  __assetStorageInfo = null;
+  return ids.length;
+}
+
+async function clearAssetStore(){
+  const db = await openAssetDb();
+  const tx = db.transaction(ASSET_STORE, 'readwrite');
+  const done = txDone(tx);
+  tx.objectStore(ASSET_STORE).clear();
+  await done;
+  __assetUrlCache.forEach(url => URL.revokeObjectURL(url));
+  __assetUrlCache.clear();
+  __assetStorageInfo = null;
 }
 
 function formatBytes(bytes){
@@ -854,8 +907,24 @@ function updateAssetUsageBadge(){
 
 async function showAssetStorageDetails(){
   const info = await refreshAssetStorageUsage({force:true});
+  const records = await listAssetRecords().catch(()=>[]);
+  const referenced = collectAssetIdsFromObject(DATA);
+  const orphaned = records.filter(record => !referenced.has(record.id));
+  const orphanBytes = orphaned.reduce((sum, record) => sum + Number(record.size || record.blob?.size || 0), 0);
   const quotaLine = info.quota ? `전체 브라우저 저장소: ${formatBytes(info.usage)} / ${formatBytes(info.quota)} (${Math.round((info.usage/info.quota)*100)}%)` : '전체 브라우저 저장소 한도: 확인 불가';
-  alert(`이미지 저장소\n\n이미지: ${info.assetCount}개\n이미지 용량: ${formatBytes(info.assetBytes)}\n${quotaLine}\n\n이미지는 이 브라우저의 IndexedDB에 저장됩니다.`);
+  const orphanLine = orphaned.length
+    ? `\n미사용 이미지: ${orphaned.length}개 (${formatBytes(orphanBytes)})`
+    : '\n미사용 이미지: 없음';
+  const message = `이미지 저장소\n\n이미지: ${info.assetCount}개\n이미지 용량: ${formatBytes(info.assetBytes)}${orphanLine}\n${quotaLine}\n\n이미지는 이 브라우저의 IndexedDB에 저장됩니다.`;
+  if(!orphaned.length){
+    alert(message);
+    return;
+  }
+  if(confirm(`${message}\n\n현재 플래너에서 사용하지 않는 이미지를 삭제할까요?`)){
+    await deleteAssetRecords(orphaned.map(record => record.id));
+    await refreshAssetStorageUsage({force:true, updateDom:true});
+    showToast(`미사용 이미지 ${orphaned.length}개를 정리했습니다.`, 1800);
+  }
 }
 
 async function confirmAssetStorageCapacity(file){
@@ -899,6 +968,7 @@ function queueAssetResolve(assetId) {
         renderRouter(true);
       }, 0);
     })
+    .catch(err => console.warn('Image asset could not be loaded:', assetId, err))
     .finally(() => __assetLoadPending.delete(assetId));
 }
 
@@ -906,7 +976,7 @@ function resolveAssetMarkdownRefs(text){
   return String(text || '').replace(/app:\/\/asset\/([A-Za-z0-9_-]+)/g, (_, assetId) => {
     const url = __assetUrlCache.get(assetId) || '';
     if (!url) queueAssetResolve(assetId);
-    return url;
+    return url || `${ASSET_ID_PREFIX}${assetId}`;
   });
 }
 
@@ -1127,6 +1197,9 @@ function escapeHtml(s='') {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+function clonePlain(value){
+  return JSON.parse(JSON.stringify(value ?? null));
+}
 function renderMdOrText(text) {
   return `<div class="md-content">${renderMarkdown(text || '')}</div>`;
 }
@@ -1260,9 +1333,13 @@ const PDF_EXPORT_TARGET_CHUNK_PAGES = 50;
 const PDF_EXPORT_MAX_CANVAS_DIMENSION = 30000;
 const PDF_EXPORT_MAX_CANVAS_AREA = 120000000;
 const PDF_EXPORT_AVOID_BREAK_SELECTOR = '.print-subsection,.link-toc,.print-note,.md-content p,.md-content li,.md-content blockquote,.md-content pre,.md-content table,.md-content img,h2,h3,h4';
+const PDF_RESTORE_SCHEMA = 'studyplanner-pdf-payload-v1';
+const PDF_RESTORE_BEGIN = '%%STUDYPLANNER_PAYLOAD_BEGIN';
+const PDF_RESTORE_END = '%%STUDYPLANNER_PAYLOAD_END';
 let PDF_EXPORT_LIB_PROMISE = null;
 function safePdfFilename(title){
-  const safe = String(title || APP_NAME || 'studyplanner')
+  const appName = (typeof APP_NAME !== 'undefined' && APP_NAME) ? APP_NAME : 'studyplanner';
+  const safe = String(title || appName)
     .replace(/[\\/:*?"<>|]+/g, '_')
     .replace(/\s+/g, ' ')
     .trim()
@@ -1323,16 +1400,38 @@ function pdfExportStyles(){
     .print-note h5{margin:0 0 6px;font-size:.92em;color:#475569}
   `;
 }
+async function hydratePdfAssetImages(root){
+  const images = Array.from(root.querySelectorAll('img'));
+  await Promise.all(images.map(async img => {
+    const src = img.getAttribute('src') || '';
+    if(!src.startsWith(ASSET_ID_PREFIX)) return;
+    const assetId = src.slice(ASSET_ID_PREFIX.length);
+    try{
+      const url = await getAssetObjectUrl(assetId);
+      if(url) img.src = url;
+      else img.removeAttribute('src');
+    }catch(e){
+      console.warn('PDF image asset could not be loaded:', assetId, e);
+      img.removeAttribute('src');
+    }
+  }));
+}
 function waitForPdfAssets(root){
   const images = Array.from(root.querySelectorAll('img'));
   if(!images.length) return Promise.resolve();
   return Promise.all(images.map(img => {
     if(img.complete) return Promise.resolve();
     return new Promise(resolve => {
-      const done = () => resolve();
-      img.onload = done;
-      img.onerror = done;
-      setTimeout(done, 5000);
+      let timer = null;
+      const done = () => {
+        if(timer) clearTimeout(timer);
+        img.removeEventListener('load', done);
+        img.removeEventListener('error', done);
+        resolve();
+      };
+      img.addEventListener('load', done, {once:true});
+      img.addEventListener('error', done, {once:true});
+      timer = setTimeout(done, 5000);
     });
   }));
 }
@@ -1611,6 +1710,7 @@ async function exportPdfDocument(title, bodyHtml, opts = {}){
     host.innerHTML = `<style>${pdfExportStyles()}</style><div class="pdf-export-doc" id="pdf-root"><div class="print-header"><div>${escapeHtml(headerLeft)}</div><div class="right">${escapeHtml(headerRight)}</div></div>${bodyHtml}</div>`;
     document.body.appendChild(host);
     const doc = host.querySelector('.pdf-export-doc');
+    await hydratePdfAssetImages(doc);
     renderPdfMath(doc);
     await waitForPdfAssets(doc);
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -1621,9 +1721,31 @@ async function exportPdfDocument(title, bodyHtml, opts = {}){
     await renderPdfBodyPages(pdf, doc);
     addInternalPdfLinks(pdf, doc);
     addPdfOutlines(pdf, doc, outlineItems);
-    pdf.save(safePdfFilename(title));
+    const pdfBlob = pdf.output('blob');
+    let finalBlob = pdfBlob;
+    let restoreAttached = false;
+    let restoreSkipped = false;
+    if(opts.restorePayload){
+      try{
+        showToast('PDF 복원 데이터 삽입 중...', 0);
+        const restorePayload = typeof opts.restorePayload === 'function'
+          ? await opts.restorePayload()
+          : opts.restorePayload;
+        if(restorePayload){
+          finalBlob = await appendPdfRestorePayload(pdfBlob, restorePayload);
+          restoreAttached = finalBlob !== pdfBlob;
+        }
+      }catch(payloadErr){
+        console.warn('PDF restore payload skipped:', payloadErr);
+        restoreSkipped = true;
+      }
+    }
+    downloadBlob(finalBlob, safePdfFilename(title));
     host.remove();
-    showToast('PDF 저장 완료', 1600);
+    const doneMsg = restoreAttached
+      ? 'PDF 저장 완료 · 다른 앱에서 다시 저장하면 복원 데이터가 사라질 수 있습니다.'
+      : (restoreSkipped ? 'PDF 저장 완료 · 복원 데이터는 포함되지 않았습니다.' : 'PDF 저장 완료');
+    showToast(doneMsg, restoreAttached ? 3600 : 1800);
   }catch(err){
     console.error(err);
     if(host) host.remove();
@@ -1635,12 +1757,17 @@ function exportCardPdf(level, pid, idx, tabId, withChildren=false){
   let title='카드'; let html='';
   let headerLeft=''; let headerRight='';
   let outlineChildren=[];
+  let restoreKind = 'card';
+  let restoreData = null;
   if(level==='home'){
     const sub = DATA.home.subjects[idx];
+    if(!sub) return;
     title=sub?.name||'홈페이지 카드';
     headerLeft = `${title}`;
     headerRight = sub?.badge || '';
     html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(sub?.examInfo || '')}${(DATA.details?.[sub?.id]?.cards||[]).length ? `<div class="section-gap"></div><h3>체크리스트</h3><ul>${(DATA.details?.[sub?.id]?.cards||[]).map(c => `<li>${doneMark(calcCardStats(c).isComplete)} ${escapeHtml(c.title||'')}</li>`).join('')}</ul>` : ''}`;
+    restoreKind = 'subject-card';
+    restoreData = buildDetailRestoreData(sub.id, withChildren ? null : [], title);
     if(withChildren){
       html += renderSubjectChildPdf(sub);
       outlineChildren = buildSubjectPdfOutlineChildren(sub);
@@ -1652,6 +1779,8 @@ function exportCardPdf(level, pid, idx, tabId, withChildren=false){
     headerLeft = `${findSubjectNameByDetailId(pid)} > ${title}`;
     headerRight = c.badge || '';
     html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(c.scope||'')}${c.qbox ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(c.qbox)}` : ''}${renderModuleChecklist(c.module)}`;
+    restoreKind = 'detail-card';
+    restoreData = buildDetailRestoreData(pid, [cloneDetailCardForRestorePayload(c, { includeModule: withChildren })], title);
     if(withChildren){
       html += renderModuleChildPdf(c.module);
       outlineChildren = c.module ? [buildModulePdfOutline(c.module)] : [];
@@ -1659,12 +1788,15 @@ function exportCardPdf(level, pid, idx, tabId, withChildren=false){
   } else if(level==='module_theory'){
     const mod = DATA.modules?.[pid];
     const tab = mod?.tabs?.find(t=>t.id===tabId);
+    if(!mod || !tab) return;
     const parent = findDetailCardByModuleId(pid);
     const homeTitle = parent ? findSubjectNameByDetailId(parent.detailId) : '홈페이지 카드';
     const detailTitle = parent?.card?.title || mod?.title || 'module 카드';
     title = tab?.label || '이론 카드';
     headerLeft = `${homeTitle} > ${detailTitle} > ${title}`;
     html = `<h1>${escapeHtml(title)}</h1>${renderMdOrText(tab?.theoryNote || '')}`;
+    restoreKind = 'module-theory-card';
+    restoreData = buildModuleSubsetRestoreData(pid, tabId, null);
   } else if(level==='module'){
     const mod = DATA.modules?.[pid];
     const tab = mod?.tabs?.find(t=>t.id===tabId) || mod?.tabs?.[0];
@@ -1677,16 +1809,29 @@ function exportCardPdf(level, pid, idx, tabId, withChildren=false){
     headerLeft = `${homeTitle} > ${detailTitle} > ${(tab?.label || '기출문제')}`;
     headerRight = q.src || '';
     html = `<div class="md-content as-body">${renderMarkdown(q.text || '')}</div>${q.userNote ? `<hr class="section-sep"><div class="section-gap"></div>${renderMdOrText(q.userNote)}` : ''}`;
+    restoreKind = 'question-card';
+    restoreData = buildModuleSubsetRestoreData(pid, tab?.id, idx);
   }
-  exportPdfDocument(title, html, { headerLeft, headerRight, outline: [pdfOutlineItem(title, 'pdf-root', outlineChildren)] });
+  exportPdfDocument(title, html, {
+    headerLeft,
+    headerRight,
+    outline: [pdfOutlineItem(title, 'pdf-root', outlineChildren)],
+    restorePayload: () => buildPdfRestorePayload(restoreKind, title, restoreData, { level, pid, idx, tabId, withChildren })
+  });
 }
 function exportPagePdf(level, id){
   if(level==='home'){
     const headerRight = HOME_BADGE_FILTER==='all' ? '' : `${HOME_BADGE_FILTER}`;
     const list = (HOME_BADGE_FILTER==='all') ? (DATA.home.subjects||[]) : (DATA.home.subjects||[]).filter(s=>badgeTags(s.badge).includes(HOME_BADGE_FILTER) || String(s.badge||'').trim()===HOME_BADGE_FILTER);
-    const html = `<h1>${escapeHtml(DATA.home.title||APP_NAME)}</h1>${renderMdOrText(DATA.home.subtitle||'')}${renderHomePageToc(list)}${list.map((sub, si) => renderSubjectPageSection(sub, si)).join('')}`;
-    const outline = [pdfOutlineItem(DATA.home.title||APP_NAME, 'pdf-root', list.map((sub, si) => buildSubjectPdfOutline(sub, si)))];
-    return exportPdfDocument(DATA.home.title||'홈', html, { headerRight, outline });
+    const appTitle = DATA.home.title || document.title || 'StudyPlanner';
+    const html = `<h1>${escapeHtml(appTitle)}</h1>${renderMdOrText(DATA.home.subtitle||'')}${renderHomePageToc(list)}${list.map((sub, si) => renderSubjectPageSection(sub, si)).join('')}`;
+    const outline = [pdfOutlineItem(appTitle, 'pdf-root', list.map((sub, si) => buildSubjectPdfOutline(sub, si)))];
+    const title = DATA.home.title || '홈';
+    return exportPdfDocument(title, html, {
+      headerRight,
+      outline,
+      restorePayload: () => buildPdfRestorePayload('home-page', title, buildSubjectsRestoreData(list, title), { level, id, filter: HOME_BADGE_FILTER })
+    });
   }
   if(level==='detail'){
     const d = DATA.details?.[id];
@@ -1697,7 +1842,12 @@ function exportPagePdf(level, id){
     const sub = (DATA.home.subjects||[]).find(s=>s.id===id) || { id, name:d.title || '상세 페이지', examInfo:d.subtitle || '' };
     const html = `<h1>${escapeHtml(d.title||'상세 페이지')}</h1>${renderMdOrText(d.subtitle||'')}${renderSubjectChildPdf(sub, cards)}`;
     const outline = [pdfOutlineItem(d.title||'상세 페이지', 'pdf-root', buildSubjectPdfOutlineChildren(sub, cards))];
-    return exportPdfDocument(d.title||'상세', html, { headerRight, outline });
+    const title = d.title || '상세';
+    return exportPdfDocument(title, html, {
+      headerRight,
+      outline,
+      restorePayload: () => buildPdfRestorePayload('detail-page', title, buildDetailRestoreData(id, cards, title), { level, id, filter: activeFilter })
+    });
   }
   if(level==='module'){
     const m = DATA.modules?.[id];
@@ -1705,7 +1855,11 @@ function exportPagePdf(level, id){
     const html = `<h1>${escapeHtml(m.title||'모듈')}</h1>${renderMdOrText(m.subtitle||'')}${renderModuleChildPdf(id)}`;
     const moduleOutline = buildModulePdfOutline(id);
     const outline = [pdfOutlineItem(m.title||'모듈', 'pdf-root', moduleOutline?.children || [])];
-    return exportPdfDocument(m.title||'모듈', html, { outline });
+    const title = m.title || '모듈';
+    return exportPdfDocument(title, html, {
+      outline,
+      restorePayload: () => buildPdfRestorePayload('module-page', title, buildModuleSubsetRestoreData(id), { level, id })
+    });
   }
 }
 
@@ -1817,6 +1971,10 @@ function jsStr(s){
     .replace(/'/g,"\\'")
     .replace(/\r/g,'')
     .replace(/\n/g,'\\n');
+}
+
+function jsAttr(s){
+  return escapeHtml(jsStr(s));
 }
 
 function buildCardHash(type, id, pid, extra){
@@ -1937,7 +2095,7 @@ function updateDDayPanel(){
     const date  = (d && d.date) ? d.date : '';
     const cnt = date ? calcDDayLabel(date) : 'D-?';
     return `<div class="dday-badge" onclick="editDDay(${d.__index}); event.stopPropagation();" title="클릭하여 편집">
-      <span>${label}</span>
+      <span>${escapeHtml(label)}</span>
       <span class="dday-count">${cnt}</span>
     </div>`;
   }).join('');
@@ -1992,9 +2150,144 @@ function toggleDarkMode(){
 /* =========================
    STORAGE / IMPORT EXPORT
 ========================= */
-function saveData(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }catch(e){}
+let __saveDataFailureNotified = false;
+function saveData(options = {}){
+  const notify = options.notify !== false;
+  let stored = true;
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+    __saveDataFailureNotified = false;
+  }catch(e){
+    stored = false;
+    console.error('Planner save failed:', e);
+    if(notify && !__saveDataFailureNotified){
+      __saveDataFailureNotified = true;
+      alert('브라우저 저장 공간이 부족해서 변경사항이 저장되지 않았습니다. 백업을 내보낸 뒤 이미지나 데이터를 정리해 주세요.');
+    }
+  }
   try{ rebuildIndex(); }catch(e){}
+  return stored;
+}
+
+function replacePlannerData(nextData, saveOptions = {}){
+  const previousData = DATA;
+  DATA = nextData;
+  try{
+    normalizeData();
+    if(saveData(saveOptions)) return true;
+  }catch(err){
+    DATA = previousData;
+    normalizeData();
+    throw err;
+  }
+  DATA = previousData;
+  normalizeData();
+  return false;
+}
+
+const SAFE_PLANNER_ID = /^[A-Za-z0-9_.:-]{1,200}$/;
+const RESERVED_OBJECT_KEYS = new Set([...Object.getOwnPropertyNames(Object.prototype), 'prototype']);
+function isPlainRecord(value){
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+function assertSafeImportedObjectKeys(value){
+  const pending = [value];
+  let scanned = 0;
+  while(pending.length){
+    const item = pending.pop();
+    if(++scanned > 1000000) throw new Error('가져올 JSON이 너무 복잡합니다.');
+    if(Array.isArray(item)){
+      item.forEach(child => { if(child && typeof child === 'object') pending.push(child); });
+      continue;
+    }
+    if(!isPlainRecord(item)) continue;
+    Object.keys(item).forEach(key => {
+      if(RESERVED_OBJECT_KEYS.has(key)) throw new Error(`허용되지 않는 JSON 키가 있습니다: ${key}`);
+      const child = item[key];
+      if(child && typeof child === 'object') pending.push(child);
+    });
+  }
+}
+
+function validateImportedPlannerData(value){
+  if(!isPlainRecord(value)) throw new Error('플래너 JSON 구조가 올바르지 않습니다.');
+  assertSafeImportedObjectKeys(value);
+
+  const checkId = (id, label, optional=false) => {
+    if(optional && (id === null || id === undefined || id === '')) return;
+    if(typeof id !== 'string' || !SAFE_PLANNER_ID.test(id) || RESERVED_OBJECT_KEYS.has(id)) {
+      throw new Error(`${label} ID가 올바르지 않습니다.`);
+    }
+  };
+  const checkUnique = (items, label) => {
+    const seen = new Set();
+    items.forEach(id => {
+      if(seen.has(id)) throw new Error(`${label} ID가 중복되었습니다: ${id}`);
+      seen.add(id);
+    });
+  };
+
+  if(value.home !== undefined && !isPlainRecord(value.home)) throw new Error('홈 데이터 구조가 올바르지 않습니다.');
+  if(value.details !== undefined && !isPlainRecord(value.details)) throw new Error('상세 페이지 구조가 올바르지 않습니다.');
+  if(value.modules !== undefined && !isPlainRecord(value.modules)) throw new Error('모듈 구조가 올바르지 않습니다.');
+  if(value.dailyHistory !== undefined && !isPlainRecord(value.dailyHistory)) throw new Error('일일 계획 구조가 올바르지 않습니다.');
+
+  const subjects = value.home?.subjects;
+  if(subjects !== undefined && !Array.isArray(subjects)) throw new Error('과목 목록이 배열이 아닙니다.');
+  const subjectIds = (subjects || []).map((subject, index) => {
+    if(!isPlainRecord(subject)) throw new Error(`과목 ${index + 1} 구조가 올바르지 않습니다.`);
+    checkId(subject?.id, `과목 ${index + 1}`);
+    return subject.id;
+  });
+  checkUnique(subjectIds, '과목');
+
+  for(const [sid, detail] of Object.entries(value.details || {})){
+    checkId(sid, '상세 페이지');
+    if(!isPlainRecord(detail) || !Array.isArray(detail.cards || [])) throw new Error(`상세 페이지 ${sid} 구조가 올바르지 않습니다.`);
+    const cardIds = (detail.cards || []).map((card, index) => {
+      if(!isPlainRecord(card)) throw new Error(`${sid} 카드 ${index + 1} 구조가 올바르지 않습니다.`);
+      checkId(card?.id, `${sid} 카드 ${index + 1}`);
+      checkId(card?.module, `${sid} 카드 모듈`, true);
+      return card.id;
+    });
+    checkUnique(cardIds, `${sid} 카드`);
+  }
+
+  for(const [mid, mod] of Object.entries(value.modules || {})){
+    checkId(mid, '모듈');
+    if(!isPlainRecord(mod) || !Array.isArray(mod.tabs) || !mod.tabs.length) throw new Error(`모듈 ${mid} 구조가 올바르지 않습니다.`);
+    const moduleQuestionIds = [];
+    const tabIds = mod.tabs.map((tab, index) => {
+      if(!isPlainRecord(tab)) throw new Error(`${mid} 탭 ${index + 1} 구조가 올바르지 않습니다.`);
+      checkId(tab?.id, `${mid} 탭 ${index + 1}`);
+      if(!Array.isArray(tab.questions || [])) throw new Error(`${mid} 탭 문항 목록이 배열이 아닙니다.`);
+      const questionIds = (tab.questions || []).map((question, qi) => {
+        if(!isPlainRecord(question)) throw new Error(`${mid} 문항 ${qi + 1} 구조가 올바르지 않습니다.`);
+        checkId(question?.id, `${mid} 문항 ${qi + 1}`);
+        moduleQuestionIds.push(question.id);
+        return question.id;
+      });
+      checkUnique(questionIds, `${mid} 문항`);
+      return tab.id;
+    });
+    checkUnique(tabIds, `${mid} 탭`);
+    checkUnique(moduleQuestionIds, `${mid} 전체 문항`);
+    checkId(mod.activeTab, `${mid} 활성 탭`, true);
+  }
+
+  for(const [date, daily] of Object.entries(value.dailyHistory || {})){
+    if(!parseYMD(date) || !isPlainRecord(daily) || !Array.isArray(daily.slots || [])) throw new Error(`일일 계획 ${date} 구조가 올바르지 않습니다.`);
+    (daily.slots || []).forEach(slot => {
+      if(!isPlainRecord(slot)) throw new Error(`일일 계획 ${date} 시간 블록 구조가 올바르지 않습니다.`);
+      if(!Array.isArray(slot.cardIds || [])) throw new Error(`일일 계획 ${date} 카드 목록이 배열이 아닙니다.`);
+      (slot.cardIds || []).forEach(ref => {
+        if(!isPlainRecord(ref) || !['subject','detail','theory','question','adhoc'].includes(ref.type)) throw new Error(`일일 계획 ${date} 카드 형식이 올바르지 않습니다.`);
+        checkId(ref.id, `일일 계획 ${date} 카드`);
+        checkId(ref.pid, `일일 계획 ${date} 상위 카드`, true);
+      });
+    });
+  }
+  return value;
 }
 
 function triggerImport() { document.getElementById('fileInput').click(); }
@@ -2017,61 +2310,600 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([arr], { type: mime });
 }
 
-async function importAssetsFromBackup(items) {
-  if (!Array.isArray(items) || !items.length) return;
+async function nextAvailableAssetId() {
+  let id = uid('a');
+  while(await getAssetRecord(id)) id = uid('a');
+  return id;
+}
+
+async function importAssetsFromBackup(items, options = {}) {
+  const remapConflicts = !!options.remapConflicts;
+  const idMap = new Map();
   const db = await openAssetDb();
-  const tx = db.transaction(ASSET_STORE, 'readwrite');
-  const store = tx.objectStore(ASSET_STORE);
+  if (!Array.isArray(items) || !items.length) return idMap;
   for (const item of items) {
     if (!item || !item.id || !item.dataUrl) continue;
+    if(!/^[A-Za-z0-9_-]{1,200}$/.test(String(item.id))) throw new Error('백업 이미지 ID가 올바르지 않습니다.');
     const blob = dataUrlToBlob(item.dataUrl);
-    await txRequest(store.put({
-      id: item.id,
+    const existing = remapConflicts ? await getAssetRecord(item.id) : null;
+    let id = item.id;
+    if(existing){
+      const incomingHash = String(item.hash || '');
+      const existingHash = String(existing.hash || '');
+      if(incomingHash && existingHash && incomingHash === existingHash){
+        idMap.set(item.id, item.id);
+        continue;
+      }
+      id = await nextAvailableAssetId();
+    }
+    idMap.set(item.id, id);
+    const tx = db.transaction(ASSET_STORE, 'readwrite');
+    const done = txDone(tx);
+    tx.objectStore(ASSET_STORE).put({
+      id,
       name: item.name || item.id,
       type: item.type || 'application/octet-stream',
       size: item.size || blob.size || 0,
       hash: item.hash || '',
       createdAt: item.createdAt || Date.now(),
       blob
+    });
+    await done;
+  }
+  return idMap;
+}
+
+function estimateBackupAssetBytes(items){
+  return (items || []).reduce((sum, item) => {
+    const declared = Number(item?.size || 0);
+    if(declared > 0) return sum + declared;
+    const encoded = String(item?.dataUrl || '').split(',')[1] || '';
+    return sum + Math.floor(encoded.length * 0.75);
+  }, 0);
+}
+
+async function confirmAssetImportCapacity(items){
+  if(!Array.isArray(items) || !items.length) return true;
+  const existing = new Map((await listAssetRecords().catch(()=>[])).map(record => [record.id, record]));
+  const incoming = items.filter(item => {
+    const current = existing.get(item?.id);
+    return !current || !item?.hash || !current.hash || String(current.hash) !== String(item.hash);
+  });
+  const bytes = estimateBackupAssetBytes(incoming);
+  if(!bytes) return true;
+  const info = await refreshAssetStorageUsage({force:true, updateDom:true});
+  const projected = (info.usage || 0) + bytes;
+  const ratio = info.quota ? projected / info.quota : 0;
+  const shouldWarn = info.quota
+    ? ratio >= STORAGE_WARN_RATIO || info.quota - projected < STORAGE_RESERVE_BYTES
+    : (info.assetBytes || 0) + bytes >= STORAGE_UNKNOWN_WARN_BYTES;
+  if(!shouldWarn) return true;
+  const quotaText = info.quota
+    ? `예상 브라우저 사용량: ${formatBytes(projected)} / ${formatBytes(info.quota)} (${Math.round(ratio * 100)}%)`
+    : `예상 이미지 저장량: ${formatBytes((info.assetBytes || 0) + bytes)}`;
+  return confirm(`백업 이미지 약 ${formatBytes(bytes)}를 가져옵니다.\n${quotaText}\n\n저장 공간이 부족하면 가져오기가 실패할 수 있습니다. 계속할까요?`);
+}
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+function collectAssetIdsFromObject(value) {
+  const ids = new Set();
+  const text = JSON.stringify(value || {});
+  text.replace(/app:\/\/asset\/([A-Za-z0-9_-]+)/g, (_, id) => {
+    ids.add(id);
+    return _;
+  });
+  return ids;
+}
+
+function rewriteAssetRefsInObject(value, idMap) {
+  if(!idMap || !idMap.size) return value;
+  if(typeof value === 'string'){
+    return value.replace(/app:\/\/asset\/([A-Za-z0-9_-]+)/g, (match, id) => {
+      const next = idMap.get(id);
+      return next && next !== id ? `${ASSET_ID_PREFIX}${next}` : match;
+    });
+  }
+  if(Array.isArray(value)){
+    value.forEach((item, idx) => { value[idx] = rewriteAssetRefsInObject(item, idMap); });
+  } else if(value && typeof value === 'object'){
+    Object.keys(value).forEach(key => { value[key] = rewriteAssetRefsInObject(value[key], idMap); });
+  }
+  return value;
+}
+
+async function buildAssetBackupItems(assetIds = null) {
+  const wanted = assetIds instanceof Set ? assetIds : null;
+  const assets = await listAssetRecords();
+  return Promise.all(assets
+    .filter(a => !wanted || wanted.has(a.id))
+    .map(async a => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      size: a.size || a.blob?.size || 0,
+      hash: a.hash,
+      createdAt: a.createdAt,
+      dataUrl: await blobToDataUrl(a.blob)
+    })));
+}
+
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(base64) {
+  const binary = atob(String(base64 || '').replace(/\s+/g, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function gzipBytes(bytes) {
+  if (!window.CompressionStream) return null;
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function ungzipBytes(bytes) {
+  if (!window.DecompressionStream) throw new Error('이 브라우저는 PDF 복원 데이터 압축 해제를 지원하지 않습니다.');
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function encodePdfRestorePayload(payload) {
+  const raw = new TextEncoder().encode(JSON.stringify(payload));
+  let encoding = 'json-base64';
+  let bytes = raw;
+  try {
+    const gz = await gzipBytes(raw);
+    if (gz && gz.byteLength < raw.byteLength) {
+      encoding = 'gzip-base64';
+      bytes = gz;
+    }
+  } catch (e) {}
+  return `\n${PDF_RESTORE_BEGIN}\n${encoding}\n${bytesToBase64(bytes)}\n${PDF_RESTORE_END}\n`;
+}
+
+async function appendPdfRestorePayload(pdfBlob, payload) {
+  if (!payload) return pdfBlob;
+  const encoded = await encodePdfRestorePayload(payload);
+  return new Blob([pdfBlob, encoded], { type: 'application/pdf' });
+}
+
+function asciiBytes(text) {
+  return new TextEncoder().encode(text);
+}
+
+function indexOfBytes(haystack, needle, start = 0) {
+  outer:
+  for (let i = Math.max(0, start); i <= haystack.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+function lastIndexOfBytes(haystack, needle) {
+  outer:
+  for (let i = haystack.length - needle.length; i >= 0; i--) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+async function decodePdfRestorePayloadBytes(bytes) {
+  const beginBytes = asciiBytes(PDF_RESTORE_BEGIN);
+  const endBytes = asciiBytes(PDF_RESTORE_END);
+  const begin = lastIndexOfBytes(bytes, beginBytes);
+  if (begin < 0) return null;
+  const payloadStart = begin + beginBytes.length;
+  const end = indexOfBytes(bytes, endBytes, payloadStart);
+  if (end < 0) return null;
+  const text = new TextDecoder().decode(bytes.slice(payloadStart, end)).trim();
+  const firstLineEnd = text.indexOf('\n');
+  if (firstLineEnd < 0) throw new Error('PDF 복원 데이터 형식이 올바르지 않습니다.');
+  const encoding = text.slice(0, firstLineEnd).trim();
+  const b64 = text.slice(firstLineEnd + 1).replace(/\s+/g, '');
+  let dataBytes = base64ToBytes(b64);
+  if (encoding === 'gzip-base64') dataBytes = await ungzipBytes(dataBytes);
+  else if (encoding !== 'json-base64') throw new Error('지원하지 않는 PDF 복원 데이터 형식입니다.');
+  return JSON.parse(new TextDecoder().decode(dataBytes));
+}
+
+async function readPdfRestorePayloadFile(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return decodePdfRestorePayloadBytes(bytes);
+}
+
+function makeEmptyRestoreData(title = '') {
+  return {
+    meta: { version: '2.6', source: 'studyplanner-pdf' },
+    home: { title: title || 'PDF 가져오기', subtitle: '', subjects: [], dDays: [] },
+    details: {},
+    modules: {},
+    dailyHistory: {}
+  };
+}
+
+function appendSubjectToRestoreData(partial, subject, cardsOverride = null) {
+  if (!partial || !subject) return partial;
+  const sub = clonePlain(subject);
+  if (!sub.id) sub.id = uid('s');
+  partial.home.subjects.push(sub);
+  const sourceDetail = DATA.details?.[sub.id] || {
+    id: sub.id,
+    title: sub.name || '상세 페이지',
+    subtitle: sub.examInfo || '',
+    cards: []
+  };
+  const detail = clonePlain(sourceDetail);
+  detail.id = sub.id;
+  if (Array.isArray(cardsOverride)) detail.cards = clonePlain(cardsOverride);
+  if (!Array.isArray(detail.cards)) detail.cards = [];
+  partial.details[sub.id] = detail;
+  detail.cards.forEach(card => {
+    if (card?.module && DATA.modules?.[card.module]) {
+      partial.modules[card.module] = clonePlain(DATA.modules[card.module]);
+    }
+  });
+  return partial;
+}
+
+function buildSubjectsRestoreData(subjects, title = '') {
+  const partial = makeEmptyRestoreData(title);
+  (subjects || []).forEach(sub => appendSubjectToRestoreData(partial, sub));
+  return partial;
+}
+
+function cloneDetailCardForRestorePayload(card, { includeModule = false } = {}) {
+  const out = clonePlain(card);
+  if(!includeModule) out.module = null;
+  return out;
+}
+
+function buildDetailRestoreData(subjectId, cardsOverride = null, title = '') {
+  const subject = (DATA.home?.subjects || []).find(s => s.id === subjectId) || {
+    id: subjectId,
+    name: DATA.details?.[subjectId]?.title || '상세 페이지',
+    examInfo: DATA.details?.[subjectId]?.subtitle || ''
+  };
+  const partial = makeEmptyRestoreData(title || subject.name || '상세 페이지');
+  appendSubjectToRestoreData(partial, subject, cardsOverride);
+  return partial;
+}
+
+function buildModuleWrapperRestoreData(moduleId, moduleOverride = null, titleOverride = '') {
+  const mod = clonePlain(moduleOverride || DATA.modules?.[moduleId]);
+  if (!mod) return makeEmptyRestoreData(titleOverride || '모듈');
+  mod.id = mod.id || moduleId || uid('m');
+  const sid = `pdf_subject_${mod.id}`;
+  const cardId = `pdf_card_${mod.id}`;
+  const partial = makeEmptyRestoreData(titleOverride || mod.title || '모듈');
+  partial.home.subjects.push({
+    id: sid,
+    name: titleOverride || mod.title || '가져온 모듈',
+    examInfo: mod.subtitle || '',
+    badge: 'PDF',
+    done: false,
+    time: 0,
+    today: 0
+  });
+  partial.details[sid] = {
+    id: sid,
+    title: titleOverride || mod.title || '가져온 모듈',
+    subtitle: mod.subtitle || '',
+    cards: [{
+      id: cardId,
+      title: mod.title || '모듈',
+      scope: mod.subtitle || '',
+      badge: 'PDF',
+      done: false,
+      time: 0,
+      today: 0,
+      module: mod.id
+    }]
+  };
+  partial.modules[mod.id] = mod;
+  return partial;
+}
+
+function buildModuleSubsetRestoreData(moduleId, tabId = null, questionIndex = null) {
+  const mod = clonePlain(DATA.modules?.[moduleId]);
+  if (!mod) return makeEmptyRestoreData('모듈');
+  if (tabId) {
+    const sourceTab = (mod.tabs || []).find(t => t.id === tabId);
+    if (!sourceTab) return makeEmptyRestoreData(mod.title || '모듈');
+    const tab = clonePlain(sourceTab);
+    if (Number.isInteger(questionIndex)) {
+      const question = sourceTab.questions?.[questionIndex];
+      if (!question) return makeEmptyRestoreData(tab.label || mod.title || '문항');
+      tab.questions = [clonePlain(question)];
+    } else {
+      tab.questions = [];
+    }
+    mod.tabs = [tab];
+    mod.activeTab = tab.id;
+  }
+  return buildModuleWrapperRestoreData(moduleId, mod, mod.title || '모듈');
+}
+
+async function buildPdfRestorePayload(kind, title, partialData, extra = {}) {
+  const data = clonePlain(partialData || makeEmptyRestoreData(title));
+  const assetIds = collectAssetIdsFromObject(data);
+  return {
+    schema: PDF_RESTORE_SCHEMA,
+    app: document.title || 'StudyPlanner',
+    buildId: APP_BUILD_ID,
+    exportedAt: new Date().toISOString(),
+    kind,
+    title,
+    extra,
+    data,
+    __assets: await buildAssetBackupItems(assetIds)
+  };
+}
+
+function sanitizeImportedPdfString(text) {
+  return String(text || '')
+    .replace(/\0/g, '')
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
+    .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<\/?[^>]+>/g, '');
+}
+
+function sanitizeImportedPdfData(value) {
+  if(typeof value === 'string') return sanitizeImportedPdfString(value);
+  if(Array.isArray(value)){
+    value.forEach((item, idx) => { value[idx] = sanitizeImportedPdfData(item); });
+  } else if(value && typeof value === 'object'){
+    Object.keys(value).forEach(key => { value[key] = sanitizeImportedPdfData(value[key]); });
+  }
+  return value;
+}
+
+function scrubImportedRuntimeState(value) {
+  if (Array.isArray(value)) {
+    value.forEach(scrubImportedRuntimeState);
+  } else if (value && typeof value === 'object') {
+    Object.keys(value).forEach(key => {
+      if (key === 'isRunning') value[key] = false;
+      else scrubImportedRuntimeState(value[key]);
+    });
+  }
+  return value;
+}
+
+function prepareImportedPlannerSubset(partialData) {
+  const src = sanitizeImportedPdfData(clonePlain(partialData || {}));
+  scrubImportedRuntimeState(src);
+  const sourceModules = src.modules || {};
+  let sourceSubjects = Array.isArray(src.home?.subjects) ? src.home.subjects : [];
+  if (!sourceSubjects.length) {
+    sourceSubjects = Object.keys(sourceModules).map(mid => ({
+      id: `pdf_subject_${mid}`,
+      name: sourceModules[mid]?.title || '가져온 모듈',
+      examInfo: sourceModules[mid]?.subtitle || '',
+      badge: 'PDF',
+      __moduleOnly: mid
     }));
   }
+  const sourceDetails = src.details || {};
+  const result = { subjects: [], details: {}, modules: {} };
+  const moduleMap = new Map();
+
+  function mapModuleId(oldMid) {
+    if (!oldMid || !sourceModules[oldMid]) return null;
+    if (!moduleMap.has(oldMid)) moduleMap.set(oldMid, uid('m'));
+    return moduleMap.get(oldMid);
+  }
+
+  sourceSubjects.forEach((subject, si) => {
+    const oldSid = subject.id || `subject_${si}`;
+    const newSid = uid('s');
+    const ns = clonePlain(subject);
+    delete ns.__moduleOnly;
+    ns.id = newSid;
+    ns.isRunning = false;
+    result.subjects.push(ns);
+
+    let sourceDetail = sourceDetails[oldSid];
+    if (!sourceDetail && subject.__moduleOnly) {
+      const mid = subject.__moduleOnly;
+      sourceDetail = {
+        id: oldSid,
+        title: subject.name || sourceModules[mid]?.title || '가져온 모듈',
+        subtitle: subject.examInfo || sourceModules[mid]?.subtitle || '',
+        cards: [{
+          id: `pdf_card_${mid}`,
+          title: sourceModules[mid]?.title || '모듈',
+          scope: sourceModules[mid]?.subtitle || '',
+          badge: 'PDF',
+          done: false,
+          time: 0,
+          module: mid
+        }]
+      };
+    }
+    if (!sourceDetail) {
+      sourceDetail = { id: oldSid, title: ns.name || '상세 페이지', subtitle: ns.examInfo || '', cards: [] };
+    }
+    const nd = clonePlain(sourceDetail);
+    nd.id = newSid;
+    nd.cards = (nd.cards || []).map(card => {
+      const nc = clonePlain(card);
+      nc.id = uid('c');
+      nc.isRunning = false;
+      if (nc.module) {
+        const mapped = mapModuleId(nc.module);
+        nc.module = mapped || null;
+      }
+      return nc;
+    });
+    result.details[newSid] = nd;
+  });
+
+  moduleMap.forEach((newMid, oldMid) => {
+    const sourceModule = sourceModules[oldMid];
+    if (!sourceModule) return;
+    const nm = clonePlain(sourceModule);
+    const tabMap = new Map();
+    nm.id = newMid;
+    nm.isRunning = false;
+    nm.tabs = (nm.tabs || []).map((tab, ti) => {
+      const oldTid = tab.id || `tab_${ti}`;
+      const newTid = uid('t');
+      tabMap.set(oldTid, newTid);
+      const nt = clonePlain(tab);
+      nt.id = newTid;
+      nt.isRunning = false;
+      nt.questions = (nt.questions || []).map(q => {
+        const nq = clonePlain(q);
+        nq.id = uid('q');
+        nq.isRunning = false;
+        return nq;
+      });
+      return nt;
+    });
+    nm.activeTab = tabMap.get(nm.activeTab) || nm.tabs[0]?.id || null;
+    result.modules[newMid] = nm;
+  });
+
+  Object.entries(result.details).forEach(([sid, detail]) => {
+    (detail.cards || []).forEach(card => {
+      if (card.module && result.modules[card.module]) {
+        result.modules[card.module].backTo = `#/detail/${sid}`;
+      }
+    });
+  });
+
+  return result;
+}
+
+async function importStudyPlannerPdfPayload(payload, fileName = '') {
+  if (!payload || payload.schema !== PDF_RESTORE_SCHEMA || !payload.data) {
+    throw new Error('StudyPlanner 복원 데이터가 들어있는 PDF가 아닙니다.');
+  }
+  assertSafeImportedObjectKeys(payload.data);
+  const prepared = prepareImportedPlannerSubset(payload.data);
+  const subjectCount = prepared.subjects.length;
+  const cardCount = Object.values(prepared.details).reduce((sum, d) => sum + (d.cards || []).length, 0);
+  const moduleCount = Object.keys(prepared.modules).length;
+  if (!subjectCount && !cardCount && !moduleCount) throw new Error('가져올 카드 구조가 없습니다.');
+
+  const ok = confirm(
+    `StudyPlanner PDF 복원 데이터를 찾았습니다.\n\n` +
+    `파일: ${fileName || payload.title || 'PDF'}\n` +
+    `과목/페이지: ${subjectCount}개\n카드: ${cardCount}개\n모듈: ${moduleCount}개\n이미지: ${(payload.__assets || []).length}개\n\n` +
+    `PDF 편집기에서 다시 저장하거나 압축한 파일은 복원 데이터가 사라질 수 있습니다.\n\n` +
+    `현재 데이터에 새 카드로 추가할까요?`
+  );
+  if (!ok) return;
+
+  if (payload.__assets?.length) {
+    const hasCapacity = await confirmAssetImportCapacity(payload.__assets);
+    if(!hasCapacity) return;
+    const assetIdMap = await importAssetsFromBackup(payload.__assets, { remapConflicts:true });
+    rewriteAssetRefsInObject(prepared, assetIdMap);
+  }
+  const nextData = clonePlain(DATA);
+  if (!nextData.home) nextData.home = baseData().home;
+  if (!Array.isArray(nextData.home.subjects)) nextData.home.subjects = [];
+  nextData.home.subjects.push(...prepared.subjects);
+  nextData.details = { ...(nextData.details || {}), ...prepared.details };
+  nextData.modules = { ...(nextData.modules || {}), ...prepared.modules };
+  const saved = replacePlannerData(nextData, {notify:false});
+  if(!saved){
+    renderRouter();
+    renderDailySidebar();
+    showToast('저장 공간이 부족해 가져오기를 취소하고 기존 데이터를 유지했습니다.', 3200);
+    return;
+  }
+  await refreshAssetStorageUsage({force:true, updateDom:true});
+  const firstImportedSubjectId = prepared.subjects[0]?.id || '';
+  location.hash = firstImportedSubjectId ? `#/?focus=${firstImportedSubjectId}` : '#/';
+  renderRouter();
+  renderDailySidebar();
+  showToast('PDF에서 카드 구조를 가져왔습니다.', 1800);
 }
 
 function exportData() {
   (async () => {
-    const payload = JSON.parse(JSON.stringify(DATA));
-    const assets = await listAssetRecords();
-    if (assets.length) {
-      payload.__assets = await Promise.all(assets.map(async a => ({
-        id: a.id,
-        name: a.name,
-        type: a.type,
-        size: a.size,
-        hash: a.hash,
-        createdAt: a.createdAt,
-        dataUrl: await blobToDataUrl(a.blob)
-      })));
-    }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
-    a.download = `planner_backup_${toYMDLocal(new Date())}.json`;
-    a.click();
+    const payload = clonePlain(DATA);
+    const assets = await buildAssetBackupItems(collectAssetIdsFromObject(payload));
+    if (assets.length) payload.__assets = assets;
+    downloadBlob(
+      new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }),
+      `planner_backup_${toYMDLocal(new Date())}.json`
+    );
   })().catch(err => alert('백업 저장 실패: ' + err.message));
 }
 
 window.loadJsonFile = function(e) {
   const f = e.target.files[0]; if (!f) return;
+  const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '');
+  if (isPdf) {
+    (async () => {
+      try {
+        showToast('PDF 복원 데이터 확인 중...', 0);
+        const payload = await readPdfRestorePayloadFile(f);
+        hideToast();
+        if (!payload) {
+          alert('이 PDF에는 StudyPlanner 복원 데이터가 없습니다.\n\n복원 가능한 PDF는 이 앱에서 새로 내보낸 파일이어야 합니다.\nPDF 편집기에서 다시 저장하거나 압축한 파일은 복원 데이터가 제거될 수 있습니다.');
+          return;
+        }
+        await importStudyPlannerPdfPayload(payload, f.name);
+      } catch (err) {
+        console.error(err);
+        hideToast();
+        alert(err.message || 'PDF 가져오기 중 오류가 발생했습니다.');
+      } finally {
+        e.target.value = '';
+      }
+    })();
+    return;
+  }
   const r = new FileReader();
   r.onload = async function(evt) {
     try {
       const parsed = JSON.parse(evt.target.result);
       const backupAssets = parsed && parsed.__assets;
       if (parsed && parsed.__assets) delete parsed.__assets;
-      DATA = parsed;
-      normalizeData();
-      if (backupAssets && backupAssets.length) await importAssetsFromBackup(backupAssets);
+      validateImportedPlannerData(parsed);
+      if(backupAssets && backupAssets.length){
+        const hasCapacity = await confirmAssetImportCapacity(backupAssets);
+        if(!hasCapacity) return;
+        const assetIdMap = await importAssetsFromBackup(backupAssets, {remapConflicts:true});
+        rewriteAssetRefsInObject(parsed, assetIdMap);
+      }
+      const saved = replacePlannerData(parsed, {notify:false});
+      if(!saved){
+        renderRouter();
+        renderDailySidebar();
+        alert('저장 공간이 부족해 불러오기를 취소했습니다. 기존 데이터는 유지됩니다.');
+        return;
+      }
       await refreshAssetStorageUsage({force:true, updateDom:true});
-      saveData();
       renderRouter();
       renderDailySidebar();
       alert("성공");
@@ -2086,6 +2918,12 @@ window.loadJsonFile = function(e) {
 async function hardReset(){
   if(!confirm('모든 데이터를 삭제하고 초기화하시겠습니까? (복구 불가)')) return;
   localStorage.removeItem(STORAGE_KEY);
+  try{
+    await clearAssetStore();
+  }catch(e){
+    console.error('Image asset reset failed:', e);
+    alert('플래너 데이터는 초기화하지만 이미지 저장소 일부를 삭제하지 못했습니다. 이미지 저장소 화면에서 다시 정리해 주세요.');
+  }
 
   DATA = baseData();
 
@@ -2121,26 +2959,72 @@ function baseData(){
 }
 
 function normalizeData(){
-  if(!DATA || typeof DATA !== 'object') DATA = baseData();
-  if(!DATA.meta) DATA.meta = {version:"2.6"};
-  if(!DATA.home) DATA.home = baseData().home;
+  if(!isPlainRecord(DATA)) DATA = baseData();
+  if(!isPlainRecord(DATA.meta)) DATA.meta = {version:"2.6"};
+  if(!isPlainRecord(DATA.home)) DATA.home = baseData().home;
   if(!Array.isArray(DATA.home.subjects)) DATA.home.subjects = [];
   if(!Array.isArray(DATA.home.dDays)) DATA.home.dDays = [];
-  if(!DATA.details) DATA.details = {};
-  if(!DATA.modules) DATA.modules = {};
-  if(!DATA.dailyHistory) DATA.dailyHistory = {};
+  DATA.home.subjects = DATA.home.subjects.filter(isPlainRecord);
+  if(!isPlainRecord(DATA.details)) DATA.details = {};
+  if(!isPlainRecord(DATA.modules)) DATA.modules = {};
+  if(!isPlainRecord(DATA.dailyHistory)) DATA.dailyHistory = {};
   DATA.home.subjects.forEach(s=>{
     if(!DATA.details[s.id]) DATA.details[s.id] = { id:s.id, title:s.name||"새 과목", subtitle:"", cards:[] };
+  });
+  const moduleBackTargets = Object.create(null);
+  Object.entries(DATA.details).forEach(([sid, detail])=>{
+    if(!isPlainRecord(detail)){
+      DATA.details[sid] = {id:sid, title:'상세 페이지', subtitle:'', cards:[]};
+      return;
+    }
+    detail.id = sid;
+    if(!Array.isArray(detail.cards)) detail.cards = [];
+    detail.cards = detail.cards.filter(isPlainRecord);
+    detail.cards.forEach(card=>{
+      if(card.module && DATA.modules?.[card.module] && !moduleBackTargets[card.module]) moduleBackTargets[card.module] = sid;
+    });
+  });
+  Object.entries(DATA.modules).forEach(([mid, mod])=>{
+    if(!isPlainRecord(mod)){
+      delete DATA.modules[mid];
+      return;
+    }
+    mod.id = mid;
+    if(!Array.isArray(mod.tabs) || !mod.tabs.length){
+      mod.tabs = [{id:uid('t'), label:'이론', theoryNote:'', questions:[], time:0, done:false, isRunning:false}];
+    }
+    mod.tabs = mod.tabs.filter(isPlainRecord);
+    if(!mod.tabs.length) mod.tabs.push({id:uid('t'), label:'이론', theoryNote:'', questions:[], time:0, done:false, isRunning:false});
+    mod.tabs.forEach(tab=>{
+      if(!Array.isArray(tab.questions)) tab.questions = [];
+      tab.questions = tab.questions.filter(isPlainRecord);
+    });
+    if(!mod.tabs.some(tab => String(tab.id) === String(mod.activeTab))) mod.activeTab = mod.tabs[0].id;
+    mod.backTo = moduleBackTargets[mid] ? `#/detail/${moduleBackTargets[mid]}` : '#/';
+  });
+  const today = getLogicalDate();
+  Object.entries(DATA.dailyHistory).forEach(([date, daily])=>{
+    if(!isPlainRecord(daily)){
+      delete DATA.dailyHistory[date];
+      return;
+    }
+    if(!Array.isArray(daily.slots)) daily.slots = [];
+    daily.slots = daily.slots.filter(isPlainRecord);
+    daily.slots.forEach(slot=>{
+      if(!Array.isArray(slot.cardIds)) slot.cardIds = [];
+      slot.cardIds = slot.cardIds.filter(isPlainRecord);
+      if(date !== today) slot.cardIds.forEach(ref => { ref.isRunning = false; });
+    });
   });
   rebuildIndex();
 }
 
 // ---- Indexes for fast parent/child lookup (used for Today time rollups) ----
-let INDEX = { moduleToSubjects: {}, moduleToDetailCards: {} };
+let INDEX = { moduleToSubjects: Object.create(null), moduleToDetailCards: Object.create(null) };
 
 function rebuildIndex(){
-  INDEX = { moduleToSubjects: {}, moduleToDetailCards: {} };
-  const subjSetByModule = {};
+  INDEX = { moduleToSubjects: Object.create(null), moduleToDetailCards: Object.create(null) };
+  const subjSetByModule = Object.create(null);
   (DATA.home?.subjects||[]).forEach(s=>{
     const sid = s.id;
     const detail = DATA.details?.[sid];
@@ -2168,20 +3052,6 @@ function incrementDailyRefTime(daily, type, id, pid, delta){
   (daily.slots||[]).forEach(slot=>{
     (slot.cardIds||[]).forEach(ref=>{
       if(!ref) return;
-      if(ref.type !== type) return;
-      if(String(ref.id) !== String(id)) return;
-      if(pid != null && ref.pid != null && String(ref.pid) !== String(pid)) return;
-      ref.time = (ref.time||0) + (delta||1);
-    });
-  });
-}
-
-function incrementDailyRefTimeIfNotRunning(daily, type, id, pid, delta){
-  if(!daily || !daily.slots) return;
-  (daily.slots||[]).forEach(slot=>{
-    (slot.cardIds||[]).forEach(ref=>{
-      if(!ref) return;
-      if(ref.isRunning) return;
       if(ref.type !== type) return;
       if(String(ref.id) !== String(id)) return;
       if(pid != null && ref.pid != null && String(ref.pid) !== String(pid)) return;
@@ -2508,12 +3378,12 @@ function renderHome() {
         <button class="theme-btn" onclick="toggleDarkMode()">🌙</button>
       </div>
 
-      <h1 class="editable block" data-placeholder="" onclick="openEditModal('app_info','home')">${DATA.home.title||''}</h1>
-      <p class="editable block" data-placeholder="" onclick="openEditModal('app_info','home')" style="color:var(--text-sub)">${DATA.home.subtitle||''}</p>
+      <h1 class="editable block" data-placeholder="" onclick="openEditModal('app_info','home')">${escapeHtml(DATA.home.title||'')}</h1>
+      <p class="editable block" data-placeholder="" onclick="openEditModal('app_info','home')" style="color:var(--text-sub)">${escapeHtml(DATA.home.subtitle||'')}</p>
       <div style="margin-top:10px;">
-        <button class="btn btn-outline" onclick="triggerImport()">📂</button>
+        <button class="btn btn-outline" onclick="triggerImport()" title="JSON/PDF 가져오기">📂</button>
         <button class="btn btn-outline" onclick="exportData()">💾</button>
-        <button class="btn btn-outline" onclick="exportPagePdf('home','home')" title="현재 필터 기준 페이지 PDF">🖨️</button>
+        <button class="btn btn-outline" onclick="exportPagePdf('home','home')" title="현재 필터 기준 복원 가능 PDF">🖨️</button>
         <button class="btn btn-outline" onclick="resetAccumulatedTime('all')" title="누적 시간 전체 초기화">⏱</button>
         <button class="btn btn-outline" style="color:#ef4444;" onclick="hardReset()">🗑</button>
         ${renderAssetUsageBadge()}
@@ -2524,7 +3394,7 @@ function renderHome() {
 
     <div class="tabs" style="margin-top:10px; margin-bottom:10px;">
       <button class="tab-btn ${HOME_BADGE_FILTER==='all'?'active':''}" onclick="setHomeBadgeFilter('all',this)">전체</button>
-      ${homeBadges.map(b=>`<button class="tab-btn ${HOME_BADGE_FILTER===b?'active':''}" onclick="setHomeBadgeFilter('${b}',this)">${b}</button>`).join('')}
+      ${homeBadges.map(b=>`<button class="tab-btn ${HOME_BADGE_FILTER===b?'active':''}" onclick="setHomeBadgeFilter('${jsAttr(b)}',this)">${escapeHtml(b)}</button>`).join('')}
     </div>
 
     <div class="bulk-bar">
@@ -2546,19 +3416,19 @@ function renderHome() {
             <div style="display:flex; align-items:center; gap:8px;">
               <input type="checkbox" ${selected?'checked':''} onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" onchange="toggleCardSelection('home','home',${realIdx},null,this.checked); renderRouter(true)">
               <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" title="드래그하여 시간표로">⋮⋮</span>
-              <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsStr(sub.name||'(제목 없음)')}', '#/?focus=${sub.id}');">📋</button>
-              <span class="badge">${sub.badge||''}</span>
+              <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsAttr(sub.name||'(제목 없음)')}', '#/?focus=${escapeHtml(sub.id)}');">📋</button>
+              <span class="badge">${escapeHtml(sub.badge||'')}</span>
             </div>
             <div class="card-actions">
 
               <button class="btn btn-icon" onclick="duplicateSubject(${realIdx});event.stopPropagation()">📑</button>
-              <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('home','home',${realIdx},'');event.stopPropagation()">🖨️</button>
-              <button class="btn btn-icon" title="하위 페이지 포함 PDF" onclick="exportCardPdf('home','home',${realIdx},'',true);event.stopPropagation()">🔗</button>
+              <button class="btn btn-icon" title="복원 가능 카드 PDF" onclick="exportCardPdf('home','home',${realIdx},'');event.stopPropagation()">🖨️</button>
+              <button class="btn btn-icon" title="하위 페이지 포함 복원 가능 PDF" onclick="exportCardPdf('home','home',${realIdx},'',true);event.stopPropagation()">🔗</button>
               <button class="btn btn-icon" onclick="openEditModal('subject','home',${realIdx});event.stopPropagation()">✏️</button>
               <button class="btn btn-icon btn-danger" onclick="deleteCard('subject','home',${realIdx});event.stopPropagation()">🗑</button>
             </div>
           </div>
-          <h3 style="cursor:pointer;" onclick="location.hash='#/detail/${sub.id}'">${sub.name||'(제목 없음)'}</h3>
+          <h3 style="cursor:pointer;" onclick="location.hash='#/detail/${escapeHtml(sub.id)}'">${escapeHtml(sub.name||'(제목 없음)')}</h3>
           <div class="md-content" style="color:var(--text-sub); font-size:0.9rem;">${renderMarkdown(sub.examInfo||'')}</div>
 
           <div class="sub-list">
@@ -2569,7 +3439,7 @@ function renderHome() {
                   draggable="false" ondragstart="return false"
                   onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
                   onchange="toggleDetailCardStatus('${sub.id}',${i},this.checked)">
-                <span onclick="location.hash='#/detail/${sub.id}?focus=${c.id}'" style="${st.isComplete?'text-decoration:line-through;color:#aaa':''}">${c.title||'(무제)'}</span>
+                <span onclick="location.hash='#/detail/${escapeHtml(sub.id)}?focus=${escapeHtml(c.id)}'" style="${st.isComplete?'text-decoration:line-through;color:#aaa':''}">${escapeHtml(c.title||'(무제)')}</span>
               </div>`;
             }).join('')}
             ${cards.length===0?'<span style="color:#ccc;">(비어있음)</span>':''}
@@ -2622,7 +3492,7 @@ function renderModuleQSrcFilterBar(mid, tid, tab){
   return `
     <div class="tabs" style="margin:-10px 0 18px;flex-wrap:wrap;">
       <button class="tab-btn ${sel==='all'?'active':''}" onclick="setModuleQSrcFilter('${mid}','${tid}','all')">전체</button>
-      ${srcs.map(s=>`<button class="tab-btn ${sel===s?'active':''}" onclick="setModuleQSrcFilter('${mid}','${tid}','${esc(s)}')">${s}</button>`).join('')}
+      ${srcs.map(s=>`<button class="tab-btn ${sel===s?'active':''}" onclick="setModuleQSrcFilter('${mid}','${tid}','${jsAttr(s)}')">${escapeHtml(s)}</button>`).join('')}
     </div>
   `;
 }
@@ -2643,9 +3513,9 @@ function renderDetail(sid) {
   APP.innerHTML = `
     <div style="margin-bottom:20px;"><button class="btn btn-outline" onclick="location.hash='#/'">← 홈</button></div>
     <div style="margin-bottom:20px;">
-      <h1 class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.title||'(제목 없음)'}</h1>
-      <p class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${detail.subtitle||''}</p>
-      <button class="btn btn-outline" style="margin-top:10px;" onclick="exportPagePdf('detail','${sid}')">🖨️ 페이지 PDF</button>
+      <h1 class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${escapeHtml(detail.title||'(제목 없음)')}</h1>
+      <p class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${escapeHtml(detail.subtitle||'')}</p>
+      <button class="btn btn-outline" style="margin-top:10px;" onclick="exportPagePdf('detail','${sid}')" title="복원 가능 페이지 PDF">🖨️ 페이지 PDF</button>
     </div>
     ${renderStickyHeader('진행률', stats.pct, stats.timeStr)}
     <div class="bulk-bar">
@@ -2657,7 +3527,7 @@ function renderDetail(sid) {
     </div>
     <div class="tabs">
       <button class="tab-btn ${activeBadge==='all'?'active':''}" onclick="filterCards('all',this,'${sid}')">전체</button>
-      ${badgeList.map(b=>`<button class="tab-btn ${activeBadge===b?'active':''}" onclick="filterCards('${esc(b)}',this,'${sid}')">${b}</button>`).join('')}
+      ${badgeList.map(b=>`<button class="tab-btn ${activeBadge===b?'active':''}" onclick="filterCards('${jsAttr(b)}',this,'${sid}')">${escapeHtml(b)}</button>`).join('')}
     </div>
     <div class="grid" id="cardGrid">
       ${(detail.cards||[]).map((c, i) => renderCardItem(c, 'detail', sid, i)).join('')}
@@ -2693,14 +3563,14 @@ function renderModule(mid) {
       </div>
     </div>
 
-    <h1 class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.title||'(모듈)'}</h1>
-    <p class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${mod.subtitle||''}</p>
-    <button class="btn btn-outline" style="margin-bottom:12px;" onclick="exportPagePdf('module','${mid}')">🖨️ 페이지 PDF</button>
+    <h1 class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${escapeHtml(mod.title||'(모듈)')}</h1>
+    <p class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${escapeHtml(mod.subtitle||'')}</p>
+    <button class="btn btn-outline" style="margin-bottom:12px;" onclick="exportPagePdf('module','${mid}')" title="복원 가능 페이지 PDF">🖨️ 페이지 PDF</button>
 
     ${renderStickyHeader('모듈 진행률', stats.pct, stats.timeStr)}
 
     <div class="tabs">
-      ${mod.tabs.map(t=>`<button class="tab-btn ${t.id===tid?'active':''}" onclick="switchTab('${mid}','${t.id}')">${t.label}</button>`).join('')}
+      ${mod.tabs.map(t=>`<button class="tab-btn ${t.id===tid?'active':''}" onclick="switchTab('${mid}','${t.id}')">${escapeHtml(t.label)}</button>`).join('')}
       <button class="tab-btn" onclick="openEditModal('tab_add','${mid}');event.stopPropagation()">+</button>
     </div>
 
@@ -2717,18 +3587,18 @@ function renderModule(mid) {
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'theory', '${tid}', '${mid}')" title="드래그하여 시간표로">⋮⋮</span>
           <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsStr('📌 '+(tab.label||'(이론)'))}', '${jsStr(buildCardHash('theory', tid, mid, null))}');">📋</button>
-        <h3 class="editable" onclick="openEditModal('tab_rename','${mid}',undefined,'${tid}');event.stopPropagation()">📌 ${tab.label}</h3>
+        <h3 class="editable" onclick="openEditModal('tab_rename','${mid}',undefined,'${tid}');event.stopPropagation()">📌 ${escapeHtml(tab.label)}</h3>
         </div>
         <div class="card-actions" style="opacity:1;">
           <button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveTheory('${mid}','${tid}');event.stopPropagation()">↪</button>
-          <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('module_theory','${mid}',0,'${tid}');event.stopPropagation()">🖨️</button>
+          <button class="btn btn-icon" title="복원 가능 카드 PDF" onclick="exportCardPdf('module_theory','${mid}',0,'${tid}');event.stopPropagation()">🖨️</button>
           <button class="btn btn-icon btn-danger" onclick="deleteTab('${mid}','${tid}');event.stopPropagation()">🗑</button>
         </div>
       </div>
 
       <div id="view-theory-${tid}" class="note-view md-content" data-empty="${!tab.theoryNote}" onclick="toggleNoteView('theory-${tid}')">${renderMarkdown(tab.theoryNote||"")}</div>
       <div id="edit-theory-${tid}" class="note-edit">
-        <textarea id="ta-theory-${tid}" class="note-textarea md-editable" data-autosave="1" data-kind="theory" data-mid="${mid}" data-tid="${tid}">${tab.theoryNote||''}</textarea>
+        <textarea id="ta-theory-${tid}" class="note-textarea md-editable" data-autosave="1" data-kind="theory" data-mid="${mid}" data-tid="${tid}">${escapeHtml(tab.theoryNote||'')}</textarea>
         <div style="text-align:right;margin-top:5px;">
           <button class="btn btn-primary" onclick="saveNoteText('theory','${mid}',null,'${tid}','theory-${tid}')">저장</button>
         </div>
@@ -2791,7 +3661,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
         <input type="checkbox" ${t.done?'checked':''}
           onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
           onchange="toggleSubItem('${item.module}','theory','${t.id}',null,this.checked)">
-        <span onclick="location.hash='#/module/${item.module}?focus=theory-${item.module}-${t.id}';event.stopPropagation()">📌 ${t.label}</span>
+        <span onclick="location.hash='#/module/${item.module}?focus=theory-${item.module}-${t.id}';event.stopPropagation()">📌 ${escapeHtml(t.label)}</span>
       </div>`;
 
       (t.questions||[]).forEach((q,qi) => {
@@ -2799,7 +3669,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
           <input type="checkbox" ${q.done?'checked':''}
             onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
             onchange="toggleSubItem('${item.module}','question','${t.id}',${qi},this.checked)">
-          <span onclick="location.hash='#/module/${item.module}?focus=${q.id}';event.stopPropagation()">${(((q.src||'')|| (q.text||''))).substring(0,15)}</span>
+          <span onclick="location.hash='#/module/${item.module}?focus=${q.id}';event.stopPropagation()">${escapeHtml((((q.src||'')|| (q.text||''))).substring(0,15))}</span>
         </div>`;
       });
     });
@@ -2813,15 +3683,15 @@ function renderCardItem(item, level, pid, idx, tabId) {
         <div style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" ${selected?'checked':''} onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" onchange="toggleCardSelection('${level}','${pid}',${idx},'${tabSafe}',this.checked); renderRouter(true)">
           <span class="drag-handle" draggable="true" ondragstart="${dragStartCode}" title="드래그하여 시간표로">⋮⋮</span>
-          <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsStr(copyTitle)}', '${jsStr(copyHash)}');">📋</button>
-          <span class="badge">${isMod?(item.src||'문항'):(item.badge||'Topic')}</span>
+          <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsAttr(copyTitle)}', '${jsAttr(copyHash)}');">📋</button>
+          <span class="badge">${escapeHtml(isMod?(item.src||'문항'):(item.badge||'Topic'))}</span>
         </div>
         <div class="card-actions">
           ${level==='detail' ? `<button class="btn btn-icon" title="다른 과목으로 이동" onclick="openMoveDetailCard('${pid}',${idx});event.stopPropagation()">↪</button>` : ''}
           ${isMod ? `<button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveQuestion('${pid}','${tabSafe}',${idx});event.stopPropagation()">↪</button>` : ''}
 
-          <button class="btn btn-icon" title="카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">🖨️</button>
-          ${level==='detail' && item.module && DATA.modules?.[item.module] ? `<button class="btn btn-icon" title="하위 페이지 포함 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}',true);event.stopPropagation()">🔗</button>` : ''}
+          <button class="btn btn-icon" title="복원 가능 카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">🖨️</button>
+          ${level==='detail' && item.module && DATA.modules?.[item.module] ? `<button class="btn btn-icon" title="하위 페이지 포함 복원 가능 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}',true);event.stopPropagation()">🔗</button>` : ''}
           <button class="btn btn-icon" onclick="duplicateCard('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">📑</button>
           <button class="btn btn-icon" onclick="(('${level}'==='detail')?openEditModal('detail','${pid}',${idx}):openEditModal('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">✏️</button>
           <button class="btn btn-icon btn-danger" onclick="(('${level}'==='detail')?deleteCard('detail','${pid}',${idx}):deleteCard('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">🗑</button>
@@ -2831,7 +3701,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
       <div onclick="${level==='detail' ? `onDetailCardClick('${pid}',${idx})` : (!isMod&&item.module?`location.hash='#/module/${item.module}'`:'')}">
         ${isMod
           ? `<div class="md-content" style="font-weight:600;font-size:1.05rem;">${renderMarkdown(item.text||'')}</div>`
-          : `<h3>${item.title||'(무제)'}</h3><div class="md-content">${renderMarkdown(item.scope||'')}</div>`
+          : `<h3>${escapeHtml(item.title||'(무제)')}</h3><div class="md-content">${renderMarkdown(item.scope||'')}</div>`
         }
         ${item.qbox?`<div class="md-content" style="background:var(--bg);padding:10px;border-radius:8px;margin-top:10px;font-size:0.9rem;">💡 ${renderMarkdown(item.qbox)}</div>`:''}
       </div>
@@ -2843,7 +3713,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
           <span class="note-label-small">📝 오답 노트</span>
           <div id="view-${sid}" class="note-view md-content" data-empty="${!item.userNote}" onclick="toggleNoteView('${sid}')">${renderMarkdown(item.userNote||"")}</div>
           <div id="edit-${sid}" class="note-edit">
-            <textarea id="ta-${sid}" class="note-textarea md-editable" data-autosave="1" data-kind="card" data-mid="${pid}" data-tabid="${tabSafe}" data-idx="${idx}">${item.userNote||''}</textarea>
+            <textarea id="ta-${sid}" class="note-textarea md-editable" data-autosave="1" data-kind="card" data-mid="${pid}" data-tabid="${tabSafe}" data-idx="${idx}">${escapeHtml(item.userNote||'')}</textarea>
             <div style="text-align:right;margin-top:5px;">
               <button class="btn btn-primary" onclick="saveNoteText('card','${pid}',${idx},'${tabSafe}','${sid}')">저장</button>
             </div>
@@ -3096,7 +3966,7 @@ function renderDailySidebar() {
       ondragover="allowDrop(event)"
       ondrop="dropOnSlot(event, '${VIEW_DATE}', ${sIdx})">
       <div class="flex-between slot-head">
-        <span>${slot.label}</span>
+        <span>${escapeHtml(slot.label)}</span>
         <div class="slot-head-actions">
           <span class="slot-drag-handle"
             draggable="true"
@@ -3671,16 +4541,16 @@ function renderSidebarCard(ref, date, sIdx, cIdx) {
 
   const childrenHtml = hasChildren
     ? children.map(ch => `
-      <div class="sb-child" onclick="sbCardClick(event,'${ch.type}','${ch.id}','${ch.pid}',''); event.stopPropagation();">
+      <div class="sb-child" onclick="sbCardClick(event,'${jsAttr(ch.type)}','${jsAttr(ch.id)}','${jsAttr(ch.pid)}',''); event.stopPropagation();">
         <label class="sb-child-check" onclick="event.stopPropagation()">
           <input type="checkbox" ${ch.done?'checked':''}
             draggable="false"
             onpointerdown="event.stopPropagation()"
             onmousedown="event.stopPropagation()"
             onclick="event.stopPropagation()"
-            ondragstart="return false" onchange="event.stopPropagation(); toggleChildDone('${ch.type}','${ch.id}','${ch.pid}', this.checked)">
+            ondragstart="return false" onchange="event.stopPropagation(); toggleChildDone('${jsAttr(ch.type)}','${jsAttr(ch.id)}','${jsAttr(ch.pid)}', this.checked)">
         </label>
-        <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${ch.text}</span>
+        <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(ch.text)}</span>
       </div>
     `).join('')
     : '';
@@ -3695,9 +4565,9 @@ function renderSidebarCard(ref, date, sIdx, cIdx) {
       id="${unique}"
       ondragover="allowDrop(event)"
       ondrop="dropOnCard(event, '${date}', ${sIdx}, ${cIdx})"
-      onclick="sbCardClick(event, '${ref.type}', '${ref.id}', '${ref.pid}', '${ref.originStr||''}')">
+      onclick="sbCardClick(event, '${jsAttr(ref.type)}', '${jsAttr(ref.id)}', '${jsAttr(ref.pid)}', '${jsAttr(ref.originStr||'')}')">
 
-      <div class="sb-card-head" onclick="sbCardClick(event, '${ref.type}', '${ref.id}', '${ref.pid}', '${ref.originStr||''}')">
+      <div class="sb-card-head" onclick="sbCardClick(event, '${jsAttr(ref.type)}', '${jsAttr(ref.id)}', '${jsAttr(ref.pid)}', '${jsAttr(ref.originStr||'')}')">
         <span class="sb-drag-handle"
           draggable="true"
           ondragstart="handleSidebarDragStart(event, ${sIdx}, ${cIdx})"
@@ -3708,7 +4578,7 @@ function renderSidebarCard(ref, date, sIdx, cIdx) {
         <button class="clip-btn sb-clip" title="[카드 제목](링크) 복사"
           onpointerdown="event.stopPropagation()"
           onmousedown="event.stopPropagation()"
-          onclick="event.stopPropagation(); copyCardMdLink('${jsStr(info.title)}', '${jsStr(buildCardHash(ref.type, ref.id, ref.pid, ref.originStr||''))}');">📋</button>
+          onclick="event.stopPropagation(); copyCardMdLink('${jsAttr(info.title)}', '${jsAttr(buildCardHash(ref.type, ref.id, ref.pid, ref.originStr||''))}');">📋</button>
 
         <button class="btn btn-icon sb-btn-del"
           onpointerdown="event.stopPropagation()"
@@ -3723,7 +4593,7 @@ function renderSidebarCard(ref, date, sIdx, cIdx) {
           ${ref.expanded ? '▲' : '▼'}
         </button>
 
-        <span class="sb-title" title="${info.title}" ${titleAttr}>${titleExtra}${info.title}</span>
+        <span class="sb-title" title="${escapeHtml(info.title)}" ${titleAttr}>${titleExtra}${escapeHtml(info.title)}</span>
 
         <span class="sb-time" id="sb-time-${date}-${sIdx}-${cIdx}" title="Today / Total">
           ${formatTime(ref.time||0)}<br><span style="color:var(--text-sub);font-size:0.7rem;">${info.totalStr||''}</span>
@@ -3897,17 +4767,121 @@ function copyDailyPlan() {
 /* =========================
    TIMER CORE
 ========================= */
-function tickOneSecond(){
-  const today = getLogicalDate();
-  ensureDailyData(today);
+let __lastTimerTickAt = Date.now();
+let __timerCarryMs = 0;
+let __lastTimerPersistAt = Date.now();
+let __timerDirty = false;
+let __timerDate = getLogicalDate();
 
-  // 1) Increment MAIN timers (these are the canonical '전체' times)
+function splitTimerSecondsByKstDate(startMs, totalSeconds){
+  const segments = [];
+  let sampleMs = startMs + 500;
+  let remaining = totalSeconds;
+  while(remaining > 0){
+    const date = getLogicalDate(new Date(sampleMs));
+    const nextMidnightMs = ymdToUtcDayMs(addDaysYMD(date, 1)) - KST_OFFSET_MS;
+    const untilMidnight = Math.max(1, Math.ceil((nextMidnightMs - sampleMs) / 1000));
+    const seconds = Math.min(remaining, untilMidnight);
+    segments.push({date, seconds});
+    sampleMs += seconds * 1000;
+    remaining -= seconds;
+  }
+  return segments;
+}
+
+function timerRefMatches(ref, running){
+  if(!ref || !running || ref.type !== running.type) return false;
+  if(String(ref.id) !== String(running.id)) return false;
+  if(running.pid != null && ref.pid != null) return String(ref.pid) === String(running.pid);
+  return true;
+}
+
+function findCanonicalTimerItem(type, id, pid){
+  if(type === 'subject') return (DATA.home?.subjects || []).find(item => String(item.id) === String(id)) || null;
+  if(type === 'detail') return (DATA.details?.[pid]?.cards || []).find(item => String(item.id) === String(id)) || null;
+  if(type === 'theory') return (DATA.modules?.[pid]?.tabs || []).find(item => String(item.id) === String(id)) || null;
+  if(type === 'question'){
+    for(const tab of DATA.modules?.[pid]?.tabs || []){
+      const question = (tab.questions || []).find(item => String(item.id) === String(id));
+      if(question) return question;
+    }
+  }
+  return null;
+}
+
+function stopCanonicalTimer(type, id, pid){
+  const item = findCanonicalTimerItem(type, id, pid);
+  if(item) item.isRunning = false;
+  setDailyRefRunning(type, id, pid, false);
+}
+
+function setDailyRefRunning(type, id, pid, running, activeDate = getLogicalDate()){
+  Object.entries(DATA.dailyHistory || {}).forEach(([date, daily])=>{
+    (daily.slots || []).forEach(slot=>{
+      (slot.cardIds || []).forEach(ref=>{
+        if(!timerRefMatches(ref, {type, id, pid})) return;
+        ref.isRunning = !!running && date === activeDate;
+      });
+    });
+  });
+}
+
+function syncDailyTimerRunningState(activeDate = getLogicalDate()){
+  Object.entries(DATA.dailyHistory || {}).forEach(([date, daily])=>{
+    (daily.slots || []).forEach(slot=>{
+      (slot.cardIds || []).forEach(ref=>{
+        if(date !== activeDate){
+          ref.isRunning = false;
+          return;
+        }
+        if(ref.type === 'adhoc'){
+          ref.isRunning = !!ref.isRunning;
+          return;
+        }
+        const canonical = findCanonicalTimerItem(ref.type, ref.id, ref.pid);
+        ref.isRunning = !!canonical?.isRunning;
+      });
+    });
+  });
+}
+
+function persistTimerState(force = false, notify = true){
+  if(!__timerDirty) return true;
+  const now = Date.now();
+  if(!force && now - __lastTimerPersistAt < 5000) return true;
+  const saved = saveData({notify});
+  __lastTimerPersistAt = now;
+  if(saved){
+    __timerDirty = false;
+  }
+  return saved;
+}
+
+function tickOneSecond(){
+  const nowMs = Date.now();
+  if(!DATA){
+    __lastTimerTickAt = nowMs;
+    __timerCarryMs = 0;
+    return;
+  }
+  const elapsedMs = Math.max(0, nowMs - __lastTimerTickAt);
+  __lastTimerTickAt = nowMs;
+  __timerCarryMs += elapsedMs;
+  const deltaSeconds = Math.floor(__timerCarryMs / 1000);
+  if(deltaSeconds <= 0) return;
+  __timerCarryMs -= deltaSeconds * 1000;
+  const countedEndMs = nowMs - __timerCarryMs;
+  const dateSegments = splitTimerSecondsByKstDate(countedEndMs - deltaSeconds * 1000, deltaSeconds);
+
+  const today = getLogicalDate(new Date(nowMs));
+  const dateChanged = __timerDate !== today;
+
   let anyRunningMain = false;
-  const runningRefs = []; // {type,id,pid}
+  const runningRefs = [];
 
   (DATA.home.subjects||[]).forEach(s=>{
     if(s.isRunning){
-      s.time = (s.time||0)+1;
+      s.time = (s.time||0) + deltaSeconds;
       anyRunningMain = true;
       runningRefs.push({type:'subject', id:s.id, pid:null});
     }
@@ -3916,7 +4890,7 @@ function tickOneSecond(){
   Object.entries(DATA.details||{}).forEach(([sid, d])=>{
     (d.cards||[]).forEach(c=>{
       if(c.isRunning){
-        c.time = (c.time||0)+1;
+        c.time = (c.time||0) + deltaSeconds;
         anyRunningMain = true;
         runningRefs.push({type:'detail', id:c.id, pid:sid});
       }
@@ -3926,13 +4900,13 @@ function tickOneSecond(){
   Object.entries(DATA.modules||{}).forEach(([mid, m])=>{
     (m.tabs||[]).forEach(t=>{
       if(t.isRunning){
-        t.time = (t.time||0)+1;
+        t.time = (t.time||0) + deltaSeconds;
         anyRunningMain = true;
         runningRefs.push({type:'theory', id:t.id, pid:mid});
       }
       (t.questions||[]).forEach(q=>{
         if(q.isRunning){
-          q.time = (q.time||0)+1;
+          q.time = (q.time||0) + deltaSeconds;
           anyRunningMain = true;
           runningRefs.push({type:'question', id:q.id, pid:mid});
         }
@@ -3940,16 +4914,6 @@ function tickOneSecond(){
     });
   });
 
-  function matchRef(ref, r){
-    if(!ref || !r) return false;
-    if(ref.type !== r.type) return false;
-    if(String(ref.id) !== String(r.id)) return false;
-    // pid is relevant for detail/theory/question; tolerate missing pid by matching on type+id
-    if(r.pid != null && ref.pid != null) return String(ref.pid) === String(r.pid);
-    return true;
-  }
-
-  // Precompute TODAY roll-up targets from running MAIN timers (wall-clock, no double-count).
   const parentsToBump = new Map();
   if(runningRefs.length){
     runningRefs.forEach(r=>{
@@ -3961,64 +4925,43 @@ function tickOneSecond(){
     });
   }
 
-  // 2) Increment Daily history timers
-  //    - All dates: increment refs that are running in that date, and that date's totalSeconds
-  //    - Today: also increment per-card time for refs matching running MAIN timers even if ref.isRunning is false
-  let todayTotalAdvancedByRunningRef = false;
-
-  if(DATA.dailyHistory){
-    Object.entries(DATA.dailyHistory).forEach(([dateKey, daily])=>{
-      let anyRunningRef = false;
-
-      (daily.slots||[]).forEach(slot=>{
-        (slot.cardIds||[]).forEach(ref=>{
+  dateSegments.forEach(segment=>{
+    const daily = ensureDailyData(segment.date);
+    let anyRunningAdhoc = false;
+    (daily.slots || []).forEach(slot=>{
+      (slot.cardIds || []).forEach(ref=>{
+        if(ref.type === 'adhoc'){
           if(ref.isRunning){
-            ref.time = (ref.time||0)+1;
-            anyRunningRef = true;
+            ref.time = (ref.time || 0) + segment.seconds;
+            anyRunningAdhoc = true;
           }
-        });
+          return;
+        }
+        const running = runningRefs.find(item => timerRefMatches(ref, item));
+        if(segment.date === today) ref.isRunning = !!running;
+        if(running) ref.time = (ref.time || 0) + segment.seconds;
       });
-
-      // Today: sync main-running timers into today's per-card time for matching refs (only if not already running via ref)
-      if(dateKey === today && runningRefs.length){
-        (daily.slots||[]).forEach(slot=>{
-          (slot.cardIds||[]).forEach(ref=>{
-            if(ref.isRunning) return;
-            const r = runningRefs.find(rr => matchRef(ref, rr));
-            if(!r) return;
-            ref.time = (ref.time||0)+1;
-          });
-        });
-      }
-
-      if(anyRunningRef){
-        daily.totalSeconds = (daily.totalSeconds||0)+1;
-        if(dateKey === today) todayTotalAdvancedByRunningRef = true;
-      }
     });
-  }
 
-  // 2.5) Apply TODAY roll-up bumps to parent refs if those refs exist in today's timetable.
-  if(runningRefs.length){
-    const dToday = ensureDailyData(today);
-    parentsToBump.forEach(p=>{
-      incrementDailyRefTimeIfNotRunning(dToday, p.type, p.id, p.pid, 1);
-    });
-  }
+    if(runningRefs.length){
+      parentsToBump.forEach(parent=>{
+        const parentRunsDirectly = runningRefs.some(running => timerRefMatches(parent, running));
+        if(!parentRunsDirectly) incrementDailyRefTime(daily, parent.type, parent.id, parent.pid, segment.seconds);
+      });
+    }
 
-  // 3) Ensure TODAY totalSeconds increases if any MAIN timer runs.
-  //    - Must not affect other dates.
-  //    - Must not double count if today's refs already advanced the total this second.
-  if(anyRunningMain && !todayTotalAdvancedByRunningRef){
-    const dToday = ensureDailyData(today);
-    dToday.totalSeconds = (dToday.totalSeconds||0)+1;
-  }
+    if(anyRunningMain || anyRunningAdhoc){
+      daily.totalSeconds = (daily.totalSeconds || 0) + segment.seconds;
+      __timerDirty = true;
+    }
+  });
 
-  // Persist periodically (avoid excessive writes)
-  const dToday = DATA.dailyHistory?.[today];
-  if(dToday && (dToday.totalSeconds||0) % 5 === 0){
-    saveData();
+  if(dateChanged){
+    __timerDate = today;
+    syncDailyTimerRunningState(today);
+    __timerDirty = true;
   }
+  persistTimerState();
 
   updateTimerDOM();
   updateSidebarTimerDOM();
@@ -4030,6 +4973,11 @@ function tickOneSecond(){
     checkGoalColor(dailyView.totalSeconds || 0, dailyView.goalStr || "00:00:00");
   }
 }
+
+document.addEventListener('visibilitychange', ()=>{
+  tickOneSecond();
+  if(document.hidden) persistTimerState(true, false);
+});
 
 function updateTimerDOM(){
   (DATA.home.subjects||[]).forEach(s=>{
@@ -4082,61 +5030,67 @@ function renderWithScrollPreserved(){
 }
 
 function toggleTimer(level, pid, idx, tabId){
+  tickOneSecond();
+  let type = '';
+  let id = '';
+  let target = null;
+  let refPid = pid;
   if(level==='subject'){
-    const s = DATA.home.subjects[idx];
-    if(!s) return;
-    s.isRunning = !s.isRunning;
+    target = DATA.home.subjects[idx];
+    type = 'subject';
+    id = target?.id;
+    refPid = null;
   } else if(level==='detail'){
     const list = DATA.details?.[pid]?.cards || [];
-    const c = list[idx];
-    if(!c) return;
-    c.isRunning = !c.isRunning;
+    target = list[idx];
+    type = 'detail';
+    id = target?.id;
   } else if(level==='theory'){
     const mod = DATA.modules?.[pid];
-    if(!mod) return;
-    const t = mod.tabs.find(x=>x.id===tabId);
-    if(!t) return;
-    t.isRunning = !t.isRunning;
+    target = mod?.tabs?.find(x=>x.id===tabId);
+    type = 'theory';
+    id = target?.id;
   } else if(level==='module'){
     const mod = DATA.modules?.[pid];
-    if(!mod) return;
-    const tab = mod.tabs.find(x=>x.id===tabId) || mod.tabs[0];
-    const q = (tab.questions||[])[idx];
-    if(!q) return;
-    q.isRunning = !q.isRunning;
+    const tab = mod?.tabs?.find(x=>x.id===tabId) || mod?.tabs?.[0];
+    target = (tab?.questions||[])[idx];
+    type = 'question';
+    id = target?.id;
   }
-  saveData();
+  if(!target) return;
+  target.isRunning = !target.isRunning;
+  setDailyRefRunning(type, id, refPid, target.isRunning);
+  __timerDirty = true;
+  persistTimerState(true);
   renderWithScrollPreserved();
 }
 
 function toggleTimerFromSidebar(type, id, pid, sIdx, cIdx){
+  tickOneSecond();
   const daily = ensureDailyData(VIEW_DATE);
   const ref = daily.slots?.[sIdx]?.cardIds?.[cIdx];
   if(!ref) return;
-
-  ref.isRunning = !ref.isRunning;
-
-  if(type==='subject'){
-    const s = DATA.home.subjects.find(x=>x.id===id);
-    if(s) s.isRunning = ref.isRunning;
-  } else if(type==='detail'){
-    const c = (DATA.details?.[pid]?.cards||[]).find(x=>x.id===id);
-    if(c) c.isRunning = ref.isRunning;
-  } else if(type==='theory'){
-    const mod = DATA.modules?.[pid];
-    const t = mod?.tabs?.find(x=>x.id===id);
-    if(t) t.isRunning = ref.isRunning;
-  } else if(type==='question'){
-    const mod = DATA.modules?.[pid];
-    if(mod){
-      mod.tabs.forEach(t=>{
-        const q = (t.questions||[]).find(x=>x.id===id);
-        if(q) q.isRunning = ref.isRunning;
-      });
-    }
+  const today = getLogicalDate();
+  const canonical = type === 'adhoc' ? null : findCanonicalTimerItem(type, id, pid);
+  const isRunning = type === 'adhoc' ? !!ref.isRunning : !!canonical?.isRunning;
+  const nextRunning = !isRunning;
+  if(nextRunning && VIEW_DATE !== today){
+    alert('타이머는 오늘 계획에서만 시작할 수 있습니다.');
+    return;
   }
-
-  saveData();
+  if(type !== 'adhoc' && !canonical){
+    ref.isRunning = false;
+    alert('연결된 카드를 찾을 수 없습니다. 일일 계획에서 이 항목을 삭제한 뒤 다시 추가해 주세요.');
+    renderDailySidebar();
+    return;
+  }
+  if(type === 'adhoc') ref.isRunning = nextRunning;
+  else {
+    canonical.isRunning = nextRunning;
+    setDailyRefRunning(type, id, pid, nextRunning, today);
+  }
+  __timerDirty = true;
+  persistTimerState(true);
   renderWithScrollPreserved();
 }
 
@@ -4150,14 +5104,14 @@ function toggleCheck(el, level, pid, idx, tabId){
     const t = DATA.modules?.[pid]?.tabs?.find(x=>x.id===tabId);
     if(t){
       t.done = checked;
-      if(checked) t.isRunning = false;
+      if(checked) stopCanonicalTimer('theory', t.id, pid);
     }
   } else if(level==='module'){
     const tab = DATA.modules?.[pid]?.tabs?.find(x=>x.id===tabId) || DATA.modules?.[pid]?.tabs?.[0];
     const q = tab?.questions?.[idx];
     if(q){
       q.done = checked;
-      if(checked) q.isRunning = false;
+      if(checked) stopCanonicalTimer('question', q.id, pid);
     }
   }
 
@@ -4198,6 +5152,7 @@ function toggleCheckFromSidebar(type, id, pid, checked, sIdx, cIdx){
   } else if(type==='subject'){
     toggleCheckAllSubject(id, !!checked);
   }
+  if(checked && type !== 'adhoc') stopCanonicalTimer(type, id, pid);
 
   saveData();
   renderDailySidebar();
@@ -4213,17 +5168,17 @@ function toggleDetailCardStatus(pid, idx, status){
 
   // 1) Update card
   card.done = v;
-  if(v) card.isRunning = false;
+  if(v) stopCanonicalTimer('detail', card.id, pid);
 
   // 2) Propagate to module (so computed completion matches UI)
   if(card.module && DATA.modules?.[card.module]){
     const mod = DATA.modules[card.module];
     (mod.tabs||[]).forEach(t=>{
       t.done = v;
-      if(v) t.isRunning = false;
+      if(v) stopCanonicalTimer('theory', t.id, card.module);
       (t.questions||[]).forEach(q=>{
         q.done = v;
-        if(v) q.isRunning = false;
+        if(v) stopCanonicalTimer('question', q.id, card.module);
       });
     });
   }
@@ -4233,7 +5188,7 @@ function toggleDetailCardStatus(pid, idx, status){
     const stats = calcSubjectStats(pid);
     if(stats.pct === 100){
       const subj = DATA.home?.subjects?.find(s=>s.id===pid);
-      if(subj) subj.isRunning = false;
+      if(subj) stopCanonicalTimer('subject', subj.id, null);
     }
   }
 
@@ -4254,16 +5209,16 @@ function toggleCheckAllSubject(sid, checked){
 
   cards.forEach(card=>{
     card.done = v;
-    if(v) card.isRunning = false;
+    if(v) stopCanonicalTimer('detail', card.id, sid);
 
     if(card.module && DATA.modules?.[card.module]){
       const mod = DATA.modules[card.module];
       (mod.tabs||[]).forEach(t=>{
         t.done = v;
-        if(v) t.isRunning = false;
+        if(v) stopCanonicalTimer('theory', t.id, card.module);
         (t.questions||[]).forEach(q=>{
           q.done = v;
-          if(v) q.isRunning = false;
+          if(v) stopCanonicalTimer('question', q.id, card.module);
         });
       });
     }
@@ -4271,7 +5226,7 @@ function toggleCheckAllSubject(sid, checked){
 
   if(v){
     const subj = DATA.home?.subjects?.find(s=>s.id===sid);
-    if(subj) subj.isRunning = false;
+    if(subj) stopCanonicalTimer('subject', subj.id, null);
   }
 
   saveData();
@@ -4284,11 +5239,17 @@ function toggleSubItem(moduleId, type, pid, idx, checked){
   if(!mod) return;
   if(type==='theory'){
     const t = mod.tabs.find(x=>x.id===pid);
-    if(t) t.done = !!checked;
+    if(t){
+      t.done = !!checked;
+      if(checked) stopCanonicalTimer('theory', t.id, moduleId);
+    }
   } else if(type==='question'){
     const t = mod.tabs.find(x=>x.id===pid);
     const q = t?.questions?.[idx];
-    if(q) q.done = !!checked;
+    if(q){
+      q.done = !!checked;
+      if(checked) stopCanonicalTimer('question', q.id, moduleId);
+    }
   }
   saveData(); renderRouter(true); renderDailySidebar();
 }
@@ -4336,16 +5297,32 @@ function resetAccumulatedTime(level, pid, idx, tabId){
     });
   } else {
     let target = null;
-    if(level==='subject') target = DATA.home?.subjects?.[idx];
-    else if(level==='detail') target = DATA.details?.[pid]?.cards?.[idx];
-    else if(level==='theory') target = DATA.modules?.[pid]?.tabs?.find(t => String(t.id)===String(tabId));
+    let type = '';
+    let id = '';
+    let refPid = pid;
+    if(level==='subject'){
+      target = DATA.home?.subjects?.[idx];
+      type = 'subject';
+      refPid = null;
+    }
+    else if(level==='detail'){
+      target = DATA.details?.[pid]?.cards?.[idx];
+      type = 'detail';
+    }
+    else if(level==='theory'){
+      target = DATA.modules?.[pid]?.tabs?.find(t => String(t.id)===String(tabId));
+      type = 'theory';
+    }
     else if(level==='module'){
       const tab = DATA.modules?.[pid]?.tabs?.find(t => String(t.id)===String(tabId)) || DATA.modules?.[pid]?.tabs?.[0];
       target = tab?.questions?.[idx];
+      type = 'question';
     }
     if(!target) return;
     if(!confirm('이 카드의 누적 시간을 초기화하시겠습니까?')) return;
+    id = target.id;
     clearItemTime(target);
+    setDailyRefRunning(type, id, refPid, false);
   }
 
   saveData();
@@ -4422,6 +5399,7 @@ window.addEventListener('beforeunload', () => {
     }
     persistNoteDraftFromTextarea(ta);
   });
+  if(__timerDirty) persistTimerState(true, false);
 });
 
 function saveNoteText(kind, mid, idx, tid, sid){
@@ -4651,6 +5629,35 @@ function purgeDailyRefs(predicate){
   });
 }
 
+function isModuleReferenced(mid){
+  return Object.values(DATA.details || {}).some(detail =>
+    (detail.cards || []).some(card => String(card.module || '') === String(mid))
+  );
+}
+
+function purgeModuleDailyRefs(mid){
+  purgeDailyRefs(ref =>
+    (ref.type === 'theory' || ref.type === 'question') && String(ref.pid) === String(mid)
+  );
+}
+
+function deleteModuleIfUnreferenced(mid){
+  if(!mid || !DATA.modules?.[mid] || isModuleReferenced(mid)) return false;
+  purgeModuleDailyRefs(mid);
+  delete DATA.modules[mid];
+  return true;
+}
+
+function purgeTabDailyRefs(mid, tab){
+  if(!tab) return;
+  const questionIds = new Set((tab.questions || []).map(question => String(question.id)));
+  purgeDailyRefs(ref => {
+    if(String(ref.pid) !== String(mid)) return false;
+    if(ref.type === 'theory' && String(ref.id) === String(tab.id)) return true;
+    return ref.type === 'question' && questionIds.has(String(ref.id));
+  });
+}
+
 
 function saveCardChange(){
   const titleTAWrap = document.getElementById('grpTitleTA');
@@ -4789,27 +5796,34 @@ function deleteSelectedCards(level, pid, tabId){
   if(!confirm(`선택한 ${selected.length}개 카드를 삭제하시겠습니까?`)) return;
 
   if(level==='home'){
+    const modulesToCheck = new Set();
     [...selected].sort((a,b)=>b-a).forEach(i=>{
       const s = DATA.home?.subjects?.[i];
       if(!s) return;
       const sid = s.id;
       const d = DATA.details?.[sid];
       if(d){
-        (d.cards||[]).forEach(c=>{ if(c.module && DATA.modules?.[c.module]) delete DATA.modules[c.module]; });
+        (d.cards||[]).forEach(c=>{ if(c.module) modulesToCheck.add(c.module); });
         delete DATA.details[sid];
       }
       DATA.home.subjects.splice(i,1);
-      purgeDailyRefs(ref=> (ref.type==='subject' && ref.id===sid) || (ref.pid===sid));
+      purgeDailyRefs(ref=>
+        (ref.type==='subject' && String(ref.id)===String(sid)) ||
+        (ref.type==='detail' && String(ref.pid)===String(sid))
+      );
     });
+    modulesToCheck.forEach(deleteModuleIfUnreferenced);
   }else if(level==='detail'){
     const list = DATA.details?.[pid]?.cards || [];
+    const modulesToCheck = new Set();
     [...selected].sort((a,b)=>b-a).forEach(i=>{
       const c = list[i];
       if(!c) return;
-      if(c.module && DATA.modules?.[c.module]) delete DATA.modules[c.module];
+      if(c.module) modulesToCheck.add(c.module);
       list.splice(i,1);
-      purgeDailyRefs(ref=> (ref.type==='detail' && ref.id===c.id && String(ref.pid)===String(pid)));
+      purgeDailyRefs(ref=> (ref.type==='detail' && String(ref.id)===String(c.id) && String(ref.pid)===String(pid)));
     });
+    modulesToCheck.forEach(deleteModuleIfUnreferenced);
   }else if(level==='module'){
     const mod = DATA.modules?.[pid];
     const tab = mod?.tabs?.find(t=>t.id===tabId) || mod?.tabs?.[0];
@@ -4851,22 +5865,27 @@ function deleteCard(mode, pid, idx, tabId){
     const s = DATA.home.subjects[idx];
     if(!s) return;
     const sid = s.id;
-    // delete linked modules
+    const modulesToCheck = new Set();
     const d = DATA.details?.[sid];
     if(d){
-      (d.cards||[]).forEach(c=>{ if(c.module && DATA.modules?.[c.module]) delete DATA.modules[c.module]; });
+      (d.cards||[]).forEach(c=>{ if(c.module) modulesToCheck.add(c.module); });
       delete DATA.details[sid];
     }
     DATA.home.subjects.splice(idx,1);
-    purgeDailyRefs(ref=> (ref.type==='subject' && ref.id===sid) || (ref.pid===sid));
+    purgeDailyRefs(ref=>
+      (ref.type==='subject' && String(ref.id)===String(sid)) ||
+      (ref.type==='detail' && String(ref.pid)===String(sid))
+    );
+    modulesToCheck.forEach(deleteModuleIfUnreferenced);
   }
   else if(mode === 'detail'){
     const list = DATA.details?.[pid]?.cards || [];
     const c = list[idx];
     if(!c) return;
-    if(c.module && DATA.modules?.[c.module]) delete DATA.modules[c.module];
+    const moduleId = c.module;
     list.splice(idx,1);
-    purgeDailyRefs(ref=> (ref.type==='detail' && ref.id===c.id && ref.pid===pid));
+    purgeDailyRefs(ref=> (ref.type==='detail' && String(ref.id)===String(c.id) && String(ref.pid)===String(pid)));
+    deleteModuleIfUnreferenced(moduleId);
   }
   else if(mode === 'module'){
     const mod = DATA.modules?.[pid];
@@ -5005,33 +6024,11 @@ function duplicateCard(level, pid, idx, tabId){
   }
 }
 
-function editModuleTitle(mid){
-  const m = DATA.modules[mid]; if(!m) return;
-  const t = prompt('모듈 제목', m.title||''); if(t!=null) m.title=t;
-  const s = prompt('모듈 부제', m.subtitle||''); if(s!=null) m.subtitle=s;
-  saveData(); renderModule(mid); renderDailySidebar();
-}
-
 function switchTab(mid, tid){
   DATA.modules[mid].activeTab = tid;
   saveData();
   renderModule(mid);
   renderDailySidebar();
-}
-
-function addTab(mid){
-  const m = DATA.modules[mid]; if(!m) return;
-  const label = prompt('탭 이름'); if(!label) return;
-  m.tabs.push({ id: uid('t'), label, theoryNote:'', time:0, done:false, isRunning:false, questions:[] });
-  m.activeTab = m.tabs[m.tabs.length-1].id;
-  saveData(); renderModule(mid); renderDailySidebar();
-}
-
-function renameTab(mid, tid){
-  const m = DATA.modules[mid]; if(!m) return;
-  const t = m.tabs.find(x=>x.id===tid); if(!t) return;
-  const label = prompt('탭 이름', t.label||''); if(label!=null) t.label=label;
-  saveData(); renderModule(mid); renderDailySidebar();
 }
 
 function deleteTab(mid, tid){
@@ -5040,18 +6037,9 @@ function deleteTab(mid, tid){
   const idx = m.tabs.findIndex(x=>x.id===tid);
   if(idx<0) return;
   if(!confirm('탭 삭제?')) return;
+  purgeTabDailyRefs(mid, m.tabs[idx]);
   m.tabs.splice(idx,1);
   m.activeTab = m.tabs[0].id;
-  saveData(); renderModule(mid); renderDailySidebar();
-}
-
-function addQuestion(mid, tid){
-  const m = DATA.modules[mid]; if(!m) return;
-  const tab = m.tabs.find(x=>x.id===tid) || m.tabs[0];
-  const src = prompt('출처(예: 기출/교재)', '') || '';
-  const txt = prompt('문항 텍스트', '') || '';
-  if(!txt) return;
-  tab.questions.push({ id: uid('q'), src, text: txt, userNote:'', time:0, done:false, isRunning:false });
   saveData(); renderModule(mid); renderDailySidebar();
 }
 
@@ -5120,15 +6108,15 @@ function renderSelectorUI() {
       if(selectorMode === 'add'){
         listEl.innerHTML += `
           <li class="sel-item">
-            <span class="sel-label" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">${sub.name}</span>
-            <span class="sel-next" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">하위 보기 ></span>
+            <span class="sel-label" onclick="selectorDrillDown('subject','${jsAttr(sub.id)}','${jsAttr(sub.name)}')">${escapeHtml(sub.name)}</span>
+            <span class="sel-next" onclick="selectorDrillDown('subject','${jsAttr(sub.id)}','${jsAttr(sub.name)}')">하위 보기 ></span>
             <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorAdd(event,'subject','${sub.id}')">추가</button>
           </li>`;
       }
       else if(selectorMode === 'move_detail'){
         listEl.innerHTML += `
           <li class="sel-item">
-            <span class="sel-label" onclick="selectorMoveDetail('${sub.id}')">${sub.name}</span>
+            <span class="sel-label" onclick="selectorMoveDetail('${jsAttr(sub.id)}')">${escapeHtml(sub.name)}</span>
             <span class="sel-next"></span>
             <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorMoveDetail('${sub.id}');event.stopPropagation()">이동</button>
           </li>`;
@@ -5136,17 +6124,17 @@ function renderSelectorUI() {
       else if(selectorMode === 'move_question'){
         listEl.innerHTML += `
           <li class="sel-item">
-            <span class="sel-label" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">${sub.name}</span>
-            <span class="sel-next" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">주제 선택 ></span>
-            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}');event.stopPropagation()">다음</button>
+            <span class="sel-label" onclick="selectorDrillDown('subject','${jsAttr(sub.id)}','${jsAttr(sub.name)}')">${escapeHtml(sub.name)}</span>
+            <span class="sel-next" onclick="selectorDrillDown('subject','${jsAttr(sub.id)}','${jsAttr(sub.name)}')">주제 선택 ></span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorDrillDown('subject','${jsAttr(sub.id)}','${jsAttr(sub.name)}');event.stopPropagation()">다음</button>
           </li>`;
       }
       else if(selectorMode === 'move_theory'){
         listEl.innerHTML += `
           <li class="sel-item">
-            <span class="sel-label" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">${sub.name}</span>
-            <span class="sel-next" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}')">주제 선택 ></span>
-            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorDrillDown('subject','${sub.id}','${sub.name}');event.stopPropagation()">다음</button>
+            <span class="sel-label" onclick="selectorDrillDown('subject','${jsAttr(sub.id)}','${jsAttr(sub.name)}')">${escapeHtml(sub.name)}</span>
+            <span class="sel-next" onclick="selectorDrillDown('subject','${jsAttr(sub.id)}','${jsAttr(sub.name)}')">주제 선택 ></span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorDrillDown('subject','${jsAttr(sub.id)}','${jsAttr(sub.name)}');event.stopPropagation()">다음</button>
           </li>`;
       }
     });
@@ -5164,8 +6152,8 @@ function renderSelectorUI() {
         const hasMod = c.module && DATA.modules[c.module];
         listEl.innerHTML += `
           <li class="sel-item">
-            <span class="sel-label" onclick="${hasMod ? `selectorDrillDown('detail','${c.module}','${c.title}','${current.id}')` : ''}">${c.title}</span>
-            ${hasMod ? `<span class="sel-next" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}')">상세 ></span>` : `<span class="sel-next"></span>`}
+            <span class="sel-label" onclick="${hasMod ? `selectorDrillDown('detail','${jsAttr(c.module)}','${jsAttr(c.title)}','${jsAttr(current.id)}')` : ''}">${escapeHtml(c.title)}</span>
+            ${hasMod ? `<span class="sel-next" onclick="selectorDrillDown('detail','${jsAttr(c.module)}','${jsAttr(c.title)}','${jsAttr(current.id)}')">상세 ></span>` : `<span class="sel-next"></span>`}
             <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorAdd(event,'detail','${c.id}','${current.id}')">추가</button>
           </li>`;
       });
@@ -5181,9 +6169,9 @@ function renderSelectorUI() {
       movable.forEach(c => {
         listEl.innerHTML += `
           <li class="sel-item">
-            <span class="sel-label" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}')">${c.title}</span>
-            <span class="sel-next" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}')">탭 선택 ></span>
-            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorDrillDown('detail','${c.module}','${c.title}','${current.id}');event.stopPropagation()">선택</button>
+            <span class="sel-label" onclick="selectorDrillDown('detail','${jsAttr(c.module)}','${jsAttr(c.title)}','${jsAttr(current.id)}')">${escapeHtml(c.title)}</span>
+            <span class="sel-next" onclick="selectorDrillDown('detail','${jsAttr(c.module)}','${jsAttr(c.title)}','${jsAttr(current.id)}')">탭 선택 ></span>
+            <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorDrillDown('detail','${jsAttr(c.module)}','${jsAttr(c.title)}','${jsAttr(current.id)}');event.stopPropagation()">선택</button>
           </li>`;
       });
       return;
@@ -5198,7 +6186,7 @@ function renderSelectorUI() {
       movable.forEach(c => {
         listEl.innerHTML += `
           <li class="sel-item">
-            <span class="sel-label" onclick="selectorMoveTheory('${c.module}')">${c.title}</span>
+            <span class="sel-label" onclick="selectorMoveTheory('${jsAttr(c.module)}')">${escapeHtml(c.title)}</span>
             <span class="sel-next"></span>
             <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorMoveTheory('${c.module}');event.stopPropagation()">이동</button>
           </li>`;
@@ -5219,13 +6207,13 @@ function renderSelectorUI() {
       mod.tabs.forEach(t => {
         listEl.innerHTML += `
           <li class="sel-item" style="background:rgba(255,255,0,0.1)">
-            <span class="sel-label">📖 ${t.label}</span>
+            <span class="sel-label">📖 ${escapeHtml(t.label)}</span>
             <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorAdd(event,'theory','${t.id}','${mod.id}')">추가</button>
           </li>`;
         (t.questions||[]).forEach(q => {
           listEl.innerHTML += `
             <li class="sel-item">
-              <span class="sel-label">${(q.text||'').substring(0,30)}</span>
+              <span class="sel-label">${escapeHtml((q.text||'').substring(0,30))}</span>
               <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorAdd(event,'question','${q.id}','${mod.id}')">추가</button>
             </li>`;
         });
@@ -5237,7 +6225,7 @@ function renderSelectorUI() {
       mod.tabs.forEach(t => {
         listEl.innerHTML += `
           <li class="sel-item" style="background:rgba(59,130,246,0.08)">
-            <span class="sel-label">📌 ${t.label}</span>
+            <span class="sel-label">📌 ${escapeHtml(t.label)}</span>
             <button class="btn btn-primary" style="font-size:0.75rem;" onclick="selectorMoveQuestion('${mod.id}','${t.id}')">여기로 이동</button>
           </li>`;
       });
@@ -5267,6 +6255,13 @@ function __updateDailyRefs(pred, mut){
       }
     }
   }
+}
+
+function nextUniquePlannerId(prefix, usedIds){
+  let id = uid(prefix);
+  while(usedIds.has(String(id))) id = uid(prefix);
+  usedIds.add(String(id));
+  return id;
 }
 
 function openMoveDetailCard(fromSid, fromIdx){
@@ -5360,12 +6355,20 @@ function selectorMoveQuestion(destMid, destTabId){
     const q = srcTab.questions.splice(i, 1)[0];
     if(q) moved.push(q);
   });
-  moved.reverse().forEach(q=>dstTab.questions.push(q));
+  const destinationIds = new Set((dstMod.tabs || []).flatMap(tab => (tab.questions || []).map(question => String(question.id))));
+  const remapped = [];
+  moved.reverse().forEach(q=>{
+    const oldId = q.id;
+    if(destinationIds.has(String(q.id))) q.id = nextUniquePlannerId('q', destinationIds);
+    else destinationIds.add(String(q.id));
+    dstTab.questions.push(q);
+    remapped.push({oldId, newId:q.id});
+  });
 
-  moved.forEach(q=>{
+  remapped.forEach(({oldId, newId})=>{
     __updateDailyRefs(
-      ref => (ref.type==='question' && ref.id===q.id && String(ref.pid)===String(fromMid)),
-      ref => { ref.pid = destMid; }
+      ref => (ref.type==='question' && String(ref.id)===String(oldId) && String(ref.pid)===String(fromMid)),
+      ref => { ref.id = newId; ref.pid = destMid; }
     );
   });
   clearSelectedInView('module', fromMid, fromTabId);
@@ -5399,6 +6402,18 @@ function selectorMoveTheory(destMid){
 
   const movingTab = srcMod.tabs.splice(srcIdx, 1)[0];
   if(!movingTab) return;
+  const oldTabId = movingTab.id;
+  const destinationTabIds = new Set(dstMod.tabs.map(tab => String(tab.id)));
+  if(destinationTabIds.has(String(movingTab.id))) movingTab.id = nextUniquePlannerId('t', destinationTabIds);
+  else destinationTabIds.add(String(movingTab.id));
+
+  const destinationQuestionIds = new Set(dstMod.tabs.flatMap(tab => (tab.questions || []).map(question => String(question.id))));
+  const questionRemaps = (movingTab.questions || []).map(question => {
+    const oldId = question.id;
+    if(destinationQuestionIds.has(String(question.id))) question.id = nextUniquePlannerId('q', destinationQuestionIds);
+    else destinationQuestionIds.add(String(question.id));
+    return {oldId, newId:question.id};
+  });
   dstMod.tabs.push(movingTab);
 
   srcMod.activeTab = (srcMod.activeTab===fromTabId)
@@ -5407,14 +6422,14 @@ function selectorMoveTheory(destMid){
   dstMod.activeTab = movingTab.id;
 
   __updateDailyRefs(
-    ref => (ref.type==='theory' && String(ref.id)===String(movingTab.id) && String(ref.pid)===String(fromMid)),
-    ref => { ref.pid = destMid; }
+    ref => (ref.type==='theory' && String(ref.id)===String(oldTabId) && String(ref.pid)===String(fromMid)),
+    ref => { ref.id = movingTab.id; ref.pid = destMid; }
   );
 
-  (movingTab.questions||[]).forEach(q => {
+  questionRemaps.forEach(({oldId, newId}) => {
     __updateDailyRefs(
-      ref => (ref.type==='question' && String(ref.id)===String(q.id) && String(ref.pid)===String(fromMid)),
-      ref => { ref.pid = destMid; }
+      ref => (ref.type==='question' && String(ref.id)===String(oldId) && String(ref.pid)===String(fromMid)),
+      ref => { ref.id = newId; ref.pid = destMid; }
     );
   });
 
@@ -5462,6 +6477,11 @@ async function init(){
   setInterval(updateClock, 1000);
   checkForAppUpdate();
   setInterval(() => checkForAppUpdate(), 5 * 60 * 1000);
+
+  __lastTimerTickAt = Date.now();
+  __timerCarryMs = 0;
+  __timerDate = getLogicalDate();
+  syncDailyTimerRunningState(__timerDate);
 
   window.addEventListener('hashchange', ()=> renderRouter(true));
   renderRouter();
