@@ -281,6 +281,13 @@
     .sel-label { font-weight:600; color:var(--text); flex:1; }
     .sel-next { font-size:0.8rem; color:var(--text-sub); margin-right:10px; }
     .md-content { font-size: 0.95rem; }
+    .md-content a, .q-body a, .note-view a {
+      color: var(--primary);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      cursor: pointer;
+      overflow-wrap: anywhere;
+    }
     .md-content pre,
     .note-view pre,
     .q-body pre {
@@ -481,7 +488,10 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
   <h2 style="font-size:2rem; margin-bottom:10px;">데이터/스크립트 오류</h2>
   <p>불러온 데이터(JSON) 또는 스크립트에 문제가 있어 앱을 실행할 수 없습니다.</p>
   <p id="err-msg" style="background:var(--line); padding:10px; border-radius:8px; font-family:inherit; font-variant-numeric: tabular-nums; margin:20px 0; color:var(--text)"></p>
-  <button class="btn btn-outline" style="padding:15px 30px; font-size:1.1rem;" onclick="hardReset()">데이터 강제 초기화 (복구)</button>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
+    <button class="btn btn-outline" style="padding:15px 30px; font-size:1.1rem;" onclick="exportRawStoredData()">원본 JSON 저장</button>
+    <button class="btn btn-outline" style="padding:15px 30px; font-size:1.1rem;" onclick="hardReset()">데이터 강제 초기화 (복구)</button>
+  </div>
 </div>
 
 <div id="app" class="container"></div>
@@ -631,10 +641,20 @@ function renderMarkdown(text){
   if (!window.DOMPurify || typeof DOMPurify.sanitize !== 'function') {
     return escapeHtml(source).replace(/\n/g, '<br>');
   }
-  return DOMPurify.sanitize(rendered, {
+  const sanitized = DOMPurify.sanitize(rendered, {
     USE_PROFILES: { html: true },
     ALLOWED_URI_REGEXP: MARKDOWN_ALLOWED_URI
   });
+  const template = document.createElement('template');
+  template.innerHTML = sanitized;
+  template.content.querySelectorAll('a[href]').forEach(link => {
+    const href = String(link.getAttribute('href') || '').trim();
+    if (/^(?:https?:)?\/\//i.test(href)) {
+      link.setAttribute('target', '_blank');
+      link.setAttribute('rel', 'noopener noreferrer');
+    }
+  });
+  return template.innerHTML;
 }
 /* =========================
    DATA / STATE
@@ -645,6 +665,13 @@ const THEME_KEY = 'universal_planner_theme';
 const APP_BUILD_ID = '2026-07-14-data-timer-pdf-hardening-1';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = 'studyplanner_app_update_reload';
+const PLANNER_SCHEMA_VERSION = 3;
+const PLANNER_BACKUP_FORMAT = 'inmonite-studyplanner-backup';
+const PLANNER_BACKUP_FORMAT_VERSION = 1;
+const OBSIDIAN_EXPORT_FORMAT = 'inmonite-studyplanner-obsidian';
+const OBSIDIAN_EXPORT_FORMAT_VERSION = 1;
+const OBSIDIAN_EXPORT_JSZIP_URL = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+const OBSIDIAN_EXPORT_LARGE_BYTES = 200 * 1024 * 1024;
 const ASSET_DB_NAME = 'studyplanner_assets_v1';
 const ASSET_STORE = 'assets';
 const ASSET_ID_PREFIX = 'app://asset/';
@@ -662,6 +689,8 @@ const __assetUrlCache = new Map();
 const __assetLoadPending = new Set();
 let __assetRerenderScheduled = false;
 let __assetStorageInfo = null;
+let OBSIDIAN_EXPORT_LIB_PROMISE = null;
+let OBSIDIAN_EXPORT_IN_PROGRESS = false;
 
 function openAssetDb() {
   if (__assetDbPromise) return __assetDbPromise;
@@ -1136,7 +1165,15 @@ let __dragFromInteractive = false;
 let __tmpDragDisabledCard = null;
 
 function __isInteractiveTarget(t){
-  return !!(t && t.closest && t.closest('input,button,textarea,select,label,a'));
+  return !!(t && t.closest && t.closest(
+    'a,button,input,textarea,select,label,summary,[contenteditable="true"],[role="button"],[role="link"]'
+  ));
+}
+
+function __shouldIgnoreContainerActivation(ev){
+  if(!ev) return false;
+  if(ev.defaultPrevented || ev.button > 0) return true;
+  return __isInteractiveTarget(ev.target);
 }
 
 // If the user interacts with a control inside a draggable card, temporarily disable draggable
@@ -1196,6 +1233,12 @@ function escapeHtml(s='') {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+function renderPlainTextWithBreaks(value='') {
+  const normalized = String(value || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/\r\n?/g, '\n');
+  return escapeHtml(normalized).replace(/\n/g, '<br>');
 }
 function clonePlain(value){
   return JSON.parse(JSON.stringify(value ?? null));
@@ -1346,13 +1389,13 @@ function safePdfFilename(title){
     .slice(0, 90) || 'studyplanner';
   return `${safe}.pdf`;
 }
-function loadScriptOnce(url, isReady){
+function loadScriptOnce(url, isReady, errorMessage='외부 라이브러리를 불러오지 못했습니다.'){
   if(isReady()) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = url;
-    script.onload = () => isReady() ? resolve() : reject(new Error('PDF 라이브러리를 불러오지 못했습니다.'));
-    script.onerror = () => reject(new Error('PDF 라이브러리를 불러오지 못했습니다.'));
+    script.onload = () => isReady() ? resolve() : reject(new Error(errorMessage));
+    script.onerror = () => reject(new Error(errorMessage));
     document.head.appendChild(script);
   });
 }
@@ -1360,9 +1403,26 @@ function ensurePdfExporter(){
   if(window.jspdf?.jsPDF && window.html2canvas) return Promise.resolve();
   if(PDF_EXPORT_LIB_PROMISE) return PDF_EXPORT_LIB_PROMISE;
   PDF_EXPORT_LIB_PROMISE = Promise.resolve()
-    .then(() => loadScriptOnce(PDF_EXPORT_JSPDF_URL, () => !!window.jspdf?.jsPDF))
-    .then(() => loadScriptOnce(PDF_EXPORT_HTML2CANVAS_URL, () => !!window.html2canvas));
+    .then(() => loadScriptOnce(PDF_EXPORT_JSPDF_URL, () => !!window.jspdf?.jsPDF, 'PDF 라이브러리를 불러오지 못했습니다.'))
+    .then(() => loadScriptOnce(PDF_EXPORT_HTML2CANVAS_URL, () => !!window.html2canvas, 'PDF 라이브러리를 불러오지 못했습니다.'))
+    .catch(err => {
+      PDF_EXPORT_LIB_PROMISE = null;
+      throw err;
+    });
   return PDF_EXPORT_LIB_PROMISE;
+}
+function ensureObsidianExporter(){
+  if(typeof window.JSZip === 'function') return Promise.resolve();
+  if(OBSIDIAN_EXPORT_LIB_PROMISE) return OBSIDIAN_EXPORT_LIB_PROMISE;
+  OBSIDIAN_EXPORT_LIB_PROMISE = loadScriptOnce(
+    OBSIDIAN_EXPORT_JSZIP_URL,
+    () => typeof window.JSZip === 'function',
+    'ZIP 라이브러리를 불러오지 못했습니다.'
+  ).catch(err => {
+    OBSIDIAN_EXPORT_LIB_PROMISE = null;
+    throw err;
+  });
+  return OBSIDIAN_EXPORT_LIB_PROMISE;
 }
 function createPdfInstance(){
   const JsPdf = window.jspdf?.jsPDF;
@@ -2150,6 +2210,97 @@ function toggleDarkMode(){
 /* =========================
    STORAGE / IMPORT EXPORT
 ========================= */
+function readPlannerSchemaVersion(value){
+  if(!isPlainRecord(value)) throw new Error('플래너 데이터 구조가 올바르지 않습니다.');
+  if(value.schemaVersion === undefined || value.schemaVersion === null || value.schemaVersion === '') return 1;
+  const version = Number(value.schemaVersion);
+  if(!Number.isInteger(version) || version < 1) throw new Error('플래너 스키마 버전이 올바르지 않습니다.');
+  if(version > PLANNER_SCHEMA_VERSION){
+    throw new Error(`이 백업은 더 최신 데이터 형식(v${version})입니다. 앱을 업데이트한 뒤 다시 시도해 주세요.`);
+  }
+  return version;
+}
+
+function migratePlannerSchema1To2(data){
+  Object.values(data.details || {}).forEach(detail => {
+    const cards = Array.isArray(detail?.cards) ? detail.cards : [];
+    cards.forEach(card => {
+      if(!card.module && card.moduleId) card.module = card.moduleId;
+      if(Object.prototype.hasOwnProperty.call(card, 'moduleId')) delete card.moduleId;
+    });
+  });
+  data.schemaVersion = 2;
+  return data;
+}
+
+function migratePlannerSchema2To3(data){
+  if(!isPlainRecord(data.meta)) data.meta = {};
+  if(!data.meta.version) data.meta.version = '2.6';
+  data.meta.dataModel = 'studyplanner';
+  data.schemaVersion = 3;
+  return data;
+}
+
+function migratePlannerData(value){
+  if(!isPlainRecord(value)) throw new Error('플래너 데이터 구조가 올바르지 않습니다.');
+  let data = clonePlain(value);
+  let version = readPlannerSchemaVersion(data);
+  while(version < PLANNER_SCHEMA_VERSION){
+    if(version === 1) data = migratePlannerSchema1To2(data);
+    else if(version === 2) data = migratePlannerSchema2To3(data);
+    else throw new Error(`지원하지 않는 플래너 스키마 버전입니다: v${version}`);
+    version = readPlannerSchemaVersion(data);
+  }
+  data.schemaVersion = PLANNER_SCHEMA_VERSION;
+  if(!isPlainRecord(data.meta)) data.meta = {};
+  data.meta.dataModel = 'studyplanner';
+  return data;
+}
+
+function buildPlannerBackupEnvelope(data, assets = []){
+  const plannerData = migratePlannerData(data);
+  return {
+    format: PLANNER_BACKUP_FORMAT,
+    formatVersion: PLANNER_BACKUP_FORMAT_VERSION,
+    schemaVersion: PLANNER_SCHEMA_VERSION,
+    appBuildId: APP_BUILD_ID,
+    exportedAt: new Date().toISOString(),
+    data: plannerData,
+    assets: Array.isArray(assets) ? assets : []
+  };
+}
+
+function unpackPlannerBackup(value){
+  if(!isPlainRecord(value)) throw new Error('백업 JSON 구조가 올바르지 않습니다.');
+  assertSafeImportedObjectKeys(value);
+  if(value.format === PLANNER_BACKUP_FORMAT){
+    const formatVersion = Number(value.formatVersion);
+    if(!Number.isInteger(formatVersion) || formatVersion < 1 || formatVersion > PLANNER_BACKUP_FORMAT_VERSION){
+      throw new Error(`지원하지 않는 백업 형식 버전입니다: ${value.formatVersion}`);
+    }
+    if(!isPlainRecord(value.data)) throw new Error('백업에 플래너 데이터가 없습니다.');
+    const envelopeSchema = Number(value.schemaVersion);
+    if(Number.isInteger(envelopeSchema) && envelopeSchema > PLANNER_SCHEMA_VERSION){
+      throw new Error(`이 백업은 더 최신 데이터 형식(v${envelopeSchema})입니다. 앱을 업데이트한 뒤 다시 시도해 주세요.`);
+    }
+    if(value.assets !== undefined && !Array.isArray(value.assets)) throw new Error('백업 이미지 목록이 올바르지 않습니다.');
+    return {
+      data: migratePlannerData(value.data),
+      assets: clonePlain(value.assets || []),
+      legacy: false
+    };
+  }
+
+  const legacyData = clonePlain(value);
+  const assets = Array.isArray(legacyData.__assets) ? clonePlain(legacyData.__assets) : [];
+  delete legacyData.__assets;
+  return {
+    data: migratePlannerData(legacyData),
+    assets,
+    legacy: true
+  };
+}
+
 let __saveDataFailureNotified = false;
 function saveData(options = {}){
   const notify = options.notify !== false;
@@ -2212,6 +2363,8 @@ function assertSafeImportedObjectKeys(value){
 function validateImportedPlannerData(value){
   if(!isPlainRecord(value)) throw new Error('플래너 JSON 구조가 올바르지 않습니다.');
   assertSafeImportedObjectKeys(value);
+  if(readPlannerSchemaVersion(value) !== PLANNER_SCHEMA_VERSION) throw new Error('플래너 스키마 마이그레이션에 실패했습니다.');
+  if(!isPlainRecord(value.meta)) throw new Error('플래너 메타데이터 구조가 올바르지 않습니다.');
 
   const checkId = (id, label, optional=false) => {
     if(optional && (id === null || id === undefined || id === '')) return;
@@ -2395,6 +2548,15 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
+function exportRawStoredData(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(!raw) return alert('브라우저에 저장된 원본 데이터가 없습니다.');
+  downloadBlob(
+    new Blob([raw], {type:'application/json'}),
+    `studyplanner_raw_${toYMDLocal(new Date())}.json`
+  );
+}
+
 function collectAssetIdsFromObject(value) {
   const ids = new Set();
   const text = JSON.stringify(value || {});
@@ -2537,7 +2699,8 @@ async function readPdfRestorePayloadFile(file) {
 
 function makeEmptyRestoreData(title = '') {
   return {
-    meta: { version: '2.6', source: 'studyplanner-pdf' },
+    schemaVersion: PLANNER_SCHEMA_VERSION,
+    meta: { version: '2.6', dataModel: 'studyplanner', source: 'studyplanner-pdf' },
     home: { title: title || 'PDF 가져오기', subtitle: '', subjects: [], dDays: [] },
     details: {},
     modules: {},
@@ -2847,14 +3010,537 @@ async function importStudyPlannerPdfPayload(payload, fileName = '') {
   showToast('PDF에서 카드 구조를 가져왔습니다.', 1800);
 }
 
+function safeObsidianPathPart(value, fallback='제목 없음'){
+  let safe = String(value || '')
+    .normalize('NFC')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/[\[\]#^]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/^[.\s]+/g, '')
+    .replace(/[.\s]+$/g, '')
+    .trim()
+    .slice(0, 80);
+  if(!safe) safe = fallback;
+  if(/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(safe)) safe = `_${safe}`;
+  return safe;
+}
+
+function uniqueObsidianPath(path, usedPaths){
+  if(!usedPaths.has(path)){
+    usedPaths.add(path);
+    return path;
+  }
+  const dot = path.lastIndexOf('.');
+  const base = dot > path.lastIndexOf('/') ? path.slice(0, dot) : path;
+  const ext = dot > path.lastIndexOf('/') ? path.slice(dot) : '';
+  let suffix = 2;
+  let next = `${base}-${suffix}${ext}`;
+  while(usedPaths.has(next)) next = `${base}-${++suffix}${ext}`;
+  usedPaths.add(next);
+  return next;
+}
+
+function obsidianSequence(index, total=0){
+  return String(index + 1).padStart(Math.max(3, String(Math.max(1, total)).length), '0');
+}
+
+function obsidianYamlScalar(value){
+  if(value === null) return 'null';
+  if(typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return JSON.stringify(value);
+}
+
+function obsidianFrontmatter(fields){
+  const lines = Object.entries(fields)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}: ${obsidianYamlScalar(value)}`);
+  return `---\n${lines.join('\n')}\n---\n\n`;
+}
+
+function escapeMarkdownInline(value){
+  return String(value || '')
+    .replace(/\r?\n/g, ' ')
+    .replace(/([\\`*_[\]<>#|])/g, '\\$1')
+    .trim();
+}
+
+function obsidianWikiLink(path, label){
+  const target = String(path || '').replace(/\\/g, '/').replace(/\.md$/i, '');
+  const alias = String(label || '').replace(/[|\]\r\n]/g, ' ').trim();
+  return alias ? `[[${target}|${alias}]]` : `[[${target}]]`;
+}
+
+function rewriteObsidianAssetRefs(text, assetPathById){
+  let output = String(text || '');
+  output = output.replace(
+    /!\[([^\]]*)\]\(\s*app:\/\/asset\/([A-Za-z0-9_-]+)(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g,
+    (match, alt, id) => {
+      const path = assetPathById.get(id);
+      if(!path) return match;
+      const alias = String(alt || '').replace(/[|\]\r\n]/g, ' ').trim();
+      return alias ? `![[${path}|${alias}]]` : `![[${path}]]`;
+    }
+  );
+  output = output.replace(
+    /\[([^\]]+)\]\(\s*app:\/\/asset\/([A-Za-z0-9_-]+)(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g,
+    (match, label, id) => {
+      const path = assetPathById.get(id);
+      return path ? obsidianWikiLink(path, label) : match;
+    }
+  );
+  return output.replace(/app:\/\/asset\/([A-Za-z0-9_-]+)/g, (match, id) => {
+    const path = assetPathById.get(id);
+    return path ? obsidianWikiLink(path) : match;
+  });
+}
+
+function obsidianAssetExtension(asset){
+  const nameMatch = String(asset?.name || '').match(/\.([A-Za-z0-9]{1,10})$/);
+  if(nameMatch) return `.${nameMatch[1].toLowerCase()}`;
+  const extensions = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+    'image/svg+xml': '.svg',
+    'image/avif': '.avif'
+  };
+  return extensions[String(asset?.type || '').toLowerCase()] || '.bin';
+}
+
+async function buildObsidianAssetBundle(plannerData){
+  const ids = [...collectAssetIdsFromObject(plannerData)].sort();
+  if(!ids.length){
+    return {
+      assetPathById:new Map(),
+      assets:[],
+      missingAssetIds:[],
+      totalBytes:0
+    };
+  }
+  const records = new Map((await listAssetRecords()).map(record => [String(record.id), record]));
+  const usedPaths = new Set();
+  const assetPathById = new Map();
+  const assets = [];
+  const missingAssetIds = [];
+
+  ids.forEach(id => {
+    const record = records.get(id);
+    if(!record?.blob){
+      missingAssetIds.push(id);
+      return;
+    }
+    const originalName = String(record.name || id);
+    const ext = obsidianAssetExtension(record);
+    const stem = safeObsidianPathPart(originalName.replace(/\.[A-Za-z0-9]{1,10}$/i, ''), 'image').slice(0, 52);
+    const idPart = safeObsidianPathPart(id, 'asset').slice(0, 32);
+    const path = uniqueObsidianPath(`attachments/${stem}--${idPart}${ext}`, usedPaths);
+    assetPathById.set(id, path);
+    assets.push({id, path, record});
+  });
+
+  return {
+    assetPathById,
+    assets,
+    missingAssetIds,
+    totalBytes: assets.reduce((sum, item) => sum + Number(item.record.size || item.record.blob.size || 0), 0)
+  };
+}
+
+function buildObsidianExportModel(plannerData, assetBundle, exportedAt){
+  const files = [];
+  const notes = [];
+  const usedPaths = new Set();
+  const subjects = Array.isArray(plannerData.home?.subjects) ? plannerData.home.subjects : [];
+  const moduleParents = new Map();
+
+  const addNote = (path, meta, body) => {
+    files.push({
+      path,
+      content: obsidianFrontmatter({
+        studyplanner_schema: PLANNER_SCHEMA_VERSION,
+        studyplanner_type: meta.type,
+        studyplanner_id: meta.id,
+        studyplanner_parent_id: meta.parentId,
+        studyplanner_order: meta.order,
+        ...meta.fields
+      }) + `${String(body || '').trim()}\n`
+    });
+    notes.push({
+      type: meta.type,
+      id: meta.id,
+      parentId: meta.parentId,
+      order: meta.order,
+      path
+    });
+  };
+
+  const subjectEntries = subjects.map((subject, index) => ({
+    subject,
+    index,
+    detail: plannerData.details?.[subject.id],
+    path: uniqueObsidianPath(
+      `Subjects/${obsidianSequence(index, subjects.length)} ${safeObsidianPathPart(subject.name || subject.id, '과목')}.md`,
+      usedPaths
+    )
+  }));
+  const subjectById = new Map(subjectEntries.map(entry => [String(entry.subject.id), entry]));
+  const cardEntries = [];
+  const cardByKey = new Map();
+
+  subjectEntries.forEach(subjectEntry => {
+    const cards = Array.isArray(subjectEntry.detail?.cards) ? subjectEntry.detail.cards : [];
+    const folder = `Cards/${obsidianSequence(subjectEntry.index, subjects.length)} ${safeObsidianPathPart(subjectEntry.subject.name || subjectEntry.subject.id, '과목')}`;
+    cards.forEach((card, index) => {
+      const entry = {
+        card,
+        index,
+        subjectEntry,
+        path: uniqueObsidianPath(
+          `${folder}/${obsidianSequence(index, cards.length)} ${safeObsidianPathPart(card.title || card.id, '카드')}.md`,
+          usedPaths
+        )
+      };
+      cardEntries.push(entry);
+      cardByKey.set(`${subjectEntry.subject.id}:${card.id}`, entry);
+      if(card.module && plannerData.modules?.[card.module]){
+        if(!moduleParents.has(card.module)) moduleParents.set(card.module, []);
+        moduleParents.get(card.module).push(entry);
+      }
+    });
+  });
+
+  const moduleIds = [];
+  const seenModules = new Set();
+  cardEntries.forEach(entry => {
+    const mid = entry.card.module;
+    if(mid && plannerData.modules?.[mid] && !seenModules.has(mid)){
+      seenModules.add(mid);
+      moduleIds.push(mid);
+    }
+  });
+  Object.keys(plannerData.modules || {}).sort().forEach(mid => {
+    if(!seenModules.has(mid)){
+      seenModules.add(mid);
+      moduleIds.push(mid);
+    }
+  });
+
+  const moduleEntries = moduleIds.map((mid, index) => {
+    const module = plannerData.modules[mid];
+    const folder = `Modules/${obsidianSequence(index, moduleIds.length)} ${safeObsidianPathPart(module.title || mid, '모듈')}`;
+    return {
+      module,
+      index,
+      folder,
+      path: uniqueObsidianPath(`${folder}/000 ${safeObsidianPathPart(module.title || mid, '모듈')}.md`, usedPaths),
+      tabs: []
+    };
+  });
+  const moduleById = new Map(moduleEntries.map(entry => [String(entry.module.id), entry]));
+  const tabByKey = new Map();
+  const questionByKey = new Map();
+
+  moduleEntries.forEach(moduleEntry => {
+    const tabs = Array.isArray(moduleEntry.module.tabs) ? moduleEntry.module.tabs : [];
+    moduleEntry.tabs = tabs.map((tab, tabIndex) => {
+      const tabEntry = {
+        tab,
+        tabIndex,
+        moduleEntry,
+        path: uniqueObsidianPath(
+          `${moduleEntry.folder}/${obsidianSequence(tabIndex, tabs.length)} ${safeObsidianPathPart(tab.label || tab.id, '탭')}.md`,
+          usedPaths
+        ),
+        questions: []
+      };
+      tabByKey.set(`${moduleEntry.module.id}:${tab.id}`, tabEntry);
+      const questions = Array.isArray(tab.questions) ? tab.questions : [];
+      tabEntry.questions = questions.map((question, questionIndex) => {
+        const title = question.src || plainSnippet(question.text, `문항 ${questionIndex + 1}`, 64);
+        const questionEntry = {
+          question,
+          questionIndex,
+          tabEntry,
+          path: uniqueObsidianPath(
+            `${moduleEntry.folder}/Questions/${obsidianSequence(tabIndex, tabs.length)}-${obsidianSequence(questionIndex, questions.length)} ${safeObsidianPathPart(title, '문항')}.md`,
+            usedPaths
+          )
+        };
+        questionByKey.set(`${moduleEntry.module.id}:${question.id}`, questionEntry);
+        return questionEntry;
+      });
+      return tabEntry;
+    });
+  });
+
+  const homePath = uniqueObsidianPath('StudyPlanner.md', usedPaths);
+  const dDays = Array.isArray(plannerData.home?.dDays) ? plannerData.home.dDays : [];
+  const homeParts = [
+    `# ${escapeMarkdownInline(plannerData.home?.title || 'StudyPlanner')}`,
+    rewriteObsidianAssetRefs(plannerData.home?.subtitle || '', assetBundle.assetPathById),
+    dDays.length ? `## D-Day\n${dDays.map(item => `- **${escapeMarkdownInline(item.label || 'D-Day')}**: ${escapeMarkdownInline(item.date || '')}`).join('\n')}` : '',
+    subjectEntries.length ? `## 과목\n${subjectEntries.map(entry => `- ${obsidianWikiLink(entry.path, entry.subject.name || entry.subject.id)}`).join('\n')}` : ''
+  ];
+  addNote(homePath, {type:'home', id:'home', order:0}, homeParts.filter(Boolean).join('\n\n'));
+
+  subjectEntries.forEach(entry => {
+    const cards = cardEntries.filter(cardEntry => cardEntry.subjectEntry === entry);
+    const subjectParts = [
+      `# ${escapeMarkdownInline(entry.subject.name || entry.subject.id)}`,
+      `상위: ${obsidianWikiLink(homePath, plannerData.home?.title || 'StudyPlanner')}`,
+      rewriteObsidianAssetRefs(entry.detail?.subtitle || '', assetBundle.assetPathById),
+      entry.subject.examInfo ? `## 과목 정보\n${rewriteObsidianAssetRefs(entry.subject.examInfo, assetBundle.assetPathById)}` : '',
+      cards.length ? `## 카드\n${cards.map(cardEntry => {
+        const done = calcCardStats(cardEntry.card).isComplete ? 'x' : ' ';
+        return `- [${done}] ${obsidianWikiLink(cardEntry.path, cardEntry.card.title || cardEntry.card.id)}`;
+      }).join('\n')}` : ''
+    ];
+    addNote(entry.path, {
+      type:'subject',
+      id:entry.subject.id,
+      parentId:'home',
+      order:entry.index,
+      fields:{studyplanner_badge:entry.subject.badge || undefined}
+    }, subjectParts.filter(Boolean).join('\n\n'));
+  });
+
+  cardEntries.forEach(entry => {
+    const moduleEntry = entry.card.module ? moduleById.get(String(entry.card.module)) : null;
+    const cardParts = [
+      `# ${escapeMarkdownInline(entry.card.title || entry.card.id)}`,
+      `상위: ${obsidianWikiLink(entry.subjectEntry.path, entry.subjectEntry.subject.name || entry.subjectEntry.subject.id)}`,
+      rewriteObsidianAssetRefs(entry.card.scope || '', assetBundle.assetPathById),
+      entry.card.qbox ? `## 문항/메모\n${rewriteObsidianAssetRefs(entry.card.qbox, assetBundle.assetPathById)}` : '',
+      moduleEntry ? `## 하위 페이지\n- ${obsidianWikiLink(moduleEntry.path, moduleEntry.module.title || moduleEntry.module.id)}` : ''
+    ];
+    addNote(entry.path, {
+      type:'detail_card',
+      id:entry.card.id,
+      parentId:entry.subjectEntry.subject.id,
+      order:entry.index,
+      fields:{
+        studyplanner_badge:entry.card.badge || undefined,
+        studyplanner_category:entry.card.category || undefined,
+        studyplanner_module_id:entry.card.module || undefined,
+        studyplanner_done:!!calcCardStats(entry.card).isComplete,
+        studyplanner_time_seconds:Number(calcCardStats(entry.card).time || 0)
+      }
+    }, cardParts.filter(Boolean).join('\n\n'));
+  });
+
+  moduleEntries.forEach(entry => {
+    const parents = moduleParents.get(entry.module.id) || [];
+    const moduleParts = [
+      `# ${escapeMarkdownInline(entry.module.title || entry.module.id)}`,
+      parents.length ? `상위 카드:\n${parents.map(parent => `- ${obsidianWikiLink(parent.path, parent.card.title || parent.card.id)}`).join('\n')}` : '',
+      rewriteObsidianAssetRefs(entry.module.subtitle || '', assetBundle.assetPathById),
+      entry.tabs.length ? `## 탭\n${entry.tabs.map(tabEntry => `- [${tabEntry.tab.done ? 'x' : ' '}] ${obsidianWikiLink(tabEntry.path, tabEntry.tab.label || tabEntry.tab.id)}`).join('\n')}` : ''
+    ];
+    addNote(entry.path, {
+      type:'module',
+      id:entry.module.id,
+      parentId:parents[0]?.card.id,
+      order:entry.index
+    }, moduleParts.filter(Boolean).join('\n\n'));
+
+    entry.tabs.forEach(tabEntry => {
+      const tabParts = [
+        `# ${escapeMarkdownInline(tabEntry.tab.label || tabEntry.tab.id)}`,
+        `상위: ${obsidianWikiLink(entry.path, entry.module.title || entry.module.id)}`,
+        rewriteObsidianAssetRefs(tabEntry.tab.theoryNote || '', assetBundle.assetPathById),
+        tabEntry.questions.length ? `## 문항\n${tabEntry.questions.map(questionEntry => {
+          const question = questionEntry.question;
+          const title = question.src || plainSnippet(question.text, `문항 ${questionEntry.questionIndex + 1}`, 64);
+          return `- [${question.done ? 'x' : ' '}] ${obsidianWikiLink(questionEntry.path, title)}`;
+        }).join('\n')}` : ''
+      ];
+      addNote(tabEntry.path, {
+        type:'module_tab',
+        id:tabEntry.tab.id,
+        parentId:entry.module.id,
+        order:tabEntry.tabIndex,
+        fields:{
+          studyplanner_done:!!tabEntry.tab.done,
+          studyplanner_time_seconds:Number(tabEntry.tab.time || 0)
+        }
+      }, tabParts.filter(Boolean).join('\n\n'));
+
+      tabEntry.questions.forEach(questionEntry => {
+        const question = questionEntry.question;
+        const title = question.src || plainSnippet(question.text, `문항 ${questionEntry.questionIndex + 1}`, 64);
+        const questionParts = [
+          `# ${escapeMarkdownInline(title)}`,
+          `상위: ${obsidianWikiLink(tabEntry.path, tabEntry.tab.label || tabEntry.tab.id)}`,
+          question.src ? `출처: ${escapeMarkdownInline(question.src)}` : '',
+          question.text ? `## 문항\n${rewriteObsidianAssetRefs(question.text, assetBundle.assetPathById)}` : '',
+          question.userNote ? `## 노트\n${rewriteObsidianAssetRefs(question.userNote, assetBundle.assetPathById)}` : ''
+        ];
+        addNote(questionEntry.path, {
+          type:'question',
+          id:question.id,
+          parentId:tabEntry.tab.id,
+          order:questionEntry.questionIndex,
+          fields:{
+            studyplanner_module_id:entry.module.id,
+            studyplanner_source:question.src || undefined,
+            studyplanner_done:!!question.done,
+            studyplanner_time_seconds:Number(question.time || 0)
+          }
+        }, questionParts.filter(Boolean).join('\n\n'));
+      });
+    });
+  });
+
+  const dailyEntries = Object.entries(plannerData.dailyHistory || {})
+    .filter(([date, daily]) => parseYMD(date) && isPlainRecord(daily))
+    .sort(([a], [b]) => a.localeCompare(b));
+  dailyEntries.forEach(([date, daily], dailyIndex) => {
+    const path = uniqueObsidianPath(`Daily/${date}.md`, usedPaths);
+    const slots = (daily.slots || []).map(slot => {
+      const refs = (slot.cardIds || []).map(ref => {
+        const info = getCardInfo(ref);
+        let target = null;
+        if(ref.type === 'subject') target = subjectById.get(String(ref.id));
+        else if(ref.type === 'detail') target = cardByKey.get(`${ref.pid}:${ref.id}`);
+        else if(ref.type === 'theory') target = tabByKey.get(`${ref.pid}:${ref.id}`);
+        else if(ref.type === 'question') target = questionByKey.get(`${ref.pid}:${ref.id}`);
+        const label = target ? obsidianWikiLink(target.path, info.title) : escapeMarkdownInline(ref.title || info.title);
+        return `- [${info.done ? 'x' : ' '}] ${label} (${formatTime(ref.time || 0)})`;
+      });
+      return `## ${escapeMarkdownInline(slot.label || '시간 블록')}\n${refs.length ? refs.join('\n') : '- 비어 있음'}`;
+    });
+    const dailyParts = [
+      `# ${date} 일일 계획`,
+      `총 공부 시간: ${formatTime(daily.totalSeconds || 0)}`,
+      `목표: ${escapeMarkdownInline(daily.goalStr || '00:00:00')}`,
+      slots.join('\n\n')
+    ];
+    addNote(path, {
+      type:'daily',
+      id:date,
+      order:dailyIndex,
+      fields:{
+        studyplanner_date:date,
+        studyplanner_total_seconds:Number(daily.totalSeconds || 0),
+        studyplanner_goal:daily.goalStr || '00:00:00'
+      }
+    }, dailyParts.filter(Boolean).join('\n\n'));
+  });
+
+  const assetManifest = assetBundle.assets.map(({id, path, record}) => ({
+    id,
+    path,
+    name:record.name || id,
+    type:record.type || 'application/octet-stream',
+    size:Number(record.size || record.blob?.size || 0),
+    hash:record.hash || '',
+    createdAt:record.createdAt || null
+  }));
+  const manifest = {
+    format:OBSIDIAN_EXPORT_FORMAT,
+    formatVersion:OBSIDIAN_EXPORT_FORMAT_VERSION,
+    schemaVersion:PLANNER_SCHEMA_VERSION,
+    appBuildId:APP_BUILD_ID,
+    exportedAt,
+    homeNote:homePath,
+    dataFile:'_studyplanner/planner-data.json',
+    counts:{
+      subjects:subjectEntries.length,
+      cards:cardEntries.length,
+      modules:moduleEntries.length,
+      tabs:moduleEntries.reduce((sum, entry) => sum + entry.tabs.length, 0),
+      questions:moduleEntries.reduce((sum, entry) => sum + entry.tabs.reduce((tabSum, tab) => tabSum + tab.questions.length, 0), 0),
+      dailyNotes:dailyEntries.length,
+      assets:assetManifest.length
+    },
+    notes,
+    assets:assetManifest,
+    missingAssetIds:assetBundle.missingAssetIds
+  };
+
+  files.push({
+    path:'README.md',
+    content:'# StudyPlanner Obsidian Export\n\n'
+      + '- `StudyPlanner.md`에서 과목별 노트를 탐색할 수 있습니다.\n'
+      + '- `_studyplanner` 폴더에는 향후 구조 복원에 사용할 원본 데이터와 manifest가 있습니다.\n'
+      + '- 현재 이 ZIP은 Obsidian으로 내보내기 전용입니다. 앱으로 다시 가져올 때는 공식 JSON 백업을 사용하세요.\n'
+  });
+  files.push({path:'_studyplanner/planner-data.json', content:JSON.stringify(plannerData, null, 2)});
+  files.push({path:'_studyplanner/manifest.json', content:JSON.stringify(manifest, null, 2)});
+  return {files, manifest};
+}
+
+async function exportObsidianVault(){
+  if(OBSIDIAN_EXPORT_IN_PROGRESS){
+    showToast('Obsidian ZIP을 생성하고 있습니다.', 1600);
+    return;
+  }
+  OBSIDIAN_EXPORT_IN_PROGRESS = true;
+  try{
+    showToast('Obsidian 내보내기 준비 중...', 0);
+    await ensureObsidianExporter();
+    const plannerData = migratePlannerData(DATA);
+    const assetBundle = await buildObsidianAssetBundle(plannerData);
+    if(assetBundle.totalBytes >= OBSIDIAN_EXPORT_LARGE_BYTES){
+      const proceed = confirm(
+        `첨부 이미지 ${formatBytes(assetBundle.totalBytes)}를 ZIP에 포함합니다.\n`
+        + '내보내는 동안 브라우저 메모리를 많이 사용할 수 있습니다. 계속할까요?'
+      );
+      if(!proceed){
+        hideToast();
+        return;
+      }
+    }
+
+    const exportedAt = new Date().toISOString();
+    const model = buildObsidianExportModel(plannerData, assetBundle, exportedAt);
+    const zip = new window.JSZip();
+    const root = zip.folder('StudyPlanner');
+    model.files.forEach(file => root.file(file.path, file.content));
+    assetBundle.assets.forEach(({path, record}) => {
+      root.file(path, record.blob, {binary:true, compression:'STORE'});
+    });
+
+    let lastProgress = -1;
+    const blob = await zip.generateAsync({
+      type:'blob',
+      compression:'DEFLATE',
+      compressionOptions:{level:6},
+      streamFiles:true
+    }, metadata => {
+      const progress = Math.floor(metadata.percent || 0);
+      if(progress !== lastProgress){
+        lastProgress = progress;
+        showToast(`Obsidian ZIP 생성 중... ${progress}%`, 0);
+      }
+    });
+    downloadBlob(blob, `studyplanner_obsidian_${toYMDLocal(new Date())}.zip`);
+    const missing = assetBundle.missingAssetIds.length;
+    showToast(
+      missing
+        ? `Obsidian ZIP 저장 완료 · 찾지 못한 이미지 ${missing}개`
+        : `Obsidian ZIP 저장 완료 · 노트 ${model.manifest.notes.length}개`,
+      2600
+    );
+  }catch(err){
+    console.error('Obsidian export failed:', err);
+    hideToast();
+    alert(`Obsidian 내보내기 실패: ${err.message}`);
+  }finally{
+    OBSIDIAN_EXPORT_IN_PROGRESS = false;
+  }
+}
+
 function exportData() {
   (async () => {
-    const payload = clonePlain(DATA);
-    const assets = await buildAssetBackupItems(collectAssetIdsFromObject(payload));
-    if (assets.length) payload.__assets = assets;
+    const plannerData = migratePlannerData(DATA);
+    const assets = await buildAssetBackupItems(collectAssetIdsFromObject(plannerData));
+    const payload = buildPlannerBackupEnvelope(plannerData, assets);
     downloadBlob(
       new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }),
-      `planner_backup_${toYMDLocal(new Date())}.json`
+      `studyplanner_backup_${toYMDLocal(new Date())}.json`
     );
   })().catch(err => alert('백업 저장 실패: ' + err.message));
 }
@@ -2886,9 +3572,9 @@ window.loadJsonFile = function(e) {
   const r = new FileReader();
   r.onload = async function(evt) {
     try {
-      const parsed = JSON.parse(evt.target.result);
-      const backupAssets = parsed && parsed.__assets;
-      if (parsed && parsed.__assets) delete parsed.__assets;
+      const unpacked = unpackPlannerBackup(JSON.parse(evt.target.result));
+      const parsed = unpacked.data;
+      const backupAssets = unpacked.assets;
       validateImportedPlannerData(parsed);
       if(backupAssets && backupAssets.length){
         const hasCapacity = await confirmAssetImportCapacity(backupAssets);
@@ -2906,7 +3592,7 @@ window.loadJsonFile = function(e) {
       await refreshAssetStorageUsage({force:true, updateDom:true});
       renderRouter();
       renderDailySidebar();
-      alert("성공");
+      alert(unpacked.legacy ? '기존 형식 백업을 변환하여 불러왔습니다.' : 'StudyPlanner 백업을 불러왔습니다.');
     } catch (err) {
       alert(err.message);
     }
@@ -2945,7 +3631,8 @@ window.resetData = hardReset;
 
 function baseData(){
   return {
-    meta: { version: "2.6" },
+    schemaVersion: PLANNER_SCHEMA_VERSION,
+    meta: { version: "2.6", dataModel: "studyplanner" },
     home: {
       title: "2026 CPA 합격 플래너",
       subtitle: "과목별 진도와 시간을 체계적으로 관리하세요",
@@ -2960,7 +3647,10 @@ function baseData(){
 
 function normalizeData(){
   if(!isPlainRecord(DATA)) DATA = baseData();
-  if(!isPlainRecord(DATA.meta)) DATA.meta = {version:"2.6"};
+  else DATA = migratePlannerData(DATA);
+  DATA.schemaVersion = PLANNER_SCHEMA_VERSION;
+  if(!isPlainRecord(DATA.meta)) DATA.meta = {version:"2.6", dataModel:"studyplanner"};
+  DATA.meta.dataModel = 'studyplanner';
   if(!isPlainRecord(DATA.home)) DATA.home = baseData().home;
   if(!Array.isArray(DATA.home.subjects)) DATA.home.subjects = [];
   if(!Array.isArray(DATA.home.dDays)) DATA.home.dDays = [];
@@ -3379,10 +4069,11 @@ function renderHome() {
       </div>
 
       <h1 class="editable block" data-placeholder="" onclick="openEditModal('app_info','home')">${escapeHtml(DATA.home.title||'')}</h1>
-      <p class="editable block" data-placeholder="" onclick="openEditModal('app_info','home')" style="color:var(--text-sub)">${escapeHtml(DATA.home.subtitle||'')}</p>
+      <p class="editable block" data-placeholder="" onclick="openEditModal('app_info','home')" style="color:var(--text-sub)">${renderPlainTextWithBreaks(DATA.home.subtitle||'')}</p>
       <div style="margin-top:10px;">
         <button class="btn btn-outline" onclick="triggerImport()" title="JSON/PDF 가져오기">📂</button>
-        <button class="btn btn-outline" onclick="exportData()">💾</button>
+        <button class="btn btn-outline" onclick="exportData()" title="전체 공식 백업(JSON + 이미지)">💾</button>
+        <button class="btn btn-outline" onclick="exportObsidianVault()" title="Obsidian 보관함 ZIP 내보내기">🗂️</button>
         <button class="btn btn-outline" onclick="exportPagePdf('home','home')" title="현재 필터 기준 복원 가능 PDF">🖨️</button>
         <button class="btn btn-outline" onclick="resetAccumulatedTime('all')" title="누적 시간 전체 초기화">⏱</button>
         <button class="btn btn-outline" style="color:#ef4444;" onclick="hardReset()">🗑</button>
@@ -3514,7 +4205,7 @@ function renderDetail(sid) {
     <div style="margin-bottom:20px;"><button class="btn btn-outline" onclick="location.hash='#/'">← 홈</button></div>
     <div style="margin-bottom:20px;">
       <h1 class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${escapeHtml(detail.title||'(제목 없음)')}</h1>
-      <p class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${escapeHtml(detail.subtitle||'')}</p>
+      <p class="editable block" onclick="openEditModal('page_info','${sid}',undefined,undefined,'${sid}')">${renderPlainTextWithBreaks(detail.subtitle||'')}</p>
       <button class="btn btn-outline" style="margin-top:10px;" onclick="exportPagePdf('detail','${sid}')" title="복원 가능 페이지 PDF">🖨️ 페이지 PDF</button>
     </div>
     ${renderStickyHeader('진행률', stats.pct, stats.timeStr)}
@@ -3564,7 +4255,7 @@ function renderModule(mid) {
     </div>
 
     <h1 class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${escapeHtml(mod.title||'(모듈)')}</h1>
-    <p class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${escapeHtml(mod.subtitle||'')}</p>
+    <p class="editable block" onclick="openEditModal('page_info','${mid}',undefined,undefined,'${mid}')">${renderPlainTextWithBreaks(mod.subtitle||'')}</p>
     <button class="btn btn-outline" style="margin-bottom:12px;" onclick="exportPagePdf('module','${mid}')" title="복원 가능 페이지 PDF">🖨️ 페이지 PDF</button>
 
     ${renderStickyHeader('모듈 진행률', stats.pct, stats.timeStr)}
@@ -3596,7 +4287,7 @@ function renderModule(mid) {
         </div>
       </div>
 
-      <div id="view-theory-${tid}" class="note-view md-content" data-empty="${!tab.theoryNote}" onclick="toggleNoteView('theory-${tid}')">${renderMarkdown(tab.theoryNote||"")}</div>
+      <div id="view-theory-${tid}" class="note-view md-content" data-empty="${!tab.theoryNote}" onclick="toggleNoteViewFromEvent(event,'theory-${tid}')">${renderMarkdown(tab.theoryNote||"")}</div>
       <div id="edit-theory-${tid}" class="note-edit">
         <textarea id="ta-theory-${tid}" class="note-textarea md-editable" data-autosave="1" data-kind="theory" data-mid="${mid}" data-tid="${tid}">${escapeHtml(tab.theoryNote||'')}</textarea>
         <div style="text-align:right;margin-top:5px;">
@@ -3698,7 +4389,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
         </div>
       </div>
 
-      <div onclick="${level==='detail' ? `onDetailCardClick('${pid}',${idx})` : (!isMod&&item.module?`location.hash='#/module/${item.module}'`:'')}">
+      <div onclick="${level==='detail' ? `onDetailCardClick(event,'${pid}',${idx})` : (!isMod&&item.module?`openModuleFromCardBody(event,'${item.module}')`:'')}">
         ${isMod
           ? `<div class="md-content" style="font-weight:600;font-size:1.05rem;">${renderMarkdown(item.text||'')}</div>`
           : `<h3>${escapeHtml(item.title||'(무제)')}</h3><div class="md-content">${renderMarkdown(item.scope||'')}</div>`
@@ -3711,7 +4402,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
       ${isMod?`
         <div class="note-area-wrap">
           <span class="note-label-small">📝 오답 노트</span>
-          <div id="view-${sid}" class="note-view md-content" data-empty="${!item.userNote}" onclick="toggleNoteView('${sid}')">${renderMarkdown(item.userNote||"")}</div>
+          <div id="view-${sid}" class="note-view md-content" data-empty="${!item.userNote}" onclick="toggleNoteViewFromEvent(event,'${sid}')">${renderMarkdown(item.userNote||"")}</div>
           <div id="edit-${sid}" class="note-edit">
             <textarea id="ta-${sid}" class="note-textarea md-editable" data-autosave="1" data-kind="card" data-mid="${pid}" data-tabid="${tabSafe}" data-idx="${idx}">${escapeHtml(item.userNote||'')}</textarea>
             <div style="text-align:right;margin-top:5px;">
@@ -3740,7 +4431,13 @@ function renderCardItem(item, level, pid, idx, tabId) {
 
 
 
-function onDetailCardClick(sid, idx){
+function openModuleFromCardBody(ev, mid){
+  if(__shouldIgnoreContainerActivation(ev)) return;
+  location.hash = `#/module/${mid}`;
+}
+
+function onDetailCardClick(ev, sid, idx){
+  if(__shouldIgnoreContainerActivation(ev)) return;
   try{
     const d = DATA.details?.[sid];
     if(!d || !Array.isArray(d.cards)) return;
@@ -5342,6 +6039,11 @@ function toggleNoteView(id){
   view.style.display = isEditing ? 'block' : 'none';
 }
 
+function toggleNoteViewFromEvent(ev, id){
+  if(__shouldIgnoreContainerActivation(ev)) return;
+  toggleNoteView(id);
+}
+
 const noteAutosaveTimers = new WeakMap();
 
 function persistNoteDraftFromTextarea(ta){
@@ -6453,8 +7155,13 @@ async function init(){
 
   const raw = localStorage.getItem(STORAGE_KEY);
   if(raw){
-    try{ DATA = JSON.parse(raw); }
-    catch(e){ DATA = baseData(); }
+    try{
+      DATA = JSON.parse(raw);
+    }catch(e){
+      console.error('Stored planner JSON could not be parsed:', e);
+      showErrorScreen('브라우저에 저장된 플래너 JSON을 해석하지 못했습니다.\n\n저장된 원본은 변경하지 않았습니다. 초기화하기 전에 원본 JSON을 내려받아 보관해 주세요.');
+      return;
+    }
   } else {
     DATA = baseData();
     try{
@@ -6466,7 +7173,13 @@ async function init(){
     }catch(e){}
   }
 
-  normalizeData();
+  try{
+    normalizeData();
+  }catch(e){
+    console.error('Planner initialization failed:', e);
+    showErrorScreen(`${e.message}\n\n저장된 원본은 변경하지 않았습니다. 초기화하기 전에 원본 JSON을 내려받거나 더 최신 앱에서 다시 열어 주세요.`);
+    return;
+  }
 
   updateDDayPanel();
 
