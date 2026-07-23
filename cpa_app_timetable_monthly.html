@@ -126,9 +126,18 @@
     }
     .card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
     .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; min-height: 32px; }
+    .card-top-stacked { flex-direction: column; align-items: stretch; gap: 8px; }
+    .card-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+    .card-toolbar-start { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .card-top-stacked .card-actions { flex-shrink: 0; margin-left: auto; }
     .card-actions { display: flex; gap: 2px; opacity: 0; transition: opacity 0.2s; }
     .card:hover .card-actions { opacity: 1; }
     .badge { background: rgba(37, 99, 235, 0.1); color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; }
+    .card-badge {
+      display: inline-block; align-self: flex-start; width: fit-content; max-width: 100%;
+      line-height: 1.4; white-space: normal; overflow-wrap: anywhere;
+    }
+    .card-badge:empty { display: none; }
     h3 { margin: 0 0 5px 0; font-size: 1.25rem; color: var(--text); display:flex; align-items:center; gap:8px; }
 
     .editable{display:inline-block; min-height:1.2em; padding:2px 6px; border-radius:8px; white-space: pre-wrap; }
@@ -4103,21 +4112,22 @@ function renderHome() {
         const selected = isCardSelected('home', 'home', realIdx, null);
         return `
         <div class="card ${selected?'card-selected':''}" id="card-${sub.id}" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'home',null,${realIdx})" data-index="${realIdx}">
-          <div class="card-top">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <input type="checkbox" ${selected?'checked':''} onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" onchange="toggleCardSelection('home','home',${realIdx},null,this.checked); renderRouter(true)">
-              <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" title="드래그하여 시간표로">⋮⋮</span>
-              <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsAttr(sub.name||'(제목 없음)')}', '#/?focus=${escapeHtml(sub.id)}');">📋</button>
-              <span class="badge">${escapeHtml(sub.badge||'')}</span>
+          <div class="card-top card-top-stacked">
+            <div class="card-toolbar">
+              <div class="card-toolbar-start">
+                <input type="checkbox" ${selected?'checked':''} onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" onchange="toggleCardSelection('home','home',${realIdx},null,this.checked); renderRouter(true)">
+                <span class="drag-handle" draggable="true" ondragstart="handleDragStart(event, 'subject', '${sub.id}', null)" title="드래그하여 시간표로">⋮⋮</span>
+                <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsAttr(sub.name||'(제목 없음)')}', '#/?focus=${escapeHtml(sub.id)}');">📋</button>
+              </div>
+              <div class="card-actions">
+                <button class="btn btn-icon" onclick="duplicateSubject(${realIdx});event.stopPropagation()">📑</button>
+                <button class="btn btn-icon" title="복원 가능 카드 PDF" onclick="exportCardPdf('home','home',${realIdx},'');event.stopPropagation()">🖨️</button>
+                <button class="btn btn-icon" title="하위 페이지 포함 복원 가능 PDF" onclick="exportCardPdf('home','home',${realIdx},'',true);event.stopPropagation()">🔗</button>
+                <button class="btn btn-icon" onclick="openEditModal('subject','home',${realIdx});event.stopPropagation()">✏️</button>
+                <button class="btn btn-icon btn-danger" onclick="deleteCard('subject','home',${realIdx});event.stopPropagation()">🗑</button>
+              </div>
             </div>
-            <div class="card-actions">
-
-              <button class="btn btn-icon" onclick="duplicateSubject(${realIdx});event.stopPropagation()">📑</button>
-              <button class="btn btn-icon" title="복원 가능 카드 PDF" onclick="exportCardPdf('home','home',${realIdx},'');event.stopPropagation()">🖨️</button>
-              <button class="btn btn-icon" title="하위 페이지 포함 복원 가능 PDF" onclick="exportCardPdf('home','home',${realIdx},'',true);event.stopPropagation()">🔗</button>
-              <button class="btn btn-icon" onclick="openEditModal('subject','home',${realIdx});event.stopPropagation()">✏️</button>
-              <button class="btn btn-icon btn-danger" onclick="deleteCard('subject','home',${realIdx});event.stopPropagation()">🗑</button>
-            </div>
+            <span class="badge card-badge">${escapeHtml(sub.badge||'')}</span>
           </div>
           <h3 style="cursor:pointer;" onclick="location.hash='#/detail/${escapeHtml(sub.id)}'">${escapeHtml(sub.name||'(제목 없음)')}</h3>
           <div class="md-content" style="color:var(--text-sub); font-size:0.9rem;">${renderMarkdown(sub.examInfo||'')}</div>
@@ -4370,23 +4380,25 @@ function renderCardItem(item, level, pid, idx, tabId) {
 
   return `
     <div class="card ${!isMod&&item.module?'clickable':''} ${selected?'card-selected':''}" data-index="${idx}" id="card-${sid}" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'${level}','${pid}',${idx},'${tabSafe}')">
-      <div class="card-top">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" ${selected?'checked':''} onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" onchange="toggleCardSelection('${level}','${pid}',${idx},'${tabSafe}',this.checked); renderRouter(true)">
-          <span class="drag-handle" draggable="true" ondragstart="${dragStartCode}" title="드래그하여 시간표로">⋮⋮</span>
-          <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsAttr(copyTitle)}', '${jsAttr(copyHash)}');">📋</button>
-          <span class="badge">${escapeHtml(isMod?(item.src||'문항'):(item.badge||'Topic'))}</span>
-        </div>
-        <div class="card-actions">
-          ${level==='detail' ? `<button class="btn btn-icon" title="다른 과목으로 이동" onclick="openMoveDetailCard('${pid}',${idx});event.stopPropagation()">↪</button>` : ''}
-          ${isMod ? `<button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveQuestion('${pid}','${tabSafe}',${idx});event.stopPropagation()">↪</button>` : ''}
+      <div class="card-top card-top-stacked">
+        <div class="card-toolbar">
+          <div class="card-toolbar-start">
+            <input type="checkbox" ${selected?'checked':''} onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" onchange="toggleCardSelection('${level}','${pid}',${idx},'${tabSafe}',this.checked); renderRouter(true)">
+            <span class="drag-handle" draggable="true" ondragstart="${dragStartCode}" title="드래그하여 시간표로">⋮⋮</span>
+            <button class="clip-btn" title="[카드 제목](링크) 복사" onclick="event.stopPropagation(); copyCardMdLink('${jsAttr(copyTitle)}', '${jsAttr(copyHash)}');">📋</button>
+          </div>
+          <div class="card-actions">
+            ${level==='detail' ? `<button class="btn btn-icon" title="다른 과목으로 이동" onclick="openMoveDetailCard('${pid}',${idx});event.stopPropagation()">↪</button>` : ''}
+            ${isMod ? `<button class="btn btn-icon" title="다른 모듈로 이동" onclick="openMoveQuestion('${pid}','${tabSafe}',${idx});event.stopPropagation()">↪</button>` : ''}
 
-          <button class="btn btn-icon" title="복원 가능 카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">🖨️</button>
-          ${level==='detail' && item.module && DATA.modules?.[item.module] ? `<button class="btn btn-icon" title="하위 페이지 포함 복원 가능 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}',true);event.stopPropagation()">🔗</button>` : ''}
-          <button class="btn btn-icon" onclick="duplicateCard('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">📑</button>
-          <button class="btn btn-icon" onclick="(('${level}'==='detail')?openEditModal('detail','${pid}',${idx}):openEditModal('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">✏️</button>
-          <button class="btn btn-icon btn-danger" onclick="(('${level}'==='detail')?deleteCard('detail','${pid}',${idx}):deleteCard('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">🗑</button>
+            <button class="btn btn-icon" title="복원 가능 카드 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">🖨️</button>
+            ${level==='detail' && item.module && DATA.modules?.[item.module] ? `<button class="btn btn-icon" title="하위 페이지 포함 복원 가능 PDF" onclick="exportCardPdf('${level}','${pid}',${idx},'${tabSafe}',true);event.stopPropagation()">🔗</button>` : ''}
+            <button class="btn btn-icon" onclick="duplicateCard('${level}','${pid}',${idx},'${tabSafe}');event.stopPropagation()">📑</button>
+            <button class="btn btn-icon" onclick="(('${level}'==='detail')?openEditModal('detail','${pid}',${idx}):openEditModal('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">✏️</button>
+            <button class="btn btn-icon btn-danger" onclick="(('${level}'==='detail')?deleteCard('detail','${pid}',${idx}):deleteCard('module','${pid}',${idx},'${tabSafe}'));event.stopPropagation()">🗑</button>
+          </div>
         </div>
+        <span class="badge card-badge">${escapeHtml(isMod?(item.src||'문항'):(item.badge||'Topic'))}</span>
       </div>
 
       <div onclick="${level==='detail' ? `onDetailCardClick(event,'${pid}',${idx})` : (!isMod&&item.module?`openModuleFromCardBody(event,'${item.module}')`:'')}">
