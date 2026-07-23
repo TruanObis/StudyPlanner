@@ -41,6 +41,9 @@ Older files may remain in the repository for backup, archive, or comparison, but
 * PDF export for pages and cards, including child pages, internal links, and PDF bookmarks
 * Dark mode support
 
+The staging v2 build additionally includes versioned backup migrations, protected
+startup recovery for unsupported or malformed local data, and Obsidian ZIP export.
+
 ## Data Storage
 
 The app stores planner data in the browser.
@@ -65,13 +68,23 @@ Use the import button to restore a previously exported JSON backup.
 
 Backups may include attached image data, so backup files can become large when many images are attached.
 
-## Experimental V2 PDF Restore
+## Experimental V2 Data Portability
 
 `cpa_app_timetable_monthly_v2.html` includes an experimental restorable PDF workflow.
 
 PDFs exported from the v2 app can include StudyPlanner restore data, so the same import button can read either JSON backups or compatible StudyPlanner PDFs.
 
 This is currently a staging feature. If a PDF is edited, compressed, merged, OCR-processed, or saved again in another PDF app, the restore data may be removed even though the PDF still opens visually.
+
+The v2 build also separates the lossless official JSON backup from an Obsidian ZIP
+export. The Obsidian package contains linked Markdown notes, YAML metadata, attachments,
+a manifest, and a copy of the structured planner data. It is currently export-only.
+
+See:
+
+* [`docs/DATA_FORMAT.md`](docs/DATA_FORMAT.md)
+* [`docs/REGISTRATION_READINESS.md`](docs/REGISTRATION_READINESS.md)
+* [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
 
 ## If the App Shows a Blank Screen
 
