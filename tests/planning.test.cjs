@@ -196,9 +196,9 @@ test('daily details expose assigned subgoals and completion changes the original
   assert.equal(a.run('typeof renderPlanningPage'),'function');
   a.run(`const goal=planningCreateGoal({...config,endDate:VIEW_DATE}); planningApplyAllocation(planningBuildAllocation(goal.id));
     location.hash='#/plans/day'; renderPlanningPage('day'); const plan=planningPlans(VIEW_DATE)[0].ref;`);
-  assert.match(a.run('APP.innerHTML'),/핵심이론/);
-  assert.match(a.run('APP.innerHTML'),/기출1/);
-  assert.match(a.run('APP.innerHTML'),/시간 미지정/);
+  assert.match(a.nodes.get('planningContent').innerHTML,/핵심이론/);
+  assert.match(a.nodes.get('planningContent').innerHTML,/기출1/);
+  assert.match(a.nodes.get('planningContent').innerHTML,/시간 미지정/);
   a.run(`planningToggleDone(plan.planId,planningKey({type:'question',id:'q1',pid:'m'}),true);`);
   assert.equal(a.run('DATA.modules.m.tabs[0].questions[0].done'),true);
   assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:5,done:1,pct:20});
@@ -211,9 +211,9 @@ test('both period tabs display the same new-card actions and correctly bound the
   a.run(`planningCreateGoal(config); DATA.modules.m.tabs[1].questions.push({id:'new-q',src:'새 기출문제'});`);
   for(const view of ['week','month']){
     a.run(`location.hash='#/plans/${view}'; renderPlanningPage('${view}');`);
-    assert.match(a.run('APP.innerHTML'),/새 기출문제/);
-    assert.match(a.run('APP.innerHTML'),/선택 카드 배분/);
-    assert.match(a.run('APP.innerHTML'),/이번 목표에서 제외/);
+    assert.match(a.nodes.get('planningContent').innerHTML,/새 기출문제/);
+    assert.match(a.nodes.get('planningContent').innerHTML,/선택 카드 배분/);
+    assert.match(a.nodes.get('planningContent').innerHTML,/이번 목표에서 제외/);
   }
 });
 
@@ -300,4 +300,90 @@ test('moving a goal root follows its new scope and preserves allocated targets, 
   assert.equal(a.run('selectedTimelineSubgoals(plan).length'),4);
   assert.equal(a.run("selectedTimelineSubgoals(planningPlans('2026-10-18')[0].ref).length"),4);
   assert.doesNotThrow(()=>a.run('validateImportedPlannerData(unpackPlannerBackup(buildPlannerBackupEnvelope(DATA)).data)'));
+});
+
+test('planning opens alongside the current card page and stays open through source navigation',()=>{
+  const a=app();
+  a.run(`location.hash='#/module/m'; APP.innerHTML='source-card-page'; openPlanningPage(); renderPlanningPage('week');`);
+  assert.equal(a.run('location.hash'),'#/module/m');
+  assert.equal(a.run('APP.innerHTML'),'source-card-page');
+  assert.match(a.nodes.get('planningContent').innerHTML,/주간/);
+  a.run(`location.hash='#/detail/a'; router(true);`);
+  assert.equal(a.run('planningView()'),'week');
+  a.run('closePlanningPage();');
+  assert.equal(a.run('location.hash'),'#/detail/a');
+  assert.equal(a.nodes.get('planningPanel').hidden,true);
+});
+
+test('legacy planning URLs replace their history entry so browser Back can leave the page',()=>{
+  const a=app();
+  a.run(`location.hash='#/plans/week'; const replaced=[];
+    window.history={replaceState(state,title,url){replaced.push(url);location.hash=url;}};
+    router(true);`);
+  assert.deepEqual(a.json('replaced'),['#/']);
+  assert.equal(a.run('location.hash'),'#/');
+  assert.equal(a.run('planningView()'),'week');
+});
+
+test('diary calendars render empty dates and neighboring month dates with drop targets before goals',()=>{
+  const a=app();
+  a.run("renderPlanningPage('month');");
+  const month=a.nodes.get('planningContent').innerHTML;
+  assert.equal((month.match(/data-plan-date=/g)||[]).length,35);
+  assert.match(month,/data-plan-date="2026-09-28"/);
+  assert.match(month,/data-plan-date="2026-11-01"/);
+  assert.ok(month.indexOf('planning-calendar')<month.indexOf('기간 목표'));
+  a.run("renderPlanningPage('week');");
+  assert.equal((a.nodes.get('planningContent').innerHTML.match(/data-plan-date=/g)||[]).length,7);
+});
+
+test('calendar source drops add unscheduled plans and date moves preserve sessions and plan identity',()=>{
+  const a=app();
+  a.run(`DATA.dailyHistory[VIEW_DATE]={slots:[],sessions:[{id:'run',ref:{type:'question',id:'q1',pid:'m'},startMs:now-60000,endMs:now}],totalSeconds:60};
+    const plan=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'question',id:'q1',pid:'m'});
+    plan.startMinute=600;plan.endMinute=630;plan.time=60;
+    planningPlaceOnDate('2026-10-18',{source:'planning',planId:plan.planId,date:VIEW_DATE});`);
+  assert.equal(a.run('planningPlans(VIEW_DATE).length'),0);
+  assert.equal(a.run("planningPlans('2026-10-18')[0].ref.planId"),a.run('plan.planId'));
+  assert.deepEqual(a.json('[plan.startMinute,plan.endMinute,plan.time]'),[600,630,0]);
+  assert.equal(a.run('DATA.dailyHistory[VIEW_DATE].sessions.length'),1);
+  a.run(`const fresh=planningPlaceOnDate('2026-10-18',{source:'main',type:'theory',id:'other',pid:'m'});`);
+  assert.deepEqual(a.json('[fresh.startMinute,fresh.endMinute,fresh.time]'),[null,null,0]);
+  assert.equal(a.run("planningPlaceOnDate('2026-10-19',{source:'main',type:'question',id:'missing',pid:'m'})"),null);
+});
+
+test('calendar plans can be dragged back onto the ten-minute timetable',()=>{
+  const a=app();
+  a.run(`const plan=planningPlaceOnDate('2026-10-18',{source:'main',type:'question',id:'q1',pid:'m'});
+    timelineMinuteAt=()=>620;
+    dropOnTimeline({preventDefault(){},stopPropagation(){},clientX:0,clientY:0,target:{closest:()=>null},dataTransfer:{getData:()=>JSON.stringify({source:'planning',planId:plan.planId,date:'2026-10-18'})}});`);
+  assert.equal(a.run('planningPlans(VIEW_DATE)[0].ref.planId'),a.run('plan.planId'));
+  assert.equal(a.run('plan.startMinute'),620);
+  assert.equal(a.run("planningPlans('2026-10-18').length"),0);
+});
+
+test('direct sidebar date entry validates real dates and preserves the learning page',()=>{
+  const a=app();
+  a.run("location.hash='#/module/m'; setSidebarDate('2026-11-04');");
+  assert.equal(a.run('VIEW_DATE'),'2026-11-04');
+  assert.equal(a.run('location.hash'),'#/module/m');
+  a.run("setSidebarDate('2026-02-30');");
+  assert.equal(a.run('VIEW_DATE'),'2026-11-04');
+});
+
+test('keyboard date drafts survive intermediate years and commit on blur while picker changes apply immediately',()=>{
+  const a=app();
+  a.run(`const input=document.getElementById('navDateDisplay');
+    planningDateKeydown({key:'2'},input);
+    for(const value of ['0002-10-17','0020-10-17','0202-10-17','2027-10-17']){
+      input.value=value; planningDateInput(input);
+    }`);
+  assert.equal(a.run('VIEW_DATE'),'2026-10-17');
+  assert.equal(a.run('input.value'),'2027-10-17');
+  a.run('planningDateInput(input,true);');
+  assert.equal(a.run('VIEW_DATE'),'2027-10-17');
+  a.run("input.value='2027-10-20'; planningDateInput(input);");
+  assert.equal(a.run('VIEW_DATE'),'2027-10-20');
+  a.run("input.value=''; planningDateInput(input,true);");
+  assert.equal(a.run('input.value'),'2027-10-20');
 });

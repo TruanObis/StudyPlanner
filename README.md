@@ -160,14 +160,26 @@ Release version checks use `app_version.json`'s `buildId` for main and
 ## V2 Experiment: Planning Details
 
 In `cpa_app_timetable_monthly_v2.html`, the arrow at the right of **일일 계획**
-opens **계획 상세**. The desktop timetable stays open alongside it; on mobile,
-**시간표로** returns to the timetable.
+opens **계획 상세** beside the current learning page. The timetable and expanded
+panel together occupy at most half the viewport, leaving source cards visible
+and usable for editing and dragging. On narrow screens, the left half switches
+between details and the timetable via **시간표**. Opening a source card keeps the
+planning panel open. The daily sidebar date accepts direct numeric entry or the
+browser's date picker, without an extra dialog or tooltip. Numeric edits commit
+on Enter or when leaving the field; picker selections apply immediately.
 
 * **일간** lists every plan for the selected date, including unscheduled plans.
   Assigned subgoals are expanded by default. Check completion, edit subgoals,
   move a plan to another date, set its time in 10-minute steps, start/stop its
   timer, or open its source card. Completion uses the source card's current
   state, including when viewing past dates.
+* **주간 / 월간** start with a diary calendar: seven dated sections for the week,
+  or a Monday-first month grid including adjacent dates. Drag a learning card
+  onto a date to add an unscheduled plan. Drag a planned card to another date
+  to move it, keeping its duration and subgoals; actual study records remain on
+  their recorded dates. Click a plan to edit it, or a date to see its daily
+  list. Month cells show two compact cards and **+N** for the remaining plans.
+  Calendar plans can also be dragged onto the timetable to set their time.
 * **주간 / 월간 → + 목표** creates a period goal for a subject or topic, with
   dates, study weekdays, and selected learning cards. **배분** previews an even,
   ordered distribution over the remaining eligible dates. Confirming creates

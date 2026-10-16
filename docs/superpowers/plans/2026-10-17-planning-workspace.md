@@ -61,6 +61,19 @@
 
 ## Execution record
 
+### Follow-up: half-width workspace and diary calendars
+
+User requested keeping the learning page usable beside the expanded panel, calendar-first week/month views with drag-and-drop, and a direct daily date input. These instructions supersede the original full-page/mobile layout.
+
+- [x] Separate planning content from the learning-page router; cap the combined planning area at half the viewport.
+- [x] Add week/month calendars and card-to-date, date-to-date, and calendar-to-timetable dragging.
+- [x] Replace the daily date label's tooltip/modal with a native date input.
+- [x] Add regression coverage for source-page preservation, calendar ranges, drag identity/history, and date selection.
+- [x] Update README, design, and V2 build metadata without promoting main.
+- [x] Finish browser verification, whole-change review, and final regression checks.
+
+Follow-up verification: V2 85/85 tests and main 59/59 tests passed. Native browser checks covered source-card body drops onto calendar dates, date-to-date dragging, source navigation with the panel open, month overflow counts, and 1280/667/390px layouts. At 390px the document fits its viewport and the planning panel remains under half its width. Numeric year entry, Enter/blur commit, native date-picker selection, and one-click tab switching after date entry were verified. Review found and resolved the partial-year reset and legacy-URL Back loop; navigation controls now retain their DOM identity during date commits.
+
 - Baseline: V2 59/59 timeline tests pass on 02fa3f8.
 - Ruling: Continue in existing feature checkout so the user's 8767 preview follows changes; no additional worktree or repeated approval is needed for the requested V2 implementation.
 - Ruling: The user has explicitly approved the design and requested V2 implementation. Plan creation is an implementation detail; continue directly rather than introducing another approval gate.
