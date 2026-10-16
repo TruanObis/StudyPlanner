@@ -80,7 +80,7 @@ test('startup migrates its own existing planner to the timeline without adopting
   a.storage.set(PEER_STORAGE_KEY,peer);
   await a.run('init()');
   const saved = JSON.parse(a.storage.get(STORAGE_KEY));
-  assert.equal(saved.schemaVersion,5);
+  assert.equal(saved.schemaVersion,a.run('PLANNER_SCHEMA_VERSION'));
   assert.equal(saved.home.title,'Working planner');
   assert.equal(saved.home.subjects[0].time,123);
   assert.equal(saved.details.a.cards[0].userNote,'Keep this note');
@@ -685,9 +685,12 @@ test('schema four plans migrate without adding subgoals or changing stored study
   const a = subgoalApp();
   const before = a.json('DATA.dailyHistory');
   const migrated = a.json('migratePlannerData({...DATA,schemaVersion:4})');
-  assert.equal(migrated.schemaVersion,5);
+  assert.equal(migrated.schemaVersion,a.run('PLANNER_SCHEMA_VERSION'));
+  if(IS_V2) Object.values(migrated.dailyHistory).forEach(day=>day.slots.forEach(slot=>slot.cardIds.forEach(ref=>{
+    assert.ok(ref.planId); delete ref.planId;
+  })));
   assert.deepEqual(migrated.dailyHistory,before);
-  assert.throws(()=>a.run('migratePlannerData({...DATA,schemaVersion:6})'),/최신/);
+  assert.throws(()=>a.run('migratePlannerData({...DATA,schemaVersion:PLANNER_SCHEMA_VERSION+1})'),/최신/);
 });
 
 function modulePlanApp() {

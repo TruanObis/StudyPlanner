@@ -1,0 +1,191 @@
+const {test} = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const path = require('node:path');
+
+function app(){
+  const html=fs.readFileSync(path.join(__dirname,'../cpa_app_timetable_monthly_v2.html'),'utf8');
+  const script=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join('\n').replace(/\ninit\(\);\s*$/,'');
+  const storage=new Map(), nodes=new Map();
+  const node=id=>{
+    if(!nodes.has(id)) nodes.set(id,{id,style:{},dataset:{},value:'',innerHTML:'',hidden:false,
+      classList:{contains:()=>false,add(){},remove(){},toggle(){}},addEventListener(){},setAttribute(){},focus(){},
+      querySelectorAll:()=>[],querySelector:()=>null});
+    return nodes.get(id);
+  };
+  const location={hash:'#/',protocol:'file:',href:'file:///planner.html'};
+  const context=vm.createContext({console,URL,URLSearchParams,Blob,Date,Map,Set,
+    window:{location,addEventListener(){},innerWidth:1280,scrollY:0,scrollTo(){}},location,
+    document:{getElementById:node,querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){},documentElement:node('html'),body:node('body')},
+    localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
+    navigator:{},setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,clearInterval(){},confirm:()=>true,alert(){}});
+  vm.runInContext(script,context);
+  const run=code=>vm.runInContext(code,context);
+  run(`DATA=baseData(); VIEW_DATE='2026-10-17';
+    const RealDate=Date; let now=RealDate.parse('2026-10-17T09:00:00+09:00');
+    Date=class extends RealDate{constructor(...args){super(...(args.length?args:[now]))} static now(){return now}};
+    __lastTimerTickAt=now; __timerCarryMs=0; __timerDate=VIEW_DATE;
+    DATA.home.subjects=[{id:'a',name:'경영학',time:60}];
+    DATA.details={a:{id:'a',title:'경영학',cards:[{id:'topic',title:'동기부여',module:'m'},{id:'loose',title:'요약'}]}};
+    DATA.modules={m:{id:'m',title:'동기부여',tabs:[
+      {id:'core',label:'핵심이론',done:false,questions:[{id:'q1',src:'기출1',done:false}]},
+      {id:'other',label:'기타이론',done:false,questions:[{id:'q2',src:'기출2',done:false}]}]}};
+    DATA.dailyHistory={};
+    const root={type:'subject',id:'a'};
+    const config={kind:'month',root,startDate:'2026-10-17',endDate:'2026-10-18',weekdays:[0,1,2,3,4,5,6]};
+    renderWithScrollPreserved=()=>{}; renderDailySidebar=()=>{}; renderRouter=()=>{};`);
+  return {run,storage,nodes,json:code=>JSON.parse(JSON.stringify(run(code)))};
+}
+
+test('schema five migrates stable plan identities without altering plans or execution',()=>{
+  const a=app();
+  a.run(`DATA.schemaVersion=5; DATA.dailyHistory[VIEW_DATE]={totalSeconds:60,goalStr:'02:00:00',slots:[
+    {id:'s',label:'오전',startMinute:300,endMinute:360,cardIds:[{type:'subject',id:'a',startMinute:310,endMinute:330,time:60,progressTargets:[{type:'theory',id:'core',pid:'m'}]}]}],
+    sessions:[{id:'run',ref:{type:'subject',id:'a'},startMs:now-60000,endMs:now}]};
+    const original=clonePlain(DATA); const migrated=migratePlannerData(DATA);`);
+  assert.equal(a.run('migrated.schemaVersion'),6);
+  assert.deepEqual(a.json('migrated.periodGoals'),[]);
+  assert.ok(a.run('migrated.dailyHistory[VIEW_DATE].slots[0].cardIds[0].planId'));
+  assert.deepEqual(a.json('migrated.dailyHistory[VIEW_DATE].sessions'),a.json('original.dailyHistory[VIEW_DATE].sessions'));
+  a.run('delete migrated.dailyHistory[VIEW_DATE].slots[0].cardIds[0].planId');
+  assert.deepEqual(a.json('migrated.dailyHistory'),a.json('original.dailyHistory'));
+});
+
+test('period goals retain only unique learning units and survive official backup',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningCreateGoal'),'function');
+  a.run('const goal=planningCreateGoal(config);');
+  assert.deepEqual(a.json('goal.targets.map(r=>r.id)'),['core','q1','other','q2','loose']);
+  assert.ok(a.run("goal.knownRefs.some(r=>r.id==='topic')"));
+  a.run('const restored=unpackPlannerBackup(buildPlannerBackupEnvelope(DATA)).data; validateImportedPlannerData(restored);');
+  assert.deepEqual(a.json('restored.periodGoals'),a.json('DATA.periodGoals'));
+  assert.throws(()=>a.run(`validateImportedPlannerData({...DATA,periodGoals:[{...goal,endDate:'2026-10-01'}]})`),/기간|목표/);
+  assert.throws(()=>a.run(`validateImportedPlannerData({...DATA,periodGoals:[{...goal,weekdays:[8]}]})`),/요일|목표/);
+});
+
+test('new cards appear once in both week and month ranges, while renames and known cards do not',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningNewCards'),'function');
+  a.run(`const g1=planningCreateGoal(config),g2=planningCreateGoal({...config,kind:'week'});
+    DATA.modules.m.tabs[0].label='이름 변경';
+    DATA.modules.m.tabs[1].questions.push({id:'new-q',src:'추가 기출'});`);
+  for(const range of [['2026-10-12','2026-10-18'],['2026-10-01','2026-10-31']]){
+    assert.deepEqual(a.json(`planningNewCards('${range[0]}','${range[1]}').map(r=>r.ref.id)`),['new-q']);
+    assert.equal(a.run(`planningNewCards('${range[0]}','${range[1]}')[0].goalIds.length`),2);
+  }
+  a.run(`planningDismissNewCards([g1.id,g2.id],[{type:'question',id:'new-q',pid:'m'}]);`);
+  assert.deepEqual(a.json("planningNewCards('2026-10-01','2026-10-31')"),[]);
+  assert.equal(a.run('g1.targets.length'),5);
+});
+
+test('allocation divides ordered units evenly, creates unscheduled plans and skips existing assignments',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningBuildAllocation'),'function');
+  a.run(`const goal=planningCreateGoal(config); const preview=planningBuildAllocation(goal.id);
+    const applied=planningApplyAllocation(preview);`);
+  assert.equal(a.run('applied.applied'),5);
+  assert.deepEqual(a.json('preview.entries.map(e=>[e.date,e.refs.map(r=>r.id)])'),[
+    ['2026-10-17',['core','q1','other']],['2026-10-18',['q2','loose']]
+  ]);
+  assert.equal(a.run('planningPlans(VIEW_DATE)[0].ref.startMinute'),null);
+  const before=a.json('DATA.dailyHistory');
+  a.run('planningApplyAllocation(preview);');
+  assert.deepEqual(a.json('DATA.dailyHistory'),before);
+  a.run('const overlapping=planningCreateGoal(config); const p2=planningBuildAllocation(overlapping.id);');
+  assert.equal(a.run('p2.entries.length'),0);
+  assert.equal(a.run('p2.skipped.length'),5);
+});
+
+test('allocation respects remaining weekdays and refuses stale plans without moving existing work',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningApplyAllocation'),'function');
+  a.run(`const goal=planningCreateGoal({...config,startDate:'2026-10-01',endDate:'2026-10-20',weekdays:[1]});
+    const preview=planningBuildAllocation(goal.id);
+    DATA.modules.m.tabs[0].questions[0].done=true;
+    const result=planningApplyAllocation(preview);`);
+  assert.deepEqual(a.json('preview.entries.map(e=>e.date)'),['2026-10-19']);
+  assert.equal(a.run('result.stale'),true);
+  assert.deepEqual(a.json('DATA.dailyHistory'),{});
+  a.run('const applied=planningApplyAllocation(result.preview);');
+  assert.equal(a.run('applied.applied'),4);
+  assert.throws(()=>a.run(`planningBuildAllocation(goal.id,undefined,'2026-10-01','2026-10-02')`),/날짜/);
+});
+
+test('new-card allocation appends to a scheduled plan without moving its time or changing existing targets',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningCreateGoal'),'function');
+  a.run(`const goal=planningCreateGoal({...config,endDate:VIEW_DATE});
+    planningApplyAllocation(planningBuildAllocation(goal.id));
+    const scheduled=planningPlans(VIEW_DATE)[0].ref;
+    scheduled.startMinute=540; scheduled.endMinute=600;
+    DATA.modules.m.tabs[1].questions.push({id:'new-q',src:'새 문제'});
+    const added=planningNewCards(VIEW_DATE,VIEW_DATE)[0].ref;
+    planningApplyAllocation(planningBuildAllocation(goal.id,[added]));`);
+  assert.deepEqual(a.json('[scheduled.startMinute,scheduled.endMinute]'),[540,600]);
+  assert.equal(a.run('scheduled.progressTargets.length'),6);
+  assert.deepEqual(a.json('planningNewCards(VIEW_DATE,VIEW_DATE)'),[]);
+});
+
+test('moving a plan retains its identity and execution history and validates ten-minute bounds',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningMovePlan'),'function');
+  a.run(`DATA.dailyHistory[VIEW_DATE]={totalSeconds:60,slots:[{id:'s',cardIds:[{type:'subject',id:'a',time:60,startMinute:300,endMinute:330}]}],
+    sessions:[{id:'run',ref:{type:'subject',id:'a'},startMs:now-60000,endMs:now}]};
+    planningEnsureData(DATA); const planId=planningPlans(VIEW_DATE)[0].ref.planId;
+    const records=clonePlain(DATA.dailyHistory[VIEW_DATE].sessions);`);
+  assert.throws(()=>a.run(`planningMovePlan(planId,'2026-10-18',541,600)`),/10분/);
+  a.run(`planningMovePlan(planId,'2026-10-18',1440,1560);`);
+  assert.equal(a.run('planningFindPlan(planId).date'),'2026-10-18');
+  assert.equal(a.run('planningFindPlan(planId).ref.time'),0);
+  assert.deepEqual(a.json('DATA.dailyHistory[VIEW_DATE].sessions'),a.json('records'));
+  assert.equal(a.run('DATA.dailyHistory[VIEW_DATE].totalSeconds'),60);
+});
+
+test('copy preserves destination data, skips repeated copies and never copies execution or active flags',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningCopyPreview'),'function');
+  a.run(`DATA.dailyHistory[VIEW_DATE]={totalSeconds:60,slots:[{id:'s',label:'집중',colorHue:150,startMinute:540,endMinute:660,cardIds:[
+    {type:'subject',id:'a',startMinute:550,endMinute:600,time:60,isRunning:true,goalId:'old',progressTargets:[{type:'theory',id:'core',pid:'m'}]},
+    {type:'adhoc',id:'read',title:'읽기',startMinute:600,endMinute:630,time:30,isRunning:true,done:true}]}],
+    sessions:[{id:'run',ref:{type:'subject',id:'a'},startMs:now-60000,endMs:now}]};
+    DATA.dailyHistory['2026-10-18']={totalSeconds:10,slots:[{id:'keep',label:'유지',startMinute:300,endMinute:360,cardIds:[]}],sessions:[]};
+    planningEnsureData(DATA); const source=clonePlain(DATA.dailyHistory[VIEW_DATE]);
+    const preview=planningCopyPreview(VIEW_DATE,['2026-10-18'],true); planningApplyCopy(preview);`);
+  assert.deepEqual(a.json('DATA.dailyHistory[VIEW_DATE]'),a.json('source'));
+  assert.equal(a.run("DATA.dailyHistory['2026-10-18'].totalSeconds"),10);
+  assert.deepEqual(a.json("DATA.dailyHistory['2026-10-18'].sessions"),[]);
+  assert.deepEqual(a.json("planningPlans('2026-10-18').map(p=>[p.ref.time,p.ref.isRunning,p.ref.goalId||null])"),[[0,false,null],[0,false,null]]);
+  assert.equal(a.run("planningPlans('2026-10-18')[1].ref.done"),false);
+  assert.notEqual(a.run("planningPlans('2026-10-18')[1].ref.id"),'read');
+  const copied=a.json("DATA.dailyHistory['2026-10-18']");
+  a.run('planningApplyCopy(planningCopyPreview(VIEW_DATE,["2026-10-18"],true));');
+  assert.deepEqual(a.json("DATA.dailyHistory['2026-10-18']"),copied);
+});
+
+test('block-only copying leaves plans out and stale copy previews do not overwrite edits',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningApplyCopy'),'function');
+  a.run(`DATA.dailyHistory[VIEW_DATE]={slots:[{id:'s',label:'공부',startMinute:540,endMinute:600,cardIds:[{type:'subject',id:'a',startMinute:540,endMinute:570}]}],sessions:[]};
+    planningEnsureData(DATA); const preview=planningCopyPreview(VIEW_DATE,['2026-10-18'],false);
+    DATA.dailyHistory[VIEW_DATE].slots[0].endMinute=660;
+    const result=planningApplyCopy(preview);`);
+  assert.equal(a.run('result.stale'),true);
+  assert.equal(a.run("DATA.dailyHistory['2026-10-18']"),undefined);
+  a.run('planningApplyCopy(result.preview);');
+  assert.equal(a.run("planningPlans('2026-10-18').length"),0);
+  assert.equal(a.run("DATA.dailyHistory['2026-10-18'].slots[0].endMinute"),660);
+});
+
+test('source identity updates follow period goals and removing goals preserves allocated plans',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningDeleteGoal'),'function');
+  a.run(`const goal=planningCreateGoal(config); planningApplyAllocation(planningBuildAllocation(goal.id));
+    __updateDailyRefs(r=>r.type==='question'&&r.id==='q1',r=>{r.id='q1-new'});`);
+  assert.ok(a.run("goal.targets.some(r=>r.id==='q1-new') && goal.knownRefs.some(r=>r.id==='q1-new')"));
+  const count=a.run('Object.values(DATA.dailyHistory).flatMap(d=>d.slots.flatMap(s=>s.cardIds)).length');
+  a.run('planningDeleteGoal(goal.id);');
+  assert.equal(a.run('DATA.periodGoals.length'),0);
+  assert.equal(a.run('Object.values(DATA.dailyHistory).flatMap(d=>d.slots.flatMap(s=>s.cardIds)).length'),count);
+  assert.equal(a.run('Object.values(DATA.dailyHistory).flatMap(d=>d.slots.flatMap(s=>s.cardIds)).some(r=>r.goalId)'),false);
+});

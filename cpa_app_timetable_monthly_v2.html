@@ -771,7 +771,7 @@ const THEME_KEY = 'universal_planner_theme';
 const APP_BUILD_ID = '2026-10-17-timeline-26h-2';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
-const PLANNER_SCHEMA_VERSION = 5;
+const PLANNER_SCHEMA_VERSION = 6;
 const PLANNER_BACKUP_FORMAT = 'inmonite-studyplanner-backup';
 const PLANNER_BACKUP_FORMAT_VERSION = 1;
 const OBSIDIAN_EXPORT_FORMAT = 'inmonite-studyplanner-obsidian';
@@ -2480,6 +2480,12 @@ function migratePlannerSchema4To5(data){
   return data;
 }
 
+function migratePlannerSchema5To6(data){
+  planningEnsureData(data);
+  data.schemaVersion = 6;
+  return data;
+}
+
 function migratePlannerData(value){
   if(!isPlainRecord(value)) throw new Error('플래너 데이터 구조가 올바르지 않습니다.');
   let data = clonePlain(value);
@@ -2489,6 +2495,7 @@ function migratePlannerData(value){
     else if(version === 2) data = migratePlannerSchema2To3(data);
     else if(version === 3) data = migratePlannerSchema3To4(data);
     else if(version === 4) data = migratePlannerSchema4To5(data);
+    else if(version === 5) data = migratePlannerSchema5To6(data);
     else throw new Error(`지원하지 않는 플래너 스키마 버전입니다: v${version}`);
     version = readPlannerSchemaVersion(data);
   }
@@ -2670,6 +2677,7 @@ function validateImportedPlannerData(value){
   }
 
   if(value.timelineColors !== undefined && (!isPlainRecord(value.timelineColors) || Object.values(value.timelineColors).some(hue=>!isTimelineHue(hue)))) throw new Error('시간표 색상 설정이 올바르지 않습니다.');
+  validatePlanningData(value,checkId,checkUnique);
   for(const [date, daily] of Object.entries(value.dailyHistory || {})){
     if(!parseYMD(date) || !isPlainRecord(daily) || !Array.isArray(daily.slots || [])) throw new Error(`일일 계획 ${date} 구조가 올바르지 않습니다.`);
     const checkRange = item => {
@@ -2685,6 +2693,8 @@ function validateImportedPlannerData(value){
         if(!isPlainRecord(ref) || !['subject','detail','theory','question','adhoc'].includes(ref.type)) throw new Error(`일일 계획 ${date} 카드 형식이 올바르지 않습니다.`);
         checkId(ref.id, `일일 계획 ${date} 카드`);
         checkId(ref.pid, `일일 계획 ${date} 상위 카드`, true);
+        checkId(ref.planId, '일간 계획', true);
+        checkId(ref.goalId, '기간 목표 연결', true);
         checkRange(ref);
         if(ref.progressTargets !== undefined){
           if(!Array.isArray(ref.progressTargets)) throw new Error('세부목표 목록이 올바르지 않습니다.');
@@ -3971,6 +3981,7 @@ function normalizeData(){
       if(date !== today) slot.cardIds.forEach(ref => { if(ref.type !== 'adhoc') ref.isRunning = false; });
     });
   });
+  planningEnsureData(DATA);
   validateImportedPlannerData(DATA);
   rebuildIndex();
 }
@@ -4803,6 +4814,251 @@ function filterCards(tag, btn, sid){
    DAILY SIDEBAR: getCardInfo / render
 ========================= */
 function timelineSubgoalKey(ref){ return `${ref.type}|${ref.pid || ''}|${ref.id}`; }
+
+/* Planning model: shared by the detail page, weekly/monthly goals and copying. */
+function planningRef(ref){
+  const out={type:ref.type,id:ref.id};
+  if(ref.type !== 'subject' && ref.pid != null) out.pid=ref.pid;
+  return out;
+}
+function planningKey(ref){ return timelineSubgoalKey(planningRef(ref)); }
+function planningUnique(refs){
+  return [...new Map((refs || []).map(ref=>[planningKey(ref),planningRef(ref)])).values()];
+}
+function planningEnsureData(data){
+  if(data.periodGoals === undefined) data.periodGoals=[];
+  const used=new Set();
+  Object.values(data.dailyHistory || {}).forEach(day=>(day?.slots || []).forEach(slot=>(slot?.cardIds || []).forEach(ref=>{
+    if(!isPlainRecord(ref)) return;
+    if(!ref.planId || used.has(ref.planId)) ref.planId=uid('plan');
+    used.add(ref.planId);
+  })));
+  return data;
+}
+function validatePlanningData(data,checkId,checkUnique){
+  if(data.periodGoals !== undefined && !Array.isArray(data.periodGoals)) throw new Error('기간 목표 목록이 올바르지 않습니다.');
+  const checkRef=ref=>{
+    if(!isPlainRecord(ref) || !['subject','detail','theory','question'].includes(ref.type)) throw new Error('기간 목표 카드가 올바르지 않습니다.');
+    checkId(ref.id,'기간 목표 카드'); checkId(ref.pid,'기간 목표 상위 카드',ref.type==='subject');
+  };
+  (data.periodGoals || []).forEach(goal=>{
+    if(!isPlainRecord(goal) || !['week','month'].includes(goal.kind)) throw new Error('기간 목표 종류가 올바르지 않습니다.');
+    checkId(goal.id,'기간 목표'); checkRef(goal.root); checkRef(goal.scope);
+    if(!parseYMD(goal.startDate) || !parseYMD(goal.endDate) || goal.startDate>goal.endDate) throw new Error('기간 목표 날짜가 올바르지 않습니다.');
+    if(!Array.isArray(goal.weekdays) || !goal.weekdays.length || goal.weekdays.some(d=>!Number.isInteger(d)||d<0||d>6)) throw new Error('기간 목표 요일이 올바르지 않습니다.');
+    for(const field of ['targets','knownRefs']){
+      if(!Array.isArray(goal[field])) throw new Error('기간 목표 카드 목록이 올바르지 않습니다.');
+      goal[field].forEach(checkRef);
+    }
+  });
+  checkUnique((data.periodGoals || []).map(g=>g.id),'기간 목표');
+  const ids=Object.values(data.dailyHistory || {}).flatMap(d=>(d?.slots || []).flatMap(s=>(s?.cardIds || []).map(r=>r?.planId).filter(Boolean)));
+  checkUnique(ids,'일간 계획');
+}
+function planningCatalog(){
+  const entries=[],seen=new Set();
+  const add=(ref,label,path,unit,scope)=>{
+    if(seen.has(planningKey(ref))) return;
+    seen.add(planningKey(ref)); entries.push({ref:planningRef(ref),label,path,unit,scope:planningRef(scope || ref)});
+  };
+  (DATA.home.subjects || []).forEach(subject=>{
+    const root={type:'subject',id:subject.id},subjectName=subject.name || subject.title || '(과목)';
+    add(root,subjectName,'',false,root);
+    (DATA.details?.[subject.id]?.cards || []).forEach(card=>{
+      const ref={type:'detail',id:card.id,pid:subject.id},mid=card.module || card.moduleId;
+      const tabs=DATA.modules?.[mid]?.tabs || [],title=card.title || '(단원)';
+      add(ref,title,subjectName,!tabs.length,ref);
+      tabs.forEach(tab=>{
+        const path=`${subjectName} / ${title}`;
+        add({type:'theory',id:tab.id,pid:mid},tab.label || '(이론)',path,true,ref);
+        (tab.questions || []).forEach(q=>add({type:'question',id:q.id,pid:mid},String(q.src || q.text || '(문제)').replace(/\n/g,' ').slice(0,100),`${path} / ${tab.label || '이론'}`,true,ref));
+      });
+    });
+  });
+  return entries;
+}
+function planningWithin(root){
+  const keys=new Set([planningKey(root),...timelineSubgoalOptions(root).map(planningKey)]);
+  return planningCatalog().filter(item=>keys.has(planningKey(item.ref)));
+}
+function planningUnits(root){ return planningWithin(root).filter(item=>item.unit).map(item=>item.ref); }
+function planningGoal(id){ return (DATA.periodGoals || []).find(g=>g.id===id); }
+function planningCreateGoal(config){
+  planningEnsureData(DATA);
+  const entry=planningCatalog().find(item=>planningKey(item.ref)===planningKey(config.root));
+  if(!entry) throw new Error('목표의 원본 카드를 찾을 수 없습니다.');
+  const allowed=new Set(planningUnits(config.root).map(planningKey));
+  const goal={id:uid('goal'),kind:config.kind,root:planningRef(config.root),scope:planningRef(entry.scope),
+    startDate:config.startDate,endDate:config.endDate,weekdays:[...new Set(config.weekdays || [])],
+    targets:planningUnique(config.targets ?? planningUnits(config.root).filter(r=>!getCardInfo(r).done)).filter(r=>allowed.has(planningKey(r))),
+    knownRefs:planningWithin(entry.scope).map(item=>item.ref)};
+  // Use the same validation as official backup import, before touching saved state.
+  validateImportedPlannerData({...DATA,periodGoals:[...DATA.periodGoals,goal]});
+  DATA.periodGoals.push(goal); saveData(); return goal;
+}
+function planningPlans(date){
+  planningEnsureData(DATA);
+  return (DATA.dailyHistory?.[date]?.slots || []).flatMap((slot,sIdx)=>(slot.cardIds || []).map((ref,cIdx)=>({date,slot,sIdx,cIdx,ref})))
+    .sort((a,b)=>(a.ref.startMinute ?? Infinity)-(b.ref.startMinute ?? Infinity));
+}
+function planningFindPlan(id){
+  for(const date of Object.keys(DATA.dailyHistory || {})){
+    const found=planningPlans(date).find(item=>item.ref.planId===id); if(found) return found;
+  }
+  return null;
+}
+function planningAssignments(){
+  const assigned=new Map();
+  Object.keys(DATA.dailyHistory || {}).sort().forEach(date=>planningPlans(date).forEach(({ref})=>{
+    const selected=selectedTimelineSubgoals(ref),targets=selected.length ? selected : [ref];
+    targets.filter(r=>r.type!=='adhoc').forEach(r=>{
+      const key=planningKey(r); if(!assigned.has(key)) assigned.set(key,[]);
+      assigned.get(key).push({date,planId:ref.planId,goalId:ref.goalId});
+    });
+  }));
+  return assigned;
+}
+function planningVisibleGoals(start,end){ return (DATA.periodGoals || []).filter(g=>g.startDate<=end && g.endDate>=start); }
+function planningNewCards(start,end){
+  const found=new Map(),assigned=planningAssignments();
+  planningVisibleGoals(start,end).forEach(goal=>{
+    const known=new Set(goal.knownRefs.map(planningKey));
+    planningWithin(goal.scope).filter(item=>item.unit && !known.has(planningKey(item.ref))).forEach(item=>{
+      const key=planningKey(item.ref);
+      if(!found.has(key)) found.set(key,{...item,goalIds:[],assignedDates:[...new Set((assigned.get(key)||[]).map(a=>a.date))]});
+      found.get(key).goalIds.push(goal.id);
+    });
+  });
+  return [...found.values()];
+}
+function planningDismissNewCards(goalIds,refs){
+  goalIds.forEach(id=>{
+    const goal=planningGoal(id); if(!goal) return;
+    const valid=new Set(planningWithin(goal.scope).map(item=>planningKey(item.ref)));
+    goal.knownRefs=planningUnique([...goal.knownRefs,...refs.filter(r=>valid.has(planningKey(r)))]);
+  });
+  saveData();
+}
+function planningDates(start,end,weekdays=[0,1,2,3,4,5,6]){
+  if(!parseYMD(start)||!parseYMD(end)||start>end) throw new Error('시작·종료 날짜를 확인해 주세요.');
+  const count=Math.round((ymdToUtcDayMs(end)-ymdToUtcDayMs(start))/DAY_MS)+1;
+  if(count>366) throw new Error('한 번에 선택할 수 있는 날짜 범위는 최대 366일입니다.');
+  return Array.from({length:count},(_,i)=>addDaysYMD(start,i)).filter(date=>weekdays.includes(new Date(ymdToUtcDayMs(date)).getUTCDay()));
+}
+function planningAllocationStamp(goal){
+  const units=planningWithin(goal.scope).map(item=>[planningKey(item.ref),item.unit,getCardInfo(item.ref).done]);
+  const plans=Object.keys(DATA.dailyHistory || {}).sort().flatMap(date=>planningPlans(date).map(({ref})=>[date,ref.planId,ref.goalId,ref.startMinute,ref.endMinute,planningKey(ref),(ref.progressTargets || []).map(planningKey)]));
+  return JSON.stringify([goal,units,plans]);
+}
+function planningBuildAllocation(goalId,refs,from,to){
+  const goal=planningGoal(goalId); if(!goal) throw new Error('기간 목표를 찾을 수 없습니다.');
+  const valid=new Set(planningUnits(goal.scope).map(planningKey));
+  const requested=planningUnique(refs ?? goal.targets).filter(r=>valid.has(planningKey(r)));
+  const start=[goal.startDate,getLogicalDate(),from || goal.startDate].sort().at(-1);
+  const end=[goal.endDate,to || goal.endDate].sort()[0];
+  if(start>end) throw new Error('배분할 남은 날짜가 없습니다. 목표 기간을 수정해 주세요.');
+  const dates=planningDates(start,end,goal.weekdays);
+  if(!dates.length) throw new Error('선택한 요일에 배분할 날짜가 없습니다.');
+  const assigned=planningAssignments(),skipped=[],available=[];
+  requested.forEach(ref=>{
+    const existing=assigned.get(planningKey(ref));
+    if(getCardInfo(ref).done || existing?.length) skipped.push({ref,reason:getCardInfo(ref).done?'완료':'이미 배정',dates:[...new Set((existing || []).map(a=>a.date))]});
+    else available.push(ref);
+  });
+  const loads=dates.map(date=>planningPlans(date).filter(p=>p.ref.goalId===goal.id).reduce((sum,p)=>sum+timelinePlanProgress(p.ref).total,0));
+  const quota=dates.map(()=>0);
+  available.forEach(()=>{ const i=loads.indexOf(Math.min(...loads)); loads[i]++; quota[i]++; });
+  let offset=0;
+  const entries=dates.map((date,i)=>{const row={date,refs:available.slice(offset,offset+quota[i])};offset+=quota[i];return row;}).filter(e=>e.refs.length);
+  return {goalId,refs:requested,from:start,to:end,entries,skipped,stamp:planningAllocationStamp(goal)};
+}
+function planningApplyAllocation(preview){
+  const current=planningBuildAllocation(preview.goalId,preview.refs,preview.from,preview.to);
+  if(current.stamp!==preview.stamp) return {stale:true,preview:current,applied:0};
+  const goal=planningGoal(preview.goalId);
+  goal.targets=planningUnique([...goal.targets,...current.refs]);
+  goal.knownRefs=planningUnique([...goal.knownRefs,...current.refs]);
+  let applied=0;
+  current.entries.forEach(({date,refs})=>{
+    const daily=ensureDailyData(date);
+    let ref=planningPlans(date).find(p=>p.ref.goalId===goal.id && planningKey(p.ref)===planningKey(goal.scope))?.ref;
+    if(!ref){
+      ref={...planningRef(goal.scope),planId:uid('plan'),goalId:goal.id,startMinute:null,endMinute:null,time:0,isRunning:false};
+      ungroupedTimelineCards(daily).cardIds.push(ref);
+    }
+    const targets=planningUnique([...(ref.progressTargets || []),...refs]).filter(r=>planningKey(r)!==planningKey(ref));
+    if(targets.length) ref.progressTargets=targets;
+    applied+=refs.length;
+  });
+  saveData(); return {applied,stale:false};
+}
+function planningMovePlan(id,date,start,end){
+  const item=planningFindPlan(id); if(!item) throw new Error('계획을 찾을 수 없습니다.');
+  if(!parseYMD(date)) throw new Error('날짜를 확인해 주세요.');
+  if(start != null || end != null){
+    if(!hasTimelineRange({startMinute:start,endMinute:end}) || start%10 || end%10) throw new Error('시간은 00:00–다음 날 02:00 안에서 10분 단위로 설정해 주세요.');
+  }
+  tickOneSecond();
+  if(date!==item.date){
+    item.slot.cardIds.splice(item.cIdx,1);
+    ungroupedTimelineCards(ensureDailyData(date)).cardIds.push(item.ref); item.ref.time=0;
+  }
+  item.ref.startMinute=start ?? null; item.ref.endMinute=end ?? null;
+  const goal=planningGoal(item.ref.goalId);
+  if(goal && (date<goal.startDate || date>goal.endDate)) delete item.ref.goalId;
+  saveData(); return item.ref;
+}
+function planningDeleteGoal(id){
+  DATA.periodGoals=(DATA.periodGoals || []).filter(g=>g.id!==id);
+  Object.keys(DATA.dailyHistory || {}).forEach(date=>planningPlans(date).forEach(({ref})=>{if(ref.goalId===id) delete ref.goalId;}));
+  saveData();
+}
+function planningCopyContent(date){
+  const daily=DATA.dailyHistory?.[date];
+  return {
+    blocks:(daily?.slots || []).filter(s=>!s.cardOnly).map(s=>({id:s.id,label:s.label || '',startMinute:s.startMinute ?? null,endMinute:s.endMinute ?? null,...(s.colorHue!==undefined?{colorHue:s.colorHue}:{})})),
+    plans:planningPlans(date).map(({ref})=>{
+      const copy=clonePlain(ref); delete copy.time; delete copy.isRunning; delete copy.done; delete copy.goalId; delete copy.copiedFromPlan;
+      return copy;
+    })
+  };
+}
+function planningCopyPreview(sourceDate,dates,includePlans=false){
+  if(!parseYMD(sourceDate)) throw new Error('복사할 날짜를 확인해 주세요.');
+  const targets=[...new Set(dates)].sort();
+  if(!targets.length || targets.some(d=>!parseYMD(d)||d===sourceDate)) throw new Error('원본과 다른 대상 날짜를 선택해 주세요.');
+  const source=planningCopyContent(sourceDate);
+  const rows=targets.map(date=>{
+    const daily=DATA.dailyHistory?.[date],existing=daily?.slots || [];
+    const blocks=source.blocks.filter(s=>!existing.some(t=>t.copiedFromBlock===`${sourceDate}:${s.id}` || (!t.cardOnly && t.label===s.label && t.startMinute===s.startMinute && t.endMinute===s.endMinute && t.colorHue===s.colorHue)));
+    const plans=includePlans ? source.plans.filter(p=>!planningPlans(date).some(t=>t.ref.copiedFromPlan===`${sourceDate}:${p.planId}`)) : [];
+    const ranges=[...existing.filter(s=>!s.cardOnly),...planningPlans(date).map(p=>p.ref)].filter(hasTimelineRange);
+    const overlaps=[...blocks,...plans].filter(hasTimelineRange).filter(s=>ranges.some(t=>s.startMinute<t.endMinute && t.startMinute<s.endMinute)).length;
+    return {date,blocks,plans,overlaps};
+  });
+  const stamp=JSON.stringify([source,targets.map(date=>[date,planningCopyContent(date),(DATA.dailyHistory?.[date]?.slots || []).map(s=>s.copiedFromBlock),(planningPlans(date)).map(p=>p.ref.copiedFromPlan)])]);
+  return {sourceDate,dates:targets,includePlans,rows,stamp};
+}
+function planningApplyCopy(preview){
+  const current=planningCopyPreview(preview.sourceDate,preview.dates,preview.includePlans);
+  if(current.stamp!==preview.stamp) return {stale:true,preview:current};
+  current.rows.forEach(row=>{
+    if(!row.blocks.length && !row.plans.length) return;
+    DATA.dailyHistory[row.date] ||= {slots:[],sessions:[],goalStr:'00:00:00',totalSeconds:0};
+    const daily=DATA.dailyHistory[row.date];
+    row.blocks.forEach(block=>daily.slots.push({...block,id:uid('slot'),cardIds:[],copiedFromBlock:`${current.sourceDate}:${block.id}`}));
+    row.plans.forEach(source=>{
+      const ref={...clonePlain(source),planId:uid('plan'),time:0,isRunning:false,copiedFromPlan:`${current.sourceDate}:${source.planId}`};
+      if(ref.type==='adhoc'){
+        ref.id=uid('adhoc'); ref.done=false;
+        const hue=DATA.timelineColors?.[timelineColorKey(source)];
+        if(hue!==undefined){ DATA.timelineColors ||= {}; DATA.timelineColors[timelineColorKey(ref)]=hue; }
+      }
+      ungroupedTimelineCards(daily).cardIds.push(ref);
+    });
+  });
+  saveData(); return {stale:false};
+}
 
 function timelineSubgoalOptions(ref){
   const options = [], seen = new Set();
@@ -7161,6 +7417,12 @@ function autoGrowTextarea(el, minHeightPx){
 }
 
 function purgeDailyRefs(predicate){
+  const removedGoals=(DATA.periodGoals || []).filter(g=>predicate(g.root) || predicate(g.scope)).map(g=>g.id);
+  DATA.periodGoals=(DATA.periodGoals || []).filter(g=>!removedGoals.includes(g.id));
+  DATA.periodGoals.forEach(g=>{
+    g.targets=g.targets.filter(r=>!predicate(r));
+    g.knownRefs=g.knownRefs.filter(r=>!predicate(r));
+  });
   if(!DATA.dailyHistory) return;
   Object.keys(DATA.dailyHistory).forEach(date=>{
     const day = DATA.dailyHistory[date];
@@ -7168,6 +7430,7 @@ function purgeDailyRefs(predicate){
       if(!Array.isArray(slot.cardIds)) return;
       slot.cardIds = slot.cardIds.filter(ref=>!predicate(ref));
       slot.cardIds.forEach(ref=>{
+        if(removedGoals.includes(ref.goalId)) delete ref.goalId;
         if(!Array.isArray(ref.progressTargets)) return;
         ref.progressTargets = ref.progressTargets.filter(target=>!predicate(target));
         if(!ref.progressTargets.length) delete ref.progressTargets;
@@ -7791,6 +8054,9 @@ function selectorDrillDown(lvl, id, tit, extra) {
 
 
 function __updateDailyRefs(pred, mut){
+  (DATA.periodGoals || []).forEach(goal=>{
+    [goal.root,goal.scope,...goal.targets,...goal.knownRefs].forEach(ref=>{if(pred(ref)) mut(ref);});
+  });
   const dh = DATA.dailyHistory || {};
   for(const date of Object.keys(dh)){
     const daily = dh[date];
