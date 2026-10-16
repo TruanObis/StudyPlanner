@@ -98,6 +98,28 @@ test('allocation divides ordered units evenly, creates unscheduled plans and ski
   assert.equal(a.run('p2.skipped.length'),5);
 });
 
+test('parent plans without selected subgoals do not block allocating their children',()=>{
+  for(const ref of [{type:'subject',id:'a'},{type:'detail',id:'topic',pid:'a'}]){
+    const a=app();
+    a.run(`const existing=planningPlaceOnDate(VIEW_DATE,{source:'main',...${JSON.stringify(ref)}});
+      existing.startMinute=540;existing.endMinute=600;existing.time=60;
+      const before=clonePlain(existing);
+      const goal=planningCreateGoal(config),preview=planningBuildAllocation(goal.id);`);
+    assert.deepEqual(a.json('preview.entries.map(e=>[e.date,e.refs.map(r=>r.id)])'),[
+      ['2026-10-17',['core','q1','other']],['2026-10-18',['q2','loose']]
+    ]);
+    assert.deepEqual(a.json('preview.skipped'),[]);
+    a.run('planningApplyAllocation(preview);');
+    assert.deepEqual(a.json('existing'),a.json('before'));
+    assert.equal(a.run("planningPlans('2026-10-18').length"),1);
+    assert.match(a.run("planningDayHTML('2026-10-18')"),/기출2/);
+    assert.match(a.run("planningDayHTML('2026-10-18')"),/요약/);
+    a.run('const repeated=planningBuildAllocation(goal.id);');
+    assert.equal(a.run('repeated.entries.length'),0);
+    assert.equal(a.run('repeated.skipped.length'),5);
+  }
+});
+
 test('allocation respects remaining weekdays and refuses stale plans without moving existing work',()=>{
   const a=app();
   assert.equal(a.run('typeof planningApplyAllocation'),'function');

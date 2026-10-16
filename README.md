@@ -194,6 +194,9 @@ sidebar and details panel. Keyboard focus still allows direct numeric entry.
   ordered distribution over the remaining eligible dates. Confirming creates
   unscheduled daily parent plans with those cards as subgoals. Existing
   assignments and completed cards are skipped. No duration is guessed.
+  A parent plan without selected subgoals counts only as that parent; it does
+  not prevent its children from being allocated. Explicitly selected subgoals
+  still prevent duplicate assignments, including descendants of selected topics.
 * Both **주간** and **월간** show **새 카드** for goals overlapping the displayed
   period. Cards added or moved into the watched subject/topic after goal
   creation appear once, with their path, related goals, completion and assigned

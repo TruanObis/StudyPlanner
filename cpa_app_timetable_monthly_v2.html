@@ -908,7 +908,7 @@ const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
 const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
 const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-10-17-planning-workspace-4';
+const APP_BUILD_ID = '2026-10-17-planning-workspace-5';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
 const PLANNER_SCHEMA_VERSION = 6;
@@ -5067,7 +5067,8 @@ function planningAssignments(){
   const assigned=new Map(),catalog=new Map(planningCatalog().map(item=>[planningKey(item.ref),item]));
   Object.keys(DATA.dailyHistory || {}).sort().forEach(date=>planningPlans(date).forEach(({ref})=>{
     const selected=selectedTimelineSubgoals(ref),targets=selected.length ? selected : [ref];
-    const covered=targets.filter(r=>r.type!=='adhoc').flatMap(r=>catalog.get(planningKey(r))?.unit===false ? [r,...planningUnits(r)] : [r]);
+    // A parent plan without selected subgoals reserves only itself, not every descendant.
+    const covered=targets.filter(r=>r.type!=='adhoc').flatMap(r=>selected.length && catalog.get(planningKey(r))?.unit===false ? [r,...planningUnits(r)] : [r]);
     planningUnique(covered).forEach(r=>{
       const key=planningKey(r); if(!assigned.has(key)) assigned.set(key,[]);
       assigned.get(key).push({date,planId:ref.planId,goalId:ref.goalId});
