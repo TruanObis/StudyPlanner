@@ -20,8 +20,11 @@ The features below describe the current published main app. Older files in `arch
 ## Features
 
 * Subject / topic / module-based study card structure
-* Daily timetable sidebar with editable, reorderable time blocks
-* Add existing study cards by drag-and-drop or the card picker, or enter daily-only tasks directly
+* A 26-hour daily timetable with 10-minute planning, continuous time blocks, and independent card movement/resizing
+* Add study cards by dragging their bodies or handles, or use the empty-cell context menu for cards and daily-only tasks
+* Pale planned cards with actual execution overlaid at the real recording time
+* Per-plan subgoals for daily progress, with parent-card progress as the default
+* Context menus for names and colors, plus touch hold support on the timetable
 * D-Day panel and KST-based date handling
 * Study timers, accumulated time tracking, and editable daily time goals
 * Calendar modal with monthly study-time summary
@@ -46,11 +49,111 @@ Images attached in Markdown notes are saved separately in the IndexedDB database
 
 Data is local to the browser profile and site origin. There is no automatic account or device synchronization. Another browser or device will not automatically have the same planner, and clearing site storage can remove it.
 
-### Main and V2 Share Storage
+### Daily Timetable
 
-The current main and v2 files use the same planner storage key and image database name. When opened under the same origin, such as the published GitHub Pages site, in the same browser profile, they share planner data and images.
+The main app and V2 display a 26-hour timetable from midnight to the following day's 02:00.
+Each hourly row has six 10-minute cells. Use **시간 블록 편집** to enter time-block
+editing: draw, move, or resize blocks using their left/start and right/end edges.
+Press **시간 블록 편집 완료** to return to card editing. Drag study cards anywhere
+on the timetable, including empty areas outside time blocks. Cards move and resize
+independently of the blocks. Each card has left/start and right/end handles that
+appear on hover or keyboard focus, snapping to 10 minutes.
+Topic cards on detail pages and question cards on module pages can be dragged
+from their card bodies into the timetable, as well as from the drag handle.
+Buttons, checkboxes, links, and editable inputs retain their normal interactions.
+The timetable fits all 26 hours and its footer into the available screen height.
+The goal and actual study-time row sits below the timetable, above the footer.
+The 06:00, 12:00, 18:00, and following midnight grid lines are slightly stronger.
+Blocks spanning multiple hours have one continuous outline and one name; partial
+first/last hours form a polygon. Resizing the window preserves the 10-minute grid.
+Arrow keys move a focused item; its edge handles adjust that edge by 10 minutes.
+Time-block editing and card editing are mutually exclusive. The old card-list
+panel below the timetable has been removed.
+Click a planned card to start or stop its timer; moving or resizing it does not
+toggle recording. Enter or Space on a focused planned card does the same.
+Starting a linked card also opens its page while keeping the timetable sidebar
+open. Subject cards open their subject detail page; topic cards open their own
+module page, just like clicking the original card. Theory and question cards
+select their containing module tab, including when that module is already open.
+Question navigation also clears that tab's source filter so the question is visible.
+Stopping a timer stays on the current page; daily-only tasks have no linked page.
+For a daily-only task, use its context menu's **완료로 표시** / **미완료로 표시**
+to change completion and daily progress. Marking it complete also stops its timer
+after recording the elapsed time.
+Right-click a parent plan (or hold it on touch screens) and choose **세부목표 설정**
+to select descendant topic, theory, or question cards. Selections belong to that
+date's plan. Daily progress and remaining tasks count the selected cards using
+their existing completion states; an unconfigured plan counts its parent card
+once. Clearing all selections restores this fallback. Deleted or no-longer-child
+targets are excluded, with the same fallback when none remain. Repeated copies
+of a plan retain their own targets and count separately, as before. Text copy
+includes selected subgoals, and official backups retain the selections.
+Recording always uses the current timestamp and date, even when the selected
+plan is scheduled for later. Right-click a card to remove it, or an empty cell
+to add a card or daily-only task. In block editing mode, right-click a block to
+rename or delete it. Deleting a block preserves its planned cards.
+Block names are edited directly in the context menu. Hover tooltips show only
+the saved region name; unnamed blocks have no tooltip.
+On touch screens, tap a planned card to toggle its timer, hold for 500 ms to open
+its context menu, or drag to move it. A selected card shows its resize handles.
+Movement cancels the hold menu, and holding never starts a timer. Hold an empty
+cell to add a card; hold a block in block-edit mode to change its name or color.
+Text copy uses saved region names (or time ranges for unnamed blocks), grouping
+cards by their current time overlap instead of their original storage group.
+Cards crossing multiple regions appear once under the largest overlap; cards
+outside all regions appear under **영역 밖 계획**.
+These context menus also offer eight colors and a default-color reset. Card
+colors are shared by the same source card's plans and actual execution records;
+each time block keeps its own color. Colors are saved with the planner and backups.
+
+Plans use pale colors. Timer execution appears in a stronger color at its actual
+time, including cards that were never planned. New execution timestamps are saved;
+older cumulative totals cannot be reconstructed into historical time ranges.
+The next day's 00:00–02:00 execution is visible in both relevant timetables, while
+daily totals continue to use the KST calendar date without double counting.
+**Daily 초기화** clears only the selected KST date's execution sessions, daily
+elapsed total, and plan-card elapsed times. Plans, time blocks, names, colors,
+subgoal selections, completion states, and the time goal remain. Other dates and
+the source cards' cumulative study times remain; active timers keep recording
+from the reset moment. Next-day execution shown in the 26-hour view belongs to
+that next date and is reset from that date.
+
+Both apps use schema 5. The main app keeps the existing
+`universal_planner_v28_data` key and automatically migrates supported older data.
+V2 uses the separate `studyplanner_v2_timeline_data` key. On its first use in a
+browser profile, V2 copies and migrates the main record if present. Subsequent
+changes are independent. Updating the main app never replaces its planner with
+V2's experimental data. To transfer a V2 planner intentionally, export its
+official JSON backup and import that backup in the main app.
+Old time labels such as `오전 (09-12)` are placed on the grid; blocks without a
+recognizable range remain available under **시간 미지정 블록** for manual placement.
+Plans, notes, completion states, and accumulated times are retained. Older totals
+have no timestamp history, so the app does not invent execution blocks for them.
+Both current apps can import schema-5 official backups; older schema-3 builds cannot.
+
+Image blobs share the IndexedDB database. A full reset in either app preserves
+that image store. Unused-image cleanup checks both planners' references and
+stops if the other planner's stored JSON cannot be read.
 
 For experiments that should not affect the working planner, use a separate browser profile and import a copy of an official JSON backup there. Export a backup before testing changes against real study data.
+
+Run the main app's data, migration, timer, and interaction regression tests:
+
+```powershell
+node --test tests/timeline.test.cjs
+```
+
+Run the same suite against V2 in PowerShell:
+
+```powershell
+$env:PLANNER_APP_FILE = 'cpa_app_timetable_monthly_v2.html'
+node --test tests/timeline.test.cjs
+Remove-Item Env:PLANNER_APP_FILE
+```
+
+The main file sets `IS_EXPERIMENTAL_BUILD` to `false`; V2 sets it to `true`.
+Release version checks use `app_version.json`'s `buildId` for main and
+`v2BuildId` for V2. Keep the appropriate field aligned with each file's `APP_BUILD_ID`.
 
 ## Backup, Restore, and Export
 
@@ -92,7 +195,7 @@ The integration is currently export-only. Changes made in Obsidian cannot be imp
 1. If the app still opens, export an official JSON backup before troubleshooting.
 2. If the recovery screen appears, use **원본 JSON 저장** to preserve the stored planner record. This raw JSON download does not include the images held separately in IndexedDB.
 3. For an unsupported newer data format, open a compatible newer app. For other loading problems, inspect the browser console and check that required scripts can load before considering a reset.
-4. Only use the app's full reset after preserving recoverable data and deciding to discard the current planner. It removes the planner record and attempts to clear the image store before loading starter content.
+4. Only use the app's full reset after preserving recoverable data and deciding to discard the current planner. It resets that app's planner and loads starter content, while retaining the shared image store. **Daily 초기화** only clears the selected day's execution times and keeps the plan.
 
 Malformed stored JSON and unsupported newer schemas are left untouched by startup recovery. Avoid clearing all site storage as a first troubleshooting step.
 
@@ -108,12 +211,14 @@ The `v2` in this content filename does not make it exclusive to the experimental
 2. Create topic cards under subjects, then open a topic card to open or create its module page.
 3. Add theory notes, question cards, and image attachments.
 4. Open **≡ — 일일 계획** and select the date to plan.
-5. Add cards by dragging them into a time block or choosing **+ 카드 추가**. Use the picker's direct-entry field for a daily-only task.
-6. Edit or reorder time blocks and set a daily study-time goal as needed.
-7. Start a card timer and use completion checkboxes to track study progress.
+5. Drag a study card onto the timetable, or right-click/hold an empty cell to add a card or daily-only task. Drag either card edge to adjust its time in 10-minute steps.
+6. Use **시간 블록 편집** to draw or adjust time blocks, then finish editing to work with cards. Set the study-time goal beneath the timetable.
+7. Click a planned card to start/stop recording; starting also opens its page. Right-click/hold a parent plan and choose **세부목표 설정** to select the day's goals. Mark completion on the source cards.
 8. Use the calendar to browse dates and monthly study time, and export JSON backups regularly.
 
-For linked study cards, the daily sidebar's completion checkbox changes the source card's completion state; it is not a separate completion record for that day's study session. Directly entered daily-only tasks have their own completion state.
+Daily progress reads linked cards' existing completion states. Selected subgoals
+belong to a particular date's plan, while their completion states are shared with
+the source cards. Directly entered daily-only tasks have their own completion state.
 
 ## Further Documentation
 

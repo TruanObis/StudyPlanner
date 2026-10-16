@@ -194,13 +194,19 @@
     .tab-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
 
     /* --- SIDEBAR STYLES --- */
-    #daily-sidebar { position: fixed; top: 0; left: calc(var(--sidebar-width) * -1); width: var(--sidebar-width); height: 100vh; background: var(--card-bg); border-right: 1px solid var(--line); box-shadow: 4px 0 15px rgba(0,0,0,0.1); z-index: 500; transition: left 0.3s ease-in-out; display: flex; flex-direction: column; }
+    #daily-sidebar { position: fixed; top: 0; left: calc(var(--sidebar-width) * -1); width: min(var(--sidebar-width),100vw); height: 100vh; height:100dvh; background: var(--card-bg); border-right: 1px solid var(--line); box-shadow: 4px 0 15px rgba(0,0,0,0.1); z-index: 500; transition: left 0.3s ease-in-out; display: flex; flex-direction: column; }
     #daily-sidebar.open { left: 0; }
     body.sidebar-active { padding-left: var(--sidebar-width); }
 
-    .sidebar-header { padding: 20px; border-bottom: 1px solid var(--line); background: var(--card-bg); position: relative; }
-    .sidebar-content { flex: 1; overflow-y: scroll; padding: 15px; }
-    .sidebar-footer { padding: 15px; border-top: 1px solid var(--line); background: var(--card-bg); }
+    .sidebar-header { flex-shrink:0; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--card-bg); position: relative; }
+    .sidebar-content { flex: 1; min-height:0; overflow:hidden; }
+    .sidebar-footer { display:flex; align-items:center; gap:4px; flex-shrink:0; padding:8px 10px max(8px,env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--card-bg); }
+    .sidebar-remaining { display:flex; align-items:center; gap:4px; flex-shrink:0; font-size:clamp(9px,2.8vw,11px); font-weight:700; color:var(--text-sub); white-space:nowrap; }
+    .sidebar-summary { display:flex; flex-shrink:0; justify-content:space-between; align-items:center; gap:8px; margin:0 10px 8px; padding:8px 10px; background:var(--input-bg); border-radius:8px; border:1px solid var(--line); }
+    .sidebar-summary .goal-wrapper { margin:0; }
+    .sidebar-header .nav-row { margin:8px 0 5px; }
+    .sidebar-footer .btn { flex:1 1 auto; min-width:0; padding:6px 4px; font-size:clamp(9px,2.8vw,11px); white-space:nowrap; }
+    @media (max-width:600px) { body.sidebar-active { padding-left:0; overflow:hidden; } #daily-sidebar { z-index:980; } }
 
     .clock-display { position: absolute; top: 15px; right: 20px; text-align: right; line-height: 1.2; }
     .clock-time { font-size: 1.1rem; font-weight: 800; color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums;}
@@ -237,6 +243,84 @@
     .time-slot:hover { border-color: var(--primary); background: rgba(37, 99, 235, 0.02); }
     .time-slot.drag-over { border-color: var(--primary); background: rgba(37,99,235,0.05); transform: scale(1.02); }
     .time-slot.slot-dragging { opacity: 0.65; }
+
+    #dailySlots { display:flex; flex-direction:column; min-height:0; overflow:hidden; padding:0; }
+    .tl-scroll { display:flex; flex-direction:column; overflow:hidden; flex:1; min-height:0; }
+    .tl-canvas { position:relative; flex:1; min-height:0; margin:20px 12px 16px 54px; user-select:none; touch-action:none; -webkit-touch-callout:none; container-type:size; }
+    .tl-canvas.adding { cursor:crosshair; touch-action:none; }
+    .tl-canvas.adding .tl-plan { pointer-events:none; opacity:.55; }
+    .tl-canvas.adding .tl-plan .tl-resize { display:none; }
+    .tl-canvas:not(.adding) .tl-slot { cursor:pointer; }
+    .tl-canvas:not(.adding) .tl-slot .tl-resize { display:none; }
+    .tl-grid { position:absolute; inset:0; pointer-events:none; border-right:1px solid #e9edf2;
+      background-image:linear-gradient(to right,#e9edf2 1px,transparent 1px),linear-gradient(to bottom,#dbe2ea 1px,transparent 1px);
+      background-size:calc(100% / 6) 100%,100% calc(100% / 26); }
+    [data-theme="dark"] .tl-grid { border-color:#29354a; background-image:linear-gradient(to right,#29354a 1px,transparent 1px),linear-gradient(to bottom,#3b4960 1px,transparent 1px); }
+    .tl-minute { position:absolute; top:-20px; transform:translateX(-50%); font-size:10px; color:var(--text-sub); pointer-events:none; }
+    .tl-hour { position:absolute; left:0; right:0; border-top:1px solid var(--line); pointer-events:none; }
+    .tl-hour-major { border-top-color:#b8c4d2; }
+    [data-theme="dark"] .tl-hour-major { border-top-color:#53647b; }
+    .tl-hour span { position:absolute; right:calc(100% + 7px); top:0; font-size:clamp(7px,2.5cqh,10px); line-height:1; white-space:nowrap; color:var(--text-sub); }
+    .tl-next-day { position:absolute; left:0; right:0; background:rgba(99,102,241,.05); pointer-events:none; }
+    .tl-slot,.tl-plan { position:absolute; border-radius:6px; touch-action:none; cursor:grab; }
+    .tl-slot { border-radius:0; }
+    .tl-slot-shape { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+    .tl-slot-shape polygon { fill:hsl(var(--tl-color) / .05); stroke:hsl(var(--tl-color) / .7); stroke-width:1; stroke-dasharray:3 2; vector-effect:non-scaling-stroke; }
+    .tl-slot.selected .tl-slot-shape polygon { stroke-width:2; }
+    .tl-slot-edge { position:absolute; width:9px; }
+    .tl-slot-label { position:absolute; top:0; left:10px; right:10px; overflow:hidden; white-space:nowrap; font-size:clamp(7px,2cqh,9px); line-height:1; color:var(--text-sub); }
+    .tl-plan { display:flex; align-items:center; gap:3px; padding:0 10px; border:1px solid hsl(var(--tl-color) / .5); color:var(--text);
+      background:hsl(var(--tl-color) / .16); overflow:hidden; font-size:clamp(8px,2.4cqh,11px); line-height:1; }
+    .tl-plan strong,.tl-plan small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .tl-plan small { flex-shrink:0; font-size:9px; color:var(--text-sub); }
+    .tl-plan-group { display:contents; }
+    .tl-plan .tl-resize { opacity:0; pointer-events:none; }
+    @media (hover:hover) { .tl-plan-group:hover .tl-resize { opacity:1; pointer-events:auto; } }
+    .tl-plan-group:has(:focus-visible) .tl-resize,.tl-plan-group.touch-selected .tl-resize { opacity:1; pointer-events:auto; }
+    .tl-plan-group.touch-selected .tl-resize { width:12px; }
+    .tl-resize { position:absolute; top:0; bottom:0; width:9px; cursor:ew-resize; touch-action:none; border:0;
+      background:hsl(var(--tl-color,220 75% 55%) / .25); padding:0; }
+    .tl-resize.start { left:0; border-right:1px solid hsl(var(--tl-color,220 75% 55%) / .45); }
+    .tl-resize.end { right:0; border-left:1px solid hsl(var(--tl-color,220 75% 55%) / .45); }
+    .tl-resize::after { content:''; position:absolute; width:2px; height:60%; max-height:12px; background:currentColor; opacity:.6; left:3px; top:50%; transform:translateY(-50%); }
+    .tl-plan:focus-visible,.tl-slot:focus-visible,.tl-resize:focus-visible { outline:3px solid var(--accent); }
+    #timelineActual { position:absolute; inset:0; pointer-events:none; }
+    .tl-actual { position:absolute; border-radius:4px; background:hsl(var(--tl-color) / .9); color:white;
+      display:flex; align-items:center; padding:0 4px; overflow:hidden; font-size:clamp(7px,2cqh,10px); line-height:1; box-shadow:0 1px 2px #0002; }
+    .tl-actual span { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tl-now { position:absolute; width:2px; height:calc(100% / 26); background:var(--danger); pointer-events:none; z-index:6; }
+    #timelineGhost { position:absolute; inset:0; pointer-events:none; z-index:8; }
+    .tl-ghost { position:absolute; border:2px solid var(--primary); background:rgba(59,130,246,.22); pointer-events:none; font-size:10px; overflow:hidden; }
+    .tl-unscheduled { padding:6px 12px; font-size:12px; max-height:120px; overflow:auto; border-bottom:1px solid var(--line); }
+    .tl-menu { position:fixed; z-index:2000; min-width:140px; padding:5px; background:var(--card-bg); border:1px solid var(--line); border-radius:8px; box-shadow:0 4px 18px #0002; }
+    .tl-menu button { display:block; width:100%; padding:8px 12px; text-align:left; border:0; border-radius:4px; color:var(--text); background:transparent; cursor:pointer; }
+    .tl-menu button:hover,.tl-menu button:focus-visible { background:var(--bg); }
+    .tl-menu-colors { border-top:1px solid var(--line); margin-top:4px; padding-top:6px; }
+    .tl-menu-colors span { display:block; padding:0 12px 4px; font-size:11px; color:var(--text-sub); }
+    .tl-color-grid { display:grid; grid-template-columns:repeat(4,28px); gap:8px; padding:4px 12px; }
+    .tl-menu .tl-color-choice { width:28px; height:28px; padding:0; border-radius:50%; background:var(--swatch); border:3px solid var(--card-bg); outline:1px solid var(--line); }
+    .tl-menu .tl-color-choice:hover,.tl-menu .tl-color-choice:focus-visible,.tl-menu .tl-color-choice[aria-checked="true"] { background:var(--swatch); outline:2px solid var(--text); }
+    .tl-name-editor { padding:8px; width:min(210px,calc(100vw - 26px)); }
+    .tl-name-editor label { display:block; font-size:12px; }
+    .tl-name-editor input { width:100%; margin:8px 0; padding:7px; font-size:16px; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:4px; }
+    .tl-name-editor div { display:flex; }
+    .tl-name-editor button { text-align:center; }
+    .tl-goals-modal { width:540px; max-width:100%; max-height:calc(100dvh - 48px); padding:20px; overflow:hidden; }
+    .tl-goals-modal h2 { margin:0; font-size:1.2rem; }
+    .tl-goals-parent { margin:6px 0; font-weight:700; overflow-wrap:anywhere; }
+    .tl-goals-help { margin:0 0 12px; color:var(--text-sub); font-size:12px; }
+    .tl-goals-search { width:100%; padding:9px; font-size:16px; color:var(--text); background:var(--input-bg); border:1px solid var(--line); border-radius:8px; }
+    .tl-goals-count { display:flex; justify-content:space-between; align-items:center; margin:8px 0; gap:8px; font-size:12px; color:var(--text-sub); }
+    .tl-goals-list { min-height:0; overflow:auto; overscroll-behavior:contain; border:1px solid var(--line); border-radius:8px; }
+    .tl-goal-option { display:flex; align-items:flex-start; gap:9px; padding:10px 10px 10px calc(10px + var(--goal-depth)*14px); border-bottom:1px solid var(--line); cursor:pointer; }
+    .tl-goal-option:last-child { border-bottom:0; }
+    .tl-goal-option:has(input:checked) { background:var(--input-bg); }
+    .tl-goal-option input { flex:0 0 auto; margin:3px 0 0; width:17px; height:17px; accent-color:var(--primary); }
+    .tl-goal-option span { min-width:0; overflow-wrap:anywhere; }
+    .tl-goal-option small { display:block; margin-top:3px; color:var(--text-sub); font-size:11px; }
+    .tl-goals-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+    @container (max-height:650px) { .tl-plan small { display:none; } }
+    @media (max-height:550px) { .sidebar-header { padding:4px 10px; } .sidebar-summary { margin-top:2px; padding:4px 8px; } .sidebar-header .nav-row { margin:3px 0; } .sidebar-footer { padding:4px 10px; } }
 
     .slot-head { font-size:0.85rem; font-weight:700; color:var(--text-sub); margin-bottom:8px; }
     .slot-head-actions { display:flex; align-items:center; gap:2px; }
@@ -517,17 +601,6 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
       <div id="clockTime" class="clock-time">00:00:00</div>
       <div id="clockDate" class="clock-date">2026.01.01 (월)</div>
     </div>
-    <div style="margin-top:20px; padding:10px; background:var(--input-bg); border-radius:8px; border:1px solid var(--line); text-align:center;">
-      <div class="goal-wrapper" onclick="toggleGoalMode()">
-        <span>목표:</span><div id="goalDisplay" class="goal-display-text">00:00:00</div>
-        <div id="goalInputWrap" style="display:none; align-items:center; gap:4px;">
-          <input type="text" id="dailyGoal" class="goal-input" placeholder="00:00:00">
-          <button class="btn btn-primary" style="padding:2px 6px; font-size:0.7rem;" onclick="saveDailyGoal(event)">저장</button>
-        </div>
-      </div>
-      <div id="todayTotal" style="font-size:1.6rem; font-weight:800; color:var(--primary); font-family:inherit; font-variant-numeric: tabular-nums; line-height:1;">00:00:00</div>
-    </div>
-
     <div class="nav-row">
       <button class="nav-btn" onclick="changeSidebarDate(-1)">❮</button>
 
@@ -547,16 +620,36 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
     <div style="height:6px; background:var(--line); border-radius:3px; overflow:hidden; margin-top:5px;"><div id="dailyProg" style="width:0%; height:100%; background:var(--accent); transition:0.3s;"></div></div>
   </div>
   <div id="dailySlots" class="sidebar-content"></div>
+  <div class="sidebar-summary">
+    <div class="goal-wrapper" onclick="toggleGoalMode()">
+      <span>목표:</span><div id="goalDisplay" class="goal-display-text">00:00:00</div>
+      <div id="goalInputWrap" style="display:none; align-items:center; gap:4px;">
+        <input type="text" id="dailyGoal" class="goal-input" placeholder="00:00:00">
+        <button class="btn btn-primary" style="padding:2px 6px; font-size:0.7rem;" onclick="saveDailyGoal(event)">저장</button>
+      </div>
+    </div>
+    <div id="todayTotal" style="font-size:1.6rem; font-weight:800; color:var(--primary); font-family:inherit; font-variant-numeric: tabular-nums; line-height:1;">00:00:00</div>
+  </div>
   <div class="sidebar-footer">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:0.9rem; font-weight:700; color:var(--text-sub);">
+    <div class="sidebar-remaining">
       <span>남은 할 일</span><span id="remainCount" style="color:var(--danger);">0</span>
     </div>
-    <div style="display:flex; gap:5px; margin-bottom:5px;">
-      <button class="btn btn-outline" style="flex:1" onclick="addDailySlot()">+ 시간 블록</button>
-      <button class="btn btn-outline" style="flex:1" onclick="copyDailyPlan()" title="복사">텍스트 복사</button>
-    </div>
-    <button class="btn btn-icon" style="margin-top:5px; width:100%;" onclick="resetDailyToday()" title="Daily 초기화">🧽 Daily 초기화</button>
+    <button id="addTimelineSlot" class="btn btn-outline" onclick="addDailySlot()">시간 블록 편집</button>
+    <button class="btn btn-outline" onclick="copyDailyPlan()" title="복사">텍스트 복사</button>
+    <button class="btn btn-icon" onclick="resetDailyToday()" title="실행시간 기록만 초기화">Daily 초기화</button>
   </div>
+</div>
+
+<div id="timelineSubgoalModal" class="modal-overlay" onclick="if(event.target===this) closeTimelineSubgoals()" onkeydown="timelineSubgoalKeydown(event)">
+  <form class="modal tl-goals-modal" role="dialog" aria-modal="true" aria-labelledby="timelineSubgoalTitle" onsubmit="event.preventDefault(); saveTimelineSubgoals()">
+    <div class="flex-between"><h2 id="timelineSubgoalTitle">세부목표 설정</h2><button type="button" class="btn btn-icon" aria-label="세부목표 설정 닫기" onclick="closeTimelineSubgoals()">✕</button></div>
+    <p id="timelineSubgoalParent" class="tl-goals-parent"></p>
+    <p class="tl-goals-help">선택한 카드마다 당일 진행률을 계산합니다. 선택하지 않으면 상위 카드를 기준으로 계산합니다.</p>
+    <input id="timelineSubgoalSearch" class="tl-goals-search" type="search" placeholder="카드 검색" aria-label="세부목표 카드 검색" oninput="renderTimelineSubgoals()">
+    <div class="tl-goals-count"><span id="timelineSubgoalCount" role="status"></span><button type="button" class="btn btn-outline" onclick="clearTimelineSubgoals()">선택 해제</button></div>
+    <div id="timelineSubgoalList" class="tl-goals-list"></div>
+    <div class="tl-goals-actions"><button type="button" class="btn btn-outline" onclick="closeTimelineSubgoals()">취소</button><button type="submit" class="btn btn-primary">저장</button></div>
+  </form>
 </div>
 
 <div id="editModal" class="modal-overlay">
@@ -669,12 +762,16 @@ function renderMarkdown(text){
    DATA / STATE
 ========================= */
 let DATA = null;
-const STORAGE_KEY = 'universal_planner_v28_data';
+const IS_EXPERIMENTAL_BUILD = true;
+const MAIN_STORAGE_KEY = 'universal_planner_v28_data';
+const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
+const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
+const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-07-14-data-timer-pdf-hardening-1';
+const APP_BUILD_ID = '2026-10-17-timeline-26h-2';
 const APP_VERSION_URL = 'app_version.json';
-const APP_UPDATE_RELOAD_KEY = 'studyplanner_app_update_reload';
-const PLANNER_SCHEMA_VERSION = 3;
+const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
+const PLANNER_SCHEMA_VERSION = 5;
 const PLANNER_BACKUP_FORMAT = 'inmonite-studyplanner-backup';
 const PLANNER_BACKUP_FORMAT_VERSION = 1;
 const OBSIDIAN_EXPORT_FORMAT = 'inmonite-studyplanner-obsidian';
@@ -947,6 +1044,12 @@ async function showAssetStorageDetails(){
   const info = await refreshAssetStorageUsage({force:true});
   const records = await listAssetRecords().catch(()=>[]);
   const referenced = collectAssetIdsFromObject(DATA);
+  // V2 and main share image blobs, even though planner records are separate.
+  const peerRaw = localStorage.getItem(PEER_STORAGE_KEY);
+  if(peerRaw){
+    try{ collectAssetIdsFromObject(JSON.parse(peerRaw)).forEach(id=>referenced.add(id)); }
+    catch(e){ alert('다른 버전의 저장 데이터를 확인할 수 없어 공유 이미지 정리를 중단했습니다.'); return; }
+  }
   const orphaned = records.filter(record => !referenced.has(record.id));
   const orphanBytes = orphaned.reduce((sum, record) => sum + Number(record.size || record.blob?.size || 0), 0);
   const quotaLine = info.quota ? `전체 브라우저 저장소: ${formatBytes(info.usage)} / ${formatBytes(info.quota)} (${Math.round((info.usage/info.quota)*100)}%)` : '전체 브라우저 저장소 한도: 확인 불가';
@@ -2011,14 +2114,129 @@ function ensureDailyData(date) {
   if (!DATA.dailyHistory[date]) {
     DATA.dailyHistory[date] = {
       totalSeconds: 0,
-      slots: [
-        { id: 's1', label: '오전 (09-12)', cardIds: [] },
-        { id: 's2', label: '오후 (13-18)', cardIds: [] }
-      ],
+      slots: [],
+      sessions: [],
       goalStr: "00:00:00"
     };
   }
   return DATA.dailyHistory[date];
+}
+
+/* Timeline minutes are relative to the selected KST midnight, up to 26:00.
+   Plans snap to ten minutes; execution timestamps retain their actual precision. */
+const TIMELINE_END = 26 * 60;
+const TIMELINE_STEP = 10;
+let timelineSelection = {date:null, slotId:null};
+let timelineTouchSelection = null;
+let timelineTouchMenuUntil = 0;
+let timelineAdding = false;
+let timelineGesture = null;
+let timelineSubgoalState = null;
+
+function snapTimelineMinute(value){
+  return Math.round(Number(value) / TIMELINE_STEP) * TIMELINE_STEP;
+}
+function hasTimelineRange(item){
+  return Number.isInteger(item?.startMinute) && Number.isInteger(item?.endMinute)
+    && item.startMinute >= 0 && item.endMinute <= TIMELINE_END
+    && item.startMinute % 10 === 0 && item.endMinute % 10 === 0 && item.endMinute > item.startMinute;
+}
+function isTimelineHue(value){ return Number.isInteger(value) && value >= 0 && value < 360; }
+function timelineTime(minute){
+  const m = Math.max(0, Math.floor(minute));
+  return `${m >= 1440 ? '다음 날 ' : ''}${pad2(Math.floor(m / 60) % 24)}:${pad2(m % 60)}`;
+}
+function timelineRange(item){ return `${timelineTime(item.startMinute)}–${timelineTime(item.endMinute)}`; }
+function placePlannedCard(slot, ref, startMinute){
+  if(startMinute == null && !hasTimelineRange(slot)){ return; }
+  const duration = hasTimelineRange(ref) ? ref.endMinute - ref.startMinute : 30;
+  const fallback = Math.max(slot.startMinute ?? 0, ...(slot.cardIds || []).filter(r=>r !== ref && hasTimelineRange(r)).map(r=>r.endMinute));
+  ref.startMinute = Math.max(0, Math.min(TIMELINE_END - 10, snapTimelineMinute(startMinute ?? fallback)));
+  ref.endMinute = Math.min(TIMELINE_END, ref.startMinute + duration);
+}
+function ungroupedTimelineCards(daily){
+  let group = daily.slots.find(slot=>slot.cardOnly);
+  if(!group){
+    group = {id:uid('plans'),cardOnly:true,label:'',startMinute:null,endMinute:null,cardIds:[]};
+    daily.slots.push(group);
+  }
+  return group;
+}
+function resizePlannedCard(date, sIdx, cIdx, minute, edge = 'end'){
+  const slot = DATA.dailyHistory?.[date]?.slots?.[sIdx];
+  const ref = slot?.cardIds?.[cIdx];
+  if(!hasTimelineRange(ref)) return;
+  if(edge === 'start') ref.startMinute = Math.max(0, Math.min(ref.endMinute - 10, snapTimelineMinute(minute)));
+  else ref.endMinute = Math.max(ref.startMinute + 10, Math.min(TIMELINE_END, snapTimelineMinute(minute)));
+}
+function moveTimelineSlot(date, sIdx, startMinute){
+  const slot = DATA.dailyHistory?.[date]?.slots?.[sIdx];
+  if(!hasTimelineRange(slot)) return;
+  const duration = slot.endMinute - slot.startMinute;
+  const next = Math.max(0, Math.min(TIMELINE_END - duration, snapTimelineMinute(startMinute)));
+  slot.startMinute = next; slot.endMinute = next + duration;
+}
+function resizeTimelineSlot(date, sIdx, minute, edge = 'end'){
+  const slot = DATA.dailyHistory?.[date]?.slots?.[sIdx];
+  if(!hasTimelineRange(slot)) return;
+  if(edge === 'start'){
+    const maximum = slot.endMinute - 10;
+    slot.startMinute = Math.max(0,Math.min(maximum,snapTimelineMinute(minute)));
+  } else {
+    const minimum = slot.startMinute + 10;
+    slot.endMinute = Math.max(minimum, Math.min(TIMELINE_END, snapTimelineMinute(minute)));
+  }
+}
+function createTimelineSlot(date, start, end){
+  const startMinute = Math.max(0, Math.min(TIMELINE_END - 10, snapTimelineMinute(Math.min(start,end))));
+  const endMinute = Math.max(startMinute + 10, Math.min(TIMELINE_END, snapTimelineMinute(Math.max(start,end))));
+  const slot = {id:uid('slot'), label:'', startMinute, endMinute, cardIds:[]};
+  ensureDailyData(date).slots.push(slot);
+  timelineSelection = {date,slotId:slot.id};
+  return slot;
+}
+function migrateTimelineDay(daily){
+  daily.sessions = [];
+  (daily.slots || []).forEach((slot,index)=>{
+    if(!isPlainRecord(slot)) return;
+    if(!slot.id) slot.id = `legacy-slot-${index}`;
+    const match = String(slot.label || '').match(/(\d{1,2})(?::(\d{2}))?\s*[-~–]\s*(\d{1,2})(?::(\d{2}))?/);
+    slot.startMinute = slot.endMinute = null;
+    if(match){
+      const start = Number(match[1])*60 + Number(match[2] || 0);
+      let end = Number(match[3])*60 + Number(match[4] || 0);
+      if(end <= start) end += 1440;
+      const range = {startMinute:snapTimelineMinute(start),endMinute:snapTimelineMinute(end)};
+      if(hasTimelineRange(range)) Object.assign(slot,range);
+    }
+    let cursor = slot.startMinute;
+    (slot.cardIds || []).forEach(ref=>{
+      ref.startMinute = ref.endMinute = null;
+      placePlannedCard(slot, ref, cursor);
+      cursor = ref.endMinute;
+    });
+  });
+}
+function recordTimelineSession(ref, startMs, endMs){
+  if(!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+  while(startMs < endMs){
+    const date = getLogicalDate(new Date(startMs));
+    const midnight = ymdToUtcDayMs(addDaysYMD(date,1)) - KST_OFFSET_MS;
+    const end = Math.min(endMs,midnight);
+    const daily = ensureDailyData(date);
+    if(!Array.isArray(daily.sessions)) daily.sessions = [];
+    const previous = daily.sessions.findLast(s=>timerRefMatches(s.ref,ref));
+    if(previous && previous.endMs === startMs) previous.endMs = end;
+    else daily.sessions.push({id:uid('run'),ref:{type:ref.type,id:ref.id,pid:ref.pid ?? null,title:ref.title || getCardInfo(ref).title},startMs,endMs:end});
+    startMs = end;
+  }
+}
+function getTimelineSessions(date){
+  const start = ymdToUtcDayMs(date) - KST_OFFSET_MS;
+  const end = start + TIMELINE_END * 60000;
+  return [date,addDaysYMD(date,1)].flatMap(d=>(DATA.dailyHistory?.[d]?.sessions || []))
+    .filter(s=>s.endMs > start && s.startMs < end)
+    .map(s=>({...s,startMinute:(Math.max(start,s.startMs)-start)/60000,endMinute:(Math.min(end,s.endMs)-start)/60000}));
 }
 
 function formatTime(s) {
@@ -2081,7 +2299,7 @@ async function checkForAppUpdate({silent = true} = {}){
     const res = await fetch(`${APP_VERSION_URL}?ts=${Date.now()}`, { cache: 'no-store' });
     if(!res.ok) return;
     const info = await res.json();
-    const remoteBuild = String(info.buildId || info.version || '').trim();
+    const remoteBuild = String(info[IS_EXPERIMENTAL_BUILD ? 'v2BuildId' : 'buildId'] || '').trim();
     if(!remoteBuild) return;
 
     window.__STUDY_PLANNER_BUILD_ID__ = APP_BUILD_ID;
@@ -2250,6 +2468,18 @@ function migratePlannerSchema2To3(data){
   return data;
 }
 
+function migratePlannerSchema3To4(data){
+  Object.values(data.dailyHistory || {}).filter(isPlainRecord).forEach(migrateTimelineDay);
+  data.schemaVersion = 4;
+  return data;
+}
+
+function migratePlannerSchema4To5(data){
+  // Missing progressTargets keeps the original parent-card completion rule.
+  data.schemaVersion = 5;
+  return data;
+}
+
 function migratePlannerData(value){
   if(!isPlainRecord(value)) throw new Error('플래너 데이터 구조가 올바르지 않습니다.');
   let data = clonePlain(value);
@@ -2257,6 +2487,8 @@ function migratePlannerData(value){
   while(version < PLANNER_SCHEMA_VERSION){
     if(version === 1) data = migratePlannerSchema1To2(data);
     else if(version === 2) data = migratePlannerSchema2To3(data);
+    else if(version === 3) data = migratePlannerSchema3To4(data);
+    else if(version === 4) data = migratePlannerSchema4To5(data);
     else throw new Error(`지원하지 않는 플래너 스키마 버전입니다: v${version}`);
     version = readPlannerSchemaVersion(data);
   }
@@ -2437,16 +2669,39 @@ function validateImportedPlannerData(value){
     checkId(mod.activeTab, `${mid} 활성 탭`, true);
   }
 
+  if(value.timelineColors !== undefined && (!isPlainRecord(value.timelineColors) || Object.values(value.timelineColors).some(hue=>!isTimelineHue(hue)))) throw new Error('시간표 색상 설정이 올바르지 않습니다.');
   for(const [date, daily] of Object.entries(value.dailyHistory || {})){
     if(!parseYMD(date) || !isPlainRecord(daily) || !Array.isArray(daily.slots || [])) throw new Error(`일일 계획 ${date} 구조가 올바르지 않습니다.`);
+    const checkRange = item => {
+      if(item.startMinute == null && item.endMinute == null) return;
+      if(!hasTimelineRange(item)) throw new Error(`일일 계획 ${date} 시간 범위가 올바르지 않습니다.`);
+    };
     (daily.slots || []).forEach(slot => {
       if(!isPlainRecord(slot)) throw new Error(`일일 계획 ${date} 시간 블록 구조가 올바르지 않습니다.`);
+      checkRange(slot);
+      if(slot.colorHue !== undefined && !isTimelineHue(slot.colorHue)) throw new Error('시간 블록 색상이 올바르지 않습니다.');
       if(!Array.isArray(slot.cardIds || [])) throw new Error(`일일 계획 ${date} 카드 목록이 배열이 아닙니다.`);
       (slot.cardIds || []).forEach(ref => {
         if(!isPlainRecord(ref) || !['subject','detail','theory','question','adhoc'].includes(ref.type)) throw new Error(`일일 계획 ${date} 카드 형식이 올바르지 않습니다.`);
         checkId(ref.id, `일일 계획 ${date} 카드`);
         checkId(ref.pid, `일일 계획 ${date} 상위 카드`, true);
+        checkRange(ref);
+        if(ref.progressTargets !== undefined){
+          if(!Array.isArray(ref.progressTargets)) throw new Error('세부목표 목록이 올바르지 않습니다.');
+          ref.progressTargets.forEach(target=>{
+            if(!isPlainRecord(target) || !['detail','theory','question'].includes(target.type)) throw new Error('세부목표 카드 형식이 올바르지 않습니다.');
+            checkId(target.id, '세부목표 카드'); checkId(target.pid, '세부목표 상위 카드');
+          });
+        }
       });
+    });
+    if(daily.sessions !== undefined && !Array.isArray(daily.sessions)) throw new Error('실행 기록 목록이 올바르지 않습니다.');
+    (daily.sessions || []).forEach(session=>{
+      const dayStart = ymdToUtcDayMs(date) - KST_OFFSET_MS;
+      if(!isPlainRecord(session) || !isPlainRecord(session.ref) || !['subject','detail','theory','question','adhoc'].includes(session.ref.type)
+        || !Number.isFinite(session.startMs) || !Number.isFinite(session.endMs) || session.endMs <= session.startMs
+        || session.startMs < dayStart || session.endMs > dayStart + DAY_MS) throw new Error('실행 기록 시간이 올바르지 않습니다.');
+      checkId(session.id, '실행 기록'); checkId(session.ref.id, '실행 카드'); checkId(session.ref.pid, '실행 상위 카드', true);
     });
   }
   return value;
@@ -2557,8 +2812,13 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
+function readStoredPlannerRaw(){
+  return localStorage.getItem(STORAGE_KEY)
+    ?? (IS_EXPERIMENTAL_BUILD ? localStorage.getItem(MAIN_STORAGE_KEY) : null);
+}
+
 function exportRawStoredData(){
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = readStoredPlannerRaw();
   if(!raw) return alert('브라우저에 저장된 원본 데이터가 없습니다.');
   downloadBlob(
     new Blob([raw], {type:'application/json'}),
@@ -3613,12 +3873,7 @@ window.loadJsonFile = function(e) {
 async function hardReset(){
   if(!confirm('모든 데이터를 삭제하고 초기화하시겠습니까? (복구 불가)')) return;
   localStorage.removeItem(STORAGE_KEY);
-  try{
-    await clearAssetStore();
-  }catch(e){
-    console.error('Image asset reset failed:', e);
-    alert('플래너 데이터는 초기화하지만 이미지 저장소 일부를 삭제하지 못했습니다. 이미지 저장소 화면에서 다시 정리해 주세요.');
-  }
+  // Main and V2 share images; resetting either planner must not erase peer assets.
 
   DATA = baseData();
 
@@ -3708,13 +3963,15 @@ function normalizeData(){
       return;
     }
     if(!Array.isArray(daily.slots)) daily.slots = [];
+    if(!Array.isArray(daily.sessions)) daily.sessions = [];
     daily.slots = daily.slots.filter(isPlainRecord);
     daily.slots.forEach(slot=>{
       if(!Array.isArray(slot.cardIds)) slot.cardIds = [];
       slot.cardIds = slot.cardIds.filter(isPlainRecord);
-      if(date !== today) slot.cardIds.forEach(ref => { ref.isRunning = false; });
+      if(date !== today) slot.cardIds.forEach(ref => { if(ref.type !== 'adhoc') ref.isRunning = false; });
     });
   });
+  validateImportedPlannerData(DATA);
   rebuildIndex();
 }
 
@@ -4379,7 +4636,7 @@ function renderCardItem(item, level, pid, idx, tabId) {
   }
 
   return `
-    <div class="card ${!isMod&&item.module?'clickable':''} ${selected?'card-selected':''}" data-index="${idx}" id="card-${sid}" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'${level}','${pid}',${idx},'${tabSafe}')">
+    <div class="card ${!isMod&&item.module?'clickable':''} ${selected?'card-selected':''}" data-index="${idx}" id="card-${sid}" draggable="true" ondragstart="${dragStartCode}" ondragover="handleReorderOver(event)" ondrop="handleReorderDrop(event,'${level}','${pid}',${idx},'${tabSafe}')">
       <div class="card-top card-top-stacked">
         <div class="card-toolbar">
           <div class="card-toolbar-start">
@@ -4545,6 +4802,148 @@ function filterCards(tag, btn, sid){
 /* =========================
    DAILY SIDEBAR: getCardInfo / render
 ========================= */
+function timelineSubgoalKey(ref){ return `${ref.type}|${ref.pid || ''}|${ref.id}`; }
+
+function timelineSubgoalOptions(ref){
+  const options = [], seen = new Set();
+  const add = (type,id,pid,label,depth,path='')=>{
+    const key = timelineSubgoalKey({type,id,pid});
+    if(seen.has(key)) return;
+    seen.add(key); options.push({type,id,pid,label,depth,path});
+  };
+  const questions = (tab,mid,depth,path)=>{
+    (tab.questions || []).forEach(q=>add('question',q.id,mid,
+      String(q.src || '').trim() || String(q.text || '').replace(/\n/g,' ').slice(0,80) || '(문항)',depth,
+      [path,String(q.text || '').replace(/\n/g,' ').slice(0,120)].filter(Boolean).join(' · ')));
+  };
+  const module = (mid,depth,path)=>{
+    (DATA.modules?.[mid]?.tabs || []).forEach(t=>{
+      add('theory',t.id,mid,`📌 ${t.label || '이론'}`,depth,path);
+      questions(t,mid,depth+1,[path,t.label].filter(Boolean).join(' / '));
+    });
+  };
+  if(ref.type === 'subject'){
+    (DATA.details?.[ref.id]?.cards || []).forEach(c=>{
+      add('detail',c.id,ref.id,c.title || '(토픽)',0);
+      module(c.module || c.moduleId,1,c.title || '(토픽)');
+    });
+  } else if(ref.type === 'detail'){
+    const card = (DATA.details?.[ref.pid]?.cards || []).find(c=>c.id===ref.id);
+    if(card) module(card.module || card.moduleId,0,'');
+  } else if(ref.type === 'theory'){
+    const tab = DATA.modules?.[ref.pid]?.tabs?.find(t=>t.id===ref.id);
+    if(tab) questions(tab,ref.pid,0,tab.label);
+  }
+  return options;
+}
+
+function selectedTimelineSubgoals(ref){
+  const keys = new Set((Array.isArray(ref.progressTargets) ? ref.progressTargets : []).map(timelineSubgoalKey));
+  return keys.size ? timelineSubgoalOptions(ref).filter(target=>keys.has(timelineSubgoalKey(target))) : [];
+}
+
+function setTimelineSubgoals(ref,targets){
+  const keys = new Set((targets || []).map(timelineSubgoalKey));
+  const selected = timelineSubgoalOptions(ref).filter(target=>keys.has(timelineSubgoalKey(target)))
+    .map(({type,id,pid})=>({type,id,pid}));
+  if(selected.length) ref.progressTargets = selected;
+  else delete ref.progressTargets;
+}
+
+function timelinePlanProgress(ref){
+  const selected = selectedTimelineSubgoals(ref), targets = selected.length ? selected : [ref];
+  const total = targets.length, done = targets.filter(target=>getCardInfo(target).done).length;
+  return {total,done,pct:Math.round(done/total*100)};
+}
+
+function dailyPlanProgress(daily){
+  let total=0, done=0;
+  (daily?.slots || []).forEach(slot=>(slot.cardIds || []).forEach(ref=>{
+    const progress = timelinePlanProgress(ref); total += progress.total; done += progress.done;
+  }));
+  return {total,done,pct:total ? Math.round(done/total*100) : 0};
+}
+
+function openTimelineSubgoals(date,sIdx,cIdx){
+  if(timelineAdding || date !== VIEW_DATE) return;
+  const ref = DATA.dailyHistory?.[date]?.slots?.[sIdx]?.cardIds?.[cIdx];
+  if(!ref) return;
+  closeTimelineMenu();
+  const options = timelineSubgoalOptions(ref);
+  timelineSubgoalState = {date,ref,options,selected:new Set(selectedTimelineSubgoals(ref).map(timelineSubgoalKey))};
+  document.getElementById('timelineSubgoalParent').textContent = getCardInfo(ref).title;
+  document.getElementById('timelineSubgoalSearch').value = '';
+  document.getElementById('timelineSubgoalModal').style.display = 'flex';
+  renderTimelineSubgoals();
+  document.getElementById('timelineSubgoalSearch').focus();
+}
+
+function validTimelineSubgoalState(){
+  const state = timelineSubgoalState;
+  return state && state.date === VIEW_DATE && !timelineAdding
+    && (DATA.dailyHistory?.[state.date]?.slots || []).some(slot=>(slot.cardIds || []).includes(state.ref));
+}
+
+function updateTimelineSubgoalCount(){
+  if(!timelineSubgoalState) return;
+  const count = timelineSubgoalState.selected.size;
+  document.getElementById('timelineSubgoalCount').textContent = count ? `${count}개 선택` : '미선택 · 상위 카드로 계산';
+}
+
+function renderTimelineSubgoals(){
+  const state = timelineSubgoalState; if(!state) return;
+  const query = document.getElementById('timelineSubgoalSearch').value.trim().toLocaleLowerCase();
+  const rows = state.options.map((target,index)=>({target,index})).filter(({target})=>`${target.label} ${target.path}`.toLocaleLowerCase().includes(query));
+  document.getElementById('timelineSubgoalList').innerHTML = rows.length ? rows.map(({target,index})=>
+    `<label class="tl-goal-option" style="--goal-depth:${query ? 0 : target.depth}"><input type="checkbox" ${state.selected.has(timelineSubgoalKey(target)) ? 'checked' : ''} onchange="toggleTimelineSubgoal(${index},this.checked)"><span>${escapeHtml(target.label)}${target.path ? `<small>${escapeHtml(target.path)}</small>` : ''}</span></label>`
+  ).join('') : '<p style="padding:12px; margin:0; color:var(--text-sub);">선택할 카드가 없습니다.</p>';
+  updateTimelineSubgoalCount();
+}
+
+function toggleTimelineSubgoal(index,checked){
+  if(!validTimelineSubgoalState()) return;
+  const target = timelineSubgoalState.options[index]; if(!target) return;
+  const key = timelineSubgoalKey(target);
+  if(checked) timelineSubgoalState.selected.add(key);
+  else timelineSubgoalState.selected.delete(key);
+  updateTimelineSubgoalCount();
+}
+
+function clearTimelineSubgoals(){
+  if(!validTimelineSubgoalState()) return;
+  timelineSubgoalState.selected.clear(); renderTimelineSubgoals();
+}
+
+function closeTimelineSubgoals(){
+  const state = timelineSubgoalState;
+  timelineSubgoalState = null;
+  document.getElementById('timelineSubgoalModal').style.display = 'none';
+  if(state?.date === VIEW_DATE){
+    (DATA.dailyHistory?.[VIEW_DATE]?.slots || []).some((slot,sIdx)=>{
+      const cIdx = (slot.cardIds || []).indexOf(state.ref);
+      if(cIdx < 0) return false;
+      document.querySelector(`.tl-plan[data-slot="${sIdx}"][data-card="${cIdx}"]`)?.focus();
+      return true;
+    });
+  }
+}
+
+function saveTimelineSubgoals(){
+  if(!validTimelineSubgoalState()){ closeTimelineSubgoals(); return; }
+  const {ref,options,selected} = timelineSubgoalState;
+  setTimelineSubgoals(ref,options.filter(target=>selected.has(timelineSubgoalKey(target))));
+  saveData(); renderDailySidebar(); closeTimelineSubgoals();
+}
+
+function timelineSubgoalKeydown(ev){
+  if(ev.key === 'Escape'){ ev.preventDefault(); ev.stopPropagation(); closeTimelineSubgoals(); return; }
+  if(ev.key !== 'Tab') return;
+  const controls = [...document.querySelectorAll('#timelineSubgoalModal button,#timelineSubgoalModal input')].filter(el=>!el.disabled && el.offsetParent !== null);
+  const first = controls[0], last = controls[controls.length-1];
+  if(ev.shiftKey && document.activeElement === first){ ev.preventDefault(); last?.focus(); }
+  else if(!ev.shiftKey && document.activeElement === last){ ev.preventDefault(); first?.focus(); }
+}
+
 function getCardInfo(ref){
   const out = { title: '(unknown)', done: !!ref.done, isRunning: !!ref.isRunning, totalStr: '', children: null };
 
@@ -4642,7 +5041,418 @@ function getCardInfo(ref){
   return out;
 }
 
+// Allocate columns only within overlapping groups so simultaneous plans remain reachable.
+function timelineLanes(items){
+  const sorted = items.map(item=>({...item})).sort((a,b)=>a.startMinute-b.startMinute || a.endMinute-b.endMinute);
+  let group = [], ends = [], groupEnd = -1;
+  const finish = ()=>group.forEach(item=>item.lanes = ends.length);
+  sorted.forEach(item=>{
+    if(item.startMinute >= groupEnd){ finish(); group=[]; ends=[]; }
+    let lane = ends.findIndex(end=>end <= item.startMinute);
+    if(lane < 0) lane = ends.length;
+    ends[lane] = item.endMinute; item.lane = lane; group.push(item);
+    groupEnd = Math.max(...ends);
+  });
+  finish(); return sorted;
+}
+function timelineColorKey(ref){ return `${ref.type}|${ref.id}|${ref.type === 'subject' ? '' : ref.pid || ''}`; }
+function timelineColor(ref){
+  const key = timelineColorKey(ref), hue = DATA.timelineColors?.[key];
+  if(isTimelineHue(hue)) return `${hue} 65% 43%`;
+  let hash = 0; for(const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return `${[215,265,165,330,25,190][hash % 6]} 65% 43%`;
+}
+function timelineSlotColor(slot){ return isTimelineHue(slot.colorHue) ? `${slot.colorHue} 65% 43%` : '220 75% 55%'; }
+function selectTimelineSlot(index,cIdx=-1){
+  const slot = DATA.dailyHistory?.[VIEW_DATE]?.slots?.[index];
+  timelineSelection = {date:VIEW_DATE,slotId:slot?.id,cardIndex:cIdx};
+  renderDailySidebar();
+}
+function clearTimelineSelection(){
+  timelineSelection = {date:VIEW_DATE,slotId:null};
+  document.querySelectorAll('.tl-slot.selected').forEach(slot=>slot.classList.remove('selected'));
+  const focused = document.activeElement;
+  if(focused?.closest?.('.tl-slot')) focused.blur();
+}
+function timelineSlotLabel(slot){ return slot.label === '시간 블록' ? '' : (slot.label || ''); }
+function selectTimelineTouchCard(sIdx=-1,cIdx=-1){
+  const slot = DATA.dailyHistory?.[VIEW_DATE]?.slots?.[sIdx];
+  timelineTouchSelection = cIdx >= 0 && slot?.cardIds[cIdx] ? {date:VIEW_DATE,slotId:slot.id,cardIndex:cIdx} : null;
+  document.querySelectorAll('.tl-plan-group').forEach(group=>group.classList.toggle('touch-selected',!!timelineTouchSelection && Number(group.dataset.slot) === sIdx && Number(group.dataset.card) === cIdx));
+}
+function timelineSegments(item){
+  const segments = [];
+  let start = item.startMinute;
+  while(start < item.endMinute){
+    const hour = Math.floor(start / 60), end = Math.min((hour+1)*60,item.endMinute);
+    segments.push({hour,startMinute:start,endMinute:end,left:(start-hour*60)/60*100,width:(end-start)/60*100});
+    start = end;
+  }
+  return segments;
+}
+function timelineSegmentStyle(segment,lane=0,lanes=1,inset=2){
+  const height = 100/26/lanes, padding = height*Math.min(inset,12)/48;
+  return `top:${segment.hour*100/26+lane*height+padding}%;height:${height-padding*2}%;left:${segment.left}%;width:${segment.width}%`;
+}
+// One outline follows the wrapped interval, including partial first/last hours.
+function timelineSlotShape(slot){
+  const firstHour = Math.floor(slot.startMinute/60), lastHour = Math.ceil(slot.endMinute/60)-1;
+  const rows = lastHour-firstHour+1, start = (slot.startMinute-firstHour*60)/60*100, end = (slot.endMinute-lastHour*60)/60*100;
+  const points = rows === 1 ? [[start,0],[end,0],[end,100],[start,100]]
+    : [[start,0],[100,0],[100,(rows-1)*100/rows],[end,(rows-1)*100/rows],[end,100],[0,100],[0,100/rows],[start,100/rows]];
+  return {firstHour,rows,start,end,points};
+}
+function timelineMinuteAt(clientX,clientY){
+  const canvas = document.getElementById('timelineCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const hour = Math.max(0,Math.min(25,Math.floor((clientY-rect.top)/(rect.height/26))));
+  const minute = Math.max(0,Math.min(60,snapTimelineMinute((clientX-rect.left)/rect.width*60)));
+  return Math.min(TIMELINE_END,hour*60+minute);
+}
+function timelineHandles(kind,sIdx,cIdx,label,first,last){
+  return `${first ? `<button class="tl-resize start" aria-label="${escapeHtml(label)} 시작 시각 조절" onpointerdown="startTimelineGesture(event,'${kind}-start',${sIdx},${cIdx})" onkeydown="timelineKey(event,'${kind}-start',${sIdx},${cIdx})"></button>` : ''}
+    ${last ? `<button class="tl-resize end" aria-label="${escapeHtml(label)} 종료 시각 조절" onpointerdown="startTimelineGesture(event,'${kind}-end',${sIdx},${cIdx})" onkeydown="timelineKey(event,'${kind}-end',${sIdx},${cIdx})"></button>` : ''}`;
+}
+function renderTimeline(daily){
+  const container = document.getElementById('dailySlots');
+  const oldScroll = document.getElementById('timelineScroll');
+  const sameDate = oldScroll?.dataset.date === VIEW_DATE;
+  if(oldScroll && !sameDate){ timelineAdding=false; timelinePendingSlot=null; }
+  const selectedIndex = timelineSelection.date === VIEW_DATE ? daily.slots.findIndex(s=>s.id === timelineSelection.slotId) : -1;
+  const slots = daily.slots.map((slot,index)=>({...slot,index})).filter(slot=>!slot.cardOnly && hasTimelineRange(slot))
+    .sort((a,b)=>(b.endMinute-b.startMinute)-(a.endMinute-a.startMinute));
+  const slotHtml = slots.map(slot=>{
+    const shape = timelineSlotShape(slot), label = timelineSlotLabel(slot);
+    return `<div class="tl-slot ${slot.index === selectedIndex ? 'selected' : ''}" data-slot="${slot.index}" role="button" tabindex="0"
+      aria-label="${escapeHtml(label || '시간 블록')} ${timelineRange(slot)}. 방향키로 이동, Shift와 방향키로 종료 시각 변경"
+      title="${escapeHtml(timelineSlotLabel(slot))}"
+      style="--tl-color:${timelineSlotColor(slot)};top:${shape.firstHour*100/26}%;height:${shape.rows*100/26}%;left:0;width:100%;clip-path:polygon(${shape.points.map(([x,y])=>`${x}% ${y}%`).join(',')})"
+      onpointerdown="startTimelineGesture(event,'slot',${slot.index})" onkeydown="timelineKey(event,'slot',${slot.index})" oncontextmenu="openTimelineMenu(event,${slot.index})">
+      <svg class="tl-slot-shape" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon points="${shape.points.map(p=>p.join(',')).join(' ')}"/></svg>
+      <span class="tl-slot-label" style="left:calc(${shape.start}% + 10px)">${escapeHtml(label)}</span>
+      <div class="tl-slot-edge" style="left:${shape.start}%;top:0;height:${100/shape.rows}%">${timelineHandles('slot',slot.index,-1,label || '시간 블록',true,false)}</div>
+      <div class="tl-slot-edge" style="right:${100-shape.end}%;bottom:0;height:${100/shape.rows}%">${timelineHandles('slot',slot.index,-1,label || '시간 블록',false,true)}</div>
+    </div>`;
+  }).join('');
+  const cards = timelineLanes(daily.slots.flatMap((slot,sIdx)=>slot.cardIds.map((ref,index)=>({...ref,index,sIdx}))).filter(hasTimelineRange));
+  const cardHtml = cards.map(ref=>{
+      const info = getCardInfo(ref);
+      const cardPieces = timelineSegments(ref);
+      const touchSelected = timelineTouchSelection?.date === VIEW_DATE && timelineTouchSelection.slotId === daily.slots[ref.sIdx].id && timelineTouchSelection.cardIndex === ref.index;
+      return `<div class="tl-plan-group ${touchSelected ? 'touch-selected' : ''}" data-slot="${ref.sIdx}" data-card="${ref.index}">${cardPieces.map((piece,pieceIndex)=>`<div class="tl-plan" data-slot="${ref.sIdx}" data-card="${ref.index}" role="button" tabindex="${timelineAdding ? '-1' : '0'}" aria-disabled="${timelineAdding}"
+        aria-pressed="${!!info.isRunning}" aria-label="계획 ${escapeHtml(info.title)} ${timelineRange(ref)}. 클릭하여 기록 ${info.isRunning ? '정지' : '시작'}, 방향키로 이동, Shift와 방향키로 길이 변경"
+        style="--tl-color:${timelineColor(ref)};${timelineSegmentStyle(piece,ref.lane,ref.lanes,2)}"
+        onpointerdown="startTimelineGesture(event,'card',${ref.sIdx},${ref.index})" onkeydown="timelineKey(event,'card',${ref.sIdx},${ref.index})" oncontextmenu="openTimelineMenu(event,${ref.sIdx},${ref.index})">
+        <strong>${escapeHtml(info.title)}</strong><small>${info.isRunning ? '● ' : ''}${ref.endMinute-ref.startMinute}분</small>
+        ${timelineAdding ? '' : timelineHandles('card',ref.sIdx,ref.index,`${info.title} 계획`,pieceIndex===0,pieceIndex===cardPieces.length-1)}
+      </div>`).join('')}</div>`;
+  }).join('');
+  const unscheduled = daily.slots.map((slot,index)=>({slot,index})).filter(({slot})=>(!slot.cardOnly && !hasTimelineRange(slot)) || slot.cardIds.some(ref=>!hasTimelineRange(ref)));
+  container.innerHTML = `${unscheduled.length ? `<details class="tl-unscheduled"><summary>시간 미지정 ${unscheduled.length}개</summary>${unscheduled.map(({slot,index})=>`<div><span oncontextmenu="openTimelineMenu(event,${index})">${escapeHtml(slot.label || '시간 미지정')}</span> <button class="btn btn-outline" ${timelineAdding ? '' : 'disabled'} onclick="scheduleLegacySlot(${index})">시간표에 배치</button>
+      ${slot.cardIds.map((ref,cIdx)=>!hasTimelineRange(ref) ? `<button class="btn btn-outline" ${timelineAdding ? 'disabled' : ''} draggable="${!timelineAdding}" ondragstart="handleSidebarDragStart(event,${index},${cIdx})" onclick="toggleTimelineCardTimer(${index},${cIdx})" oncontextmenu="openTimelineMenu(event,${index},${cIdx})">${escapeHtml(getCardInfo(ref).title)}</button>` : '').join('')}</div>`).join('')}</details>` : ''}
+    <div id="timelineScroll" class="tl-scroll" data-date="${VIEW_DATE}">
+      <div id="timelineCanvas" class="tl-canvas ${timelineAdding ? 'adding' : ''}"
+        onpointerdown="startTimelineGesture(event,'create')" ondragover="timelineDragOver(event)" ondrop="dropOnTimeline(event)" oncontextmenu="openTimelineMenu(event)">
+        <div class="tl-grid"></div><div class="tl-next-day" style="top:${24*100/26}%;height:${2*100/26}%"></div>
+        ${Array.from({length:7},(_,col)=>`<span class="tl-minute" style="left:${col*100/6}%">${col*10}</span>`).join('')}
+        ${Array.from({length:27},(_,hour)=>`<div class="tl-hour${hour > 0 && hour % 6 === 0 ? ' tl-hour-major' : ''}" style="top:${hour*100/26}%"><span>${pad2(hour%24)}:00</span></div>`).join('')}
+        ${slotHtml}${cardHtml}<div id="timelineActual"></div><div id="timelineNow" class="tl-now" hidden></div>
+      </div>
+    </div><div id="timelineMenu" class="tl-menu" role="menu" hidden></div>`;
+  const add = document.getElementById('addTimelineSlot');
+  if(add){ add.textContent = timelineAdding ? '시간 블록 편집 완료' : '시간 블록 편집'; add.className = `btn ${timelineAdding ? 'btn-primary' : 'btn-outline'}`; add.setAttribute('aria-pressed',String(timelineAdding)); }
+  updateTimelineExecution();
+}
+function updateTimelineExecution(){
+  const layer = document.getElementById('timelineActual');
+  if(!layer || !DATA || !VIEW_DATE) return;
+  layer.innerHTML = timelineLanes(getTimelineSessions(VIEW_DATE)).flatMap(s=>timelineSegments(s).map(piece=>`<div class="tl-actual" role="img"
+    aria-label="실행 ${escapeHtml(s.ref.title)} ${timelineRange(s)}" style="--tl-color:${timelineColor(s.ref)};${timelineSegmentStyle(piece,s.lane,s.lanes,7)};min-width:2px">
+    <span>${escapeHtml(s.ref.title)}</span></div>`)).join('');
+  const now = document.getElementById('timelineNow');
+  if(now){
+    const minute = (Date.now() - (ymdToUtcDayMs(VIEW_DATE) - KST_OFFSET_MS))/60000;
+    now.hidden = minute < 0 || minute > TIMELINE_END;
+    now.style.top = `${Math.floor(minute/60)*100/26}%`;
+    now.style.left = `${(minute%60)/60*100}%`;
+  }
+}
+let timelinePendingSlot = null;
+let timelineMenuState = null;
+function closeTimelineMenu(){
+  const menu = document.getElementById('timelineMenu');
+  if(menu) menu.hidden = true;
+  timelineMenuState = null;
+}
+function positionTimelineMenu(){
+  const menu = document.getElementById('timelineMenu'), state = timelineMenuState;
+  if(!menu || !state) return;
+  menu.style.left = `${Math.max(4,Math.min(state.clientX,window.innerWidth-menu.offsetWidth-4))}px`;
+  menu.style.top = `${Math.max(4,Math.min(state.clientY,window.innerHeight-menu.offsetHeight-4))}px`;
+}
+function openTimelineMenu(ev,sIdx=-1,cIdx=-1,fromTouch=false){
+  ev.preventDefault(); ev.stopPropagation();
+  if(!fromTouch && (ev.pointerType === 'touch' || timelineGesture?.touch || Date.now() < timelineTouchMenuUntil)) return;
+  if(timelineGesture || (timelineAdding && (sIdx < 0 || cIdx >= 0))) return;
+  const slot = DATA.dailyHistory?.[VIEW_DATE]?.slots?.[sIdx], ref = slot?.cardIds[cIdx];
+  timelineMenuState = {date:VIEW_DATE,sIdx,cIdx,minute:Math.min(TIMELINE_END-10,timelineMinuteAt(ev.clientX,ev.clientY)),editing:timelineAdding,clientX:ev.clientX,clientY:ev.clientY};
+  const actions = timelineAdding ? [['rename',timelineSlotLabel(slot) ? '이름 변경' : '이름 설정'],['delete','블록 삭제']] : ref
+    ? [...(ref.type === 'adhoc' ? [['done',ref.done ? '미완료로 표시' : '완료로 표시'],['rename','이름 변경']] : []),...(timelineSubgoalOptions(ref).length || ref.progressTargets?.length ? [['subgoals','세부목표 설정']] : []),['delete','계획에서 제거']]
+    : [['add','카드 추가']];
+  const menu = document.getElementById('timelineMenu');
+  menu.innerHTML = actions.map(([action,label])=>`<button role="menuitem" onclick="timelineMenuAction('${action}')">${label}</button>`).join('');
+  if(ref || (timelineAdding && slot)){
+    const selectedHue = ref ? DATA.timelineColors?.[timelineColorKey(ref)] : slot.colorHue;
+    const colors = [[0,'빨강'],[25,'주황'],[45,'노랑'],[150,'초록'],[190,'청록'],[215,'파랑'],[265,'보라'],[330,'분홍']];
+    menu.innerHTML += `<div class="tl-menu-colors"><span>색상</span><div class="tl-color-grid">${colors.map(([hue,name])=>`<button class="tl-color-choice" role="menuitemradio" aria-label="${name}" aria-checked="${selectedHue === hue}" style="--swatch:hsl(${hue} 65% 43%)" onclick="setTimelineMenuColor(${hue})"></button>`).join('')}</div><button role="menuitem" onclick="setTimelineMenuColor(null)">기본 색상</button></div>`;
+  }
+  menu.hidden = false;
+  positionTimelineMenu();
+}
+function setTimelineMenuColor(hue){
+  const state = timelineMenuState; closeTimelineMenu();
+  if(!state || state.date !== VIEW_DATE || state.editing !== timelineAdding || (hue !== null && !isTimelineHue(hue))) return;
+  const slot = DATA.dailyHistory?.[state.date]?.slots?.[state.sIdx];
+  if(!slot) return;
+  if(state.cIdx >= 0 && !timelineAdding){
+    const ref = slot.cardIds[state.cIdx]; if(!ref) return;
+    DATA.timelineColors ||= {};
+    const key = timelineColorKey(ref);
+    if(hue === null) delete DATA.timelineColors[key];
+    else DATA.timelineColors[key] = hue;
+  } else if(state.cIdx < 0 && timelineAdding){
+    if(hue === null) delete slot.colorHue;
+    else slot.colorHue = hue;
+  } else return;
+  saveData(); renderDailySidebar();
+}
+function timelineMenuAction(action){
+  const state = timelineMenuState;
+  if(!state || state.date !== VIEW_DATE || state.editing !== timelineAdding) return;
+  const {date,sIdx,cIdx,minute} = state, daily = ensureDailyData(date);
+  if(action === 'subgoals'){ openTimelineSubgoals(date,sIdx,cIdx); return; }
+  if(action === 'rename'){
+    const slot = daily.slots[sIdx], ref = slot?.cardIds[cIdx];
+    if(!slot || (cIdx >= 0 && (timelineAdding || ref?.type !== 'adhoc')) || (cIdx < 0 && !timelineAdding)) return;
+    const value = cIdx >= 0 ? ref.title || '' : timelineSlotLabel(slot);
+    document.getElementById('timelineMenu').innerHTML = `<form class="tl-name-editor" onsubmit="event.preventDefault(); saveTimelineName()"><label for="timelineNameInput">${cIdx >= 0 ? '카드 이름' : '영역 이름'}</label><input id="timelineNameInput" value="${escapeHtml(value)}" autocomplete="off" onkeydown="event.stopPropagation(); if(event.key==='Escape') closeTimelineMenu()"><div><button type="button" onclick="closeTimelineMenu()">취소</button><button type="submit">저장</button></div></form>`;
+    positionTimelineMenu();
+    const input = document.getElementById('timelineNameInput'); input.focus(); input.select();
+    return;
+  }
+  closeTimelineMenu();
+  if(timelineAdding){
+    if(action === 'delete') removeSlot(date,sIdx);
+  } else if(cIdx >= 0){
+    if(action === 'delete') removeDailyCard({stopPropagation(){}},date,sIdx,cIdx);
+    const ref = daily.slots[sIdx]?.cardIds[cIdx];
+    if(action === 'done' && ref?.type === 'adhoc'){
+      tickOneSecond();
+      toggleCheckFromSidebar(ref.type,ref.id,ref.pid,!ref.done,sIdx,cIdx);
+    }
+  } else if(action === 'add'){
+    const slot = daily.slots[sIdx] || ungroupedTimelineCards(daily);
+    openSlotSelector(date,daily.slots.indexOf(slot),minute);
+  }
+}
+function saveTimelineName(){
+  const state = timelineMenuState;
+  if(!state || state.date !== VIEW_DATE || state.editing !== timelineAdding) return;
+  const slot = DATA.dailyHistory?.[state.date]?.slots?.[state.sIdx];
+  if(!slot) return;
+  const value = document.getElementById('timelineNameInput').value.trim();
+  if(state.cIdx >= 0 && !timelineAdding){
+    const ref = slot.cardIds[state.cIdx];
+    if(ref?.type !== 'adhoc' || !value) return;
+    ref.title = value;
+  } else if(state.cIdx < 0 && timelineAdding) slot.label = value;
+  else return;
+  closeTimelineMenu(); saveData(); renderDailySidebar();
+}
+document.addEventListener('pointerdown',ev=>{
+  if(timelineGesture && (ev.isPrimary === false || !ev.target.closest?.('#timelineCanvas'))) cancelTimelineGesture();
+  if(!ev.target.closest?.('#timelineMenu')) closeTimelineMenu();
+  if(!ev.target.closest?.('.tl-plan,#timelineMenu')) selectTimelineTouchCard();
+},true);
+function scheduleLegacySlot(index){
+  if(!timelineAdding) return;
+  const slot = DATA.dailyHistory?.[VIEW_DATE]?.slots?.[index];
+  if(!slot) return;
+  timelinePendingSlot = {date:VIEW_DATE,slotId:slot.id}; timelineAdding = true; renderDailySidebar();
+}
+function startTimelineGesture(ev,kind,sIdx=-1,cIdx=-1){
+  if(ev.isPrimary === false){ cancelTimelineGesture(); return; }
+  const touch = ev.pointerType === 'touch' || ev.pointerType === 'pen';
+  if(ev.button !== 0) return;
+  if(kind === 'create'){
+    clearTimelineSelection();
+    if(!touch && !timelineAdding) return;
+  }
+  ev.preventDefault(); ev.stopPropagation();
+  if(kind.startsWith('card') && timelineAdding) return;
+  if(!touch && kind.startsWith('slot') && !timelineAdding){ selectTimelineSlot(sIdx); return; }
+  if(timelineGesture) return;
+  closeTimelineMenu();
+  if(touch) selectTimelineTouchCard(sIdx,cIdx);
+  const canvas = document.getElementById('timelineCanvas');
+  const slot = DATA.dailyHistory[VIEW_DATE].slots[sIdx];
+  const item = cIdx >= 0 ? slot?.cardIds[cIdx] : slot;
+  const anchor = timelineMinuteAt(ev.clientX,ev.clientY);
+  const canDrag = kind.startsWith('card') || timelineAdding;
+  const g = timelineGesture = {kind,sIdx,cIdx,date:VIEW_DATE,editing:timelineAdding,touch,canDrag,anchor,clientX:ev.clientX,clientY:ev.clientY,originX:ev.clientX,originY:ev.clientY,start:item?.startMinute ?? anchor,end:item?.endMinute ?? anchor+10,moved:false,pointerId:ev.pointerId};
+  canvas.setPointerCapture(ev.pointerId);
+  const ghost = document.createElement('div'); ghost.id = 'timelineGhost'; canvas.appendChild(ghost);
+  canvas.addEventListener('pointermove',moveTimelineGesture);
+  canvas.addEventListener('pointerup',finishTimelineGesture);
+  canvas.addEventListener('pointercancel',cancelTimelineGesture);
+  canvas.addEventListener('lostpointercapture',cancelTimelineGesture);
+  if(touch && !kind.includes('-')) g.holdTimer = setTimeout(()=>{
+    if(timelineGesture !== g) return;
+    if(g.date !== VIEW_DATE || g.editing !== timelineAdding){ cancelTimelineGesture(); return; }
+    if(g.moved) return;
+    cleanupTimelineGesture();
+    timelineTouchMenuUntil = Date.now()+800;
+    openTimelineMenu({clientX:g.clientX,clientY:g.clientY,preventDefault(){},stopPropagation(){}},sIdx,cIdx,true);
+  },500);
+  previewTimelineGesture();
+}
+function moveTimelineGesture(ev){
+  if(!timelineGesture || ev.pointerId !== timelineGesture.pointerId) return;
+  timelineGesture.clientX = ev.clientX; timelineGesture.clientY = ev.clientY; previewTimelineGesture();
+}
+function previewTimelineGesture(){
+  const g = timelineGesture, minute = timelineMinuteAt(g.clientX,g.clientY);
+  const distance = Math.hypot(g.clientX-g.originX,g.clientY-g.originY);
+  g.moved ||= g.touch ? distance > 8 : minute !== g.anchor || distance > 4;
+  if(g.moved) clearTimeout(g.holdTimer);
+  const ghost = document.getElementById('timelineGhost');
+  if(g.canDrag === false || (g.touch && !g.moved)){
+    g.nextStart = g.start; g.nextEnd = g.end; ghost.innerHTML = ''; return;
+  }
+  let start = g.start, end = g.end;
+  if(g.kind === 'create'){ start = Math.min(g.anchor,minute); end = Math.max(start+10,g.anchor,minute); }
+  else if(g.kind.endsWith('-start')){
+    start = Math.max(0,Math.min(end-10,g.start+minute-g.anchor));
+  } else if(g.kind.endsWith('-end')){
+    end = Math.max(start+10,Math.min(TIMELINE_END,g.end+minute-g.anchor));
+  } else {
+    start = Math.max(0,Math.min(TIMELINE_END-(g.end-g.start),g.start+minute-g.anchor)); end = start+(g.end-g.start);
+  }
+  start = Math.min(start,TIMELINE_END-10); end = Math.min(end,TIMELINE_END);
+  g.nextStart = start; g.nextEnd = end;
+  ghost.innerHTML = timelineSegments({startMinute:start,endMinute:end}).map(piece=>`<div class="tl-ghost" style="${timelineSegmentStyle(piece)}"></div>`).join('');
+}
+function cleanupTimelineGesture(){
+  if(!timelineGesture) return;
+  const g = timelineGesture; timelineGesture = null; clearTimeout(g.holdTimer);
+  const canvas = document.getElementById('timelineCanvas');
+  canvas?.removeEventListener('pointermove',moveTimelineGesture); canvas?.removeEventListener('pointerup',finishTimelineGesture);
+  canvas?.removeEventListener('pointercancel',cancelTimelineGesture); canvas?.removeEventListener('lostpointercapture',cancelTimelineGesture);
+  if(canvas?.hasPointerCapture(g.pointerId)) canvas.releasePointerCapture(g.pointerId);
+  document.getElementById('timelineGhost')?.remove();
+  return g;
+}
+function cancelTimelineGesture(ev){
+  if(ev?.pointerId != null && timelineGesture && ev.pointerId !== timelineGesture.pointerId) return;
+  cleanupTimelineGesture();
+}
+function finishTimelineGesture(ev){
+  if(!timelineGesture || ev.pointerId !== timelineGesture.pointerId) return;
+  timelineGesture.clientX = ev.clientX; timelineGesture.clientY = ev.clientY; previewTimelineGesture();
+  const g = cleanupTimelineGesture();
+  if(g.date !== VIEW_DATE || (g.editing != null && g.editing !== timelineAdding)) return;
+  const daily = ensureDailyData(g.date), slot = daily.slots[g.sIdx];
+  if(g.kind === 'create' && !g.moved) return;
+  if(g.canDrag === false){ if(slot && !g.moved) selectTimelineSlot(g.sIdx); return; }
+  if(g.kind === 'card' && !g.moved){ toggleTimelineCardTimer(g.sIdx,g.cIdx); return; }
+  if(g.kind === 'create'){
+    const legacy = timelinePendingSlot?.date === g.date ? daily.slots.find(s=>s.id === timelinePendingSlot.slotId) : null;
+    if(legacy){
+      legacy.startMinute = g.nextStart; legacy.endMinute = g.nextEnd;
+      legacy.cardIds.filter(ref=>!hasTimelineRange(ref)).forEach(ref=>placePlannedCard(legacy,ref));
+      timelineSelection = {date:g.date,slotId:legacy.id};
+    } else createTimelineSlot(g.date,g.nextStart,g.nextEnd);
+    timelinePendingSlot = null;
+  } else {
+    timelineSelection = {date:g.date,slotId:slot.id,cardIndex:g.cIdx};
+    if(g.kind === 'slot') moveTimelineSlot(g.date,g.sIdx,g.nextStart);
+    else if(g.kind === 'slot-end') resizeTimelineSlot(g.date,g.sIdx,g.nextEnd);
+    else if(g.kind === 'slot-start') resizeTimelineSlot(g.date,g.sIdx,g.nextStart,'start');
+    else if(g.kind === 'card-end') resizePlannedCard(g.date,g.sIdx,g.cIdx,g.nextEnd);
+    else if(g.kind === 'card-start') resizePlannedCard(g.date,g.sIdx,g.cIdx,g.nextStart,'start');
+    else Object.assign(slot.cardIds[g.cIdx],{startMinute:g.nextStart,endMinute:g.nextEnd});
+  }
+  saveData(); renderDailySidebar();
+}
+function toggleTimelineCardTimer(sIdx,cIdx){
+  if(timelineAdding) return;
+  const ref = DATA.dailyHistory?.[VIEW_DATE]?.slots?.[sIdx]?.cardIds?.[cIdx];
+  if(!ref) return;
+  const started = toggleTimerFromSidebar(ref.type,ref.id,ref.pid,sIdx,cIdx);
+  if(started && ref.type !== 'adhoc') navigateToCard(ref.type,ref.id,ref.pid,ref.originStr);
+}
+function timelineKey(ev,kind,sIdx,cIdx=-1){
+  if((kind.startsWith('card') && timelineAdding) || (kind.startsWith('slot') && !timelineAdding && !['Enter',' '].includes(ev.key))) return;
+  if(ev.key === 'Enter' || ev.key === ' '){
+    ev.preventDefault(); ev.stopPropagation();
+    if(kind === 'card') toggleTimelineCardTimer(sIdx,cIdx);
+    else selectTimelineSlot(sIdx,cIdx);
+    return;
+  }
+  if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(ev.key)) return;
+  ev.preventDefault(); ev.stopPropagation();
+  const slot = DATA.dailyHistory[VIEW_DATE].slots[sIdx], item = cIdx >= 0 ? slot.cardIds[cIdx] : slot;
+  const delta = ['ArrowUp','ArrowLeft'].includes(ev.key) ? -10 : 10;
+  const edge = kind.endsWith('-start') ? 'start' : kind.endsWith('-end') || ev.shiftKey ? 'end' : null;
+  if(edge){
+    const minute = item[`${edge}Minute`]+delta;
+    if(cIdx >= 0) resizePlannedCard(VIEW_DATE,sIdx,cIdx,minute,edge);
+    else resizeTimelineSlot(VIEW_DATE,sIdx,minute,edge);
+  } else if(cIdx < 0) moveTimelineSlot(VIEW_DATE,sIdx,item.startMinute+delta);
+  else { const duration = item.endMinute-item.startMinute; item.startMinute = Math.max(0,Math.min(TIMELINE_END-duration,item.startMinute+delta)); item.endMinute=item.startMinute+duration; }
+  saveData(); renderDailySidebar();
+  const selector = `.tl-${cIdx >= 0 ? 'plan' : 'slot'}[data-slot="${sIdx}"]${cIdx >= 0 ? `[data-card="${cIdx}"]` : ''}`;
+  document.querySelector(edge ? `${selector} .tl-resize.${edge}` : selector)?.focus();
+}
+function timelineDragOver(ev){
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = timelineAdding ? 'none' : 'move';
+}
+function dropOnTimeline(ev){
+  ev.preventDefault(); ev.stopPropagation();
+  let data; try{ data = JSON.parse(ev.dataTransfer.getData('application/json')); }catch(e){ return; }
+  const minute = Math.min(TIMELINE_END-10,timelineMinuteAt(ev.clientX,ev.clientY));
+  if(timelineAdding) return;
+  const daily = ensureDailyData(VIEW_DATE), target = ev.target.closest('.tl-slot[data-slot]');
+  const index = target ? Number(target.dataset.slot) : daily.slots.findIndex(s=>hasTimelineRange(s) && s.startMinute <= minute && s.endMinute > minute);
+  let slot = daily.slots[index];
+  let ref;
+  if(data.source === 'main' && findCanonicalTimerItem(data.type,data.id,data.pid)){
+    if(slot?.cardIds.some(r=>timerRefMatches(r,data))) return;
+    ref = {type:data.type,id:data.id,pid:data.pid ?? null,originStr:data.originStr || '',time:0,isRunning:false,done:false};
+  } else if(data.source === 'sidebar' && (!data.date || data.date === VIEW_DATE)){
+    const from = daily.slots[data.sIdx], item = from?.cardIds[data.cIdx];
+    if(!item || (from !== slot && slot?.cardIds.some(r=>timerRefMatches(r,item)))) return;
+    ref = from.cardIds.splice(data.cIdx,1)[0];
+  } else return;
+  slot ||= ungroupedTimelineCards(daily);
+  placePlannedCard(slot,ref,minute); slot.cardIds.push(ref);
+  timelineSelection = {date:VIEW_DATE,slotId:slot.id,cardIndex:slot.cardIds.length-1};
+  saveData(); renderDailySidebar();
+}
+document.addEventListener('keydown',ev=>{
+  if(ev.key !== 'Escape') return;
+  closeTimelineMenu();
+  cancelTimelineGesture();
+  if(timelineAdding){ timelineAdding=false; timelinePendingSlot=null; renderDailySidebar(); }
+});
+
 function renderDailySidebar() {
+  if(timelineSubgoalState && !validTimelineSubgoalState()) closeTimelineSubgoals();
+  if(timelineGesture){
+    if(timelineGesture.date === VIEW_DATE && timelineGesture.editing === timelineAdding) return;
+    cancelTimelineGesture();
+  }
   const daily = ensureDailyData(VIEW_DATE);
 
   const navDateDisplay = document.getElementById('navDateDisplay');
@@ -4667,43 +5477,8 @@ function renderDailySidebar() {
     }
   }
 
-  let total=0, done=0;
-  const container = document.getElementById('dailySlots');
-
-  container.innerHTML = (daily.slots||[]).map((slot, sIdx) => `
-    <div class="time-slot"
-      ondragover="allowDrop(event)"
-      ondrop="dropOnSlot(event, '${VIEW_DATE}', ${sIdx})">
-      <div class="flex-between slot-head">
-        <span>${escapeHtml(slot.label)}</span>
-        <div class="slot-head-actions">
-          <span class="slot-drag-handle"
-            draggable="true"
-            title="시간 블록 순서 이동"
-            ondragstart="handleSlotDragStart(event, ${sIdx})"
-            ondragend="handleSlotDragEnd(event)"
-            onpointerdown="event.stopPropagation()"
-            onmousedown="event.stopPropagation()">⋮⋮</span>
-          <button class="btn btn-icon" style="font-size:0.8rem;" title="블록 이름 수정"
-            onpointerdown="event.stopPropagation()"
-            onmousedown="event.stopPropagation()"
-            onclick="editDailySlotLabel('${VIEW_DATE}', ${sIdx}); event.stopPropagation();">✏️</button>
-          <button class="btn btn-icon" style="font-size:0.7rem;" onclick="removeSlot('${VIEW_DATE}', ${sIdx}); event.stopPropagation();">🗑</button>
-        </div>
-      </div>
-      <div class="ts-content" style="min-height:30px;">
-        ${(slot.cardIds||[]).map((ref, cIdx) => renderSidebarCard(ref, VIEW_DATE, sIdx, cIdx)).join('')}
-        <button class="add-btn-small" onclick="openSlotSelector('${VIEW_DATE}', ${sIdx}); event.stopPropagation();">+ 카드 추가</button>
-      </div>
-    </div>`).join('');
-
-  (daily.slots||[]).forEach(s => (s.cardIds||[]).forEach(ref => {
-    const i = getCardInfo(ref);
-    total++;
-    if(i.done) done++;
-  }));
-
-  const pct = (total?Math.round((done/total)*100):0);
+  renderTimeline(daily);
+  const {total,done,pct} = dailyPlanProgress(daily);
   document.getElementById('dailyPct').innerText = pct + '%';
   document.getElementById('dailyProg').style.width = pct + '%';
   document.getElementById('remainCount').innerText = (total - done);
@@ -4972,7 +5747,7 @@ function handleDragStart(ev, type, id, pid) {
 }
 
 function handleSidebarDragStart(ev, sIdx, cIdx) {
-  ev.dataTransfer.setData("application/json", JSON.stringify({ source:'sidebar', sIdx, cIdx }));
+  ev.dataTransfer.setData("application/json", JSON.stringify({ source:'sidebar', date:VIEW_DATE, sIdx, cIdx }));
 }
 
 
@@ -5051,6 +5826,7 @@ function handleReorderDrop(ev, listType, pid, targetIdx, tabId){
 function dropOnCard(ev, date, targetSlotIdx, targetCardIdx){
   ev.preventDefault();
   ev.stopPropagation();
+  if(timelineAdding) return;
 
   const slotEl = ev.currentTarget.closest('.time-slot');
   if(slotEl) slotEl.classList.remove('drag-over');
@@ -5074,9 +5850,13 @@ function dropOnCard(ev, date, targetSlotIdx, targetCardIdx){
     const fromSlot = daily.slots?.[fromSlotIdx];
     const toSlot   = daily.slots?.[targetSlotIdx];
     if(!fromSlot || !toSlot) return;
+    if(data.date && data.date !== date) return;
+    const candidate = fromSlot.cardIds[fromCardIdx];
+    if(fromSlot !== toSlot && candidate && candidate.type !== 'adhoc' && toSlot.cardIds.some(ref=>timerRefMatches(ref,candidate))) return;
 
     const [item] = fromSlot.cardIds.splice(fromCardIdx, 1);
     if(!item) return;
+    if(fromSlot !== toSlot) placePlannedCard(toSlot,item);
 
     let insertIdx = targetCardIdx;
     if(fromSlotIdx === targetSlotIdx && fromCardIdx < targetCardIdx) insertIdx -= 1;
@@ -5103,6 +5883,7 @@ function dropOnCard(ev, date, targetSlotIdx, targetCardIdx){
     // 중복 방지 (adhoc 제외)
     if(ref.type !== 'adhoc' && slot.cardIds.some(x => x.type===ref.type && x.id===ref.id)) return;
 
+    placePlannedCard(slot,ref);
     slot.cardIds.splice(Math.max(0, targetCardIdx), 0, ref);
 
     saveData();
@@ -5112,6 +5893,8 @@ function dropOnCard(ev, date, targetSlotIdx, targetCardIdx){
 
 function dropOnSlot(ev, date, sIdx) {
   ev.preventDefault();
+  ev.stopPropagation();
+  if(timelineAdding) return;
   if(ev.currentTarget && ev.currentTarget.classList) ev.currentTarget.classList.remove('drag-over');
 
   try {
@@ -5211,26 +5994,29 @@ function navigateToCard(type, id, pid, originStr) {
   }
 
   if(type === 'subject') {
-    // Subject cards in timetable should go to Home.
-    location.hash = '#/';
+    location.hash = `#/detail/${id}`;
     return;
   }
 
   if(type === 'detail'){
     const resolvedPid = pid || findDetailPidByCardId(id);
-    if(resolvedPid) location.hash = `#/detail/${resolvedPid}?focus=${id}`;
+    const cardIndex = (DATA.details?.[resolvedPid]?.cards || []).findIndex(card=>card.id===id);
+    if(cardIndex >= 0) onDetailCardClick(null, resolvedPid, cardIndex);
     return;
   }
 
-  if(type === 'theory'){
-    const resolvedPid = pid || findModuleByTab(id);
-    if(resolvedPid) location.hash = `#/module/${resolvedPid}?focus=theory-${resolvedPid}-${id}`;
-    return;
-  }
-
-  if(type === 'question'){
-    const resolvedPid = pid || findModuleByQuestion(id);
-    if(resolvedPid) location.hash = `#/module/${resolvedPid}?focus=${id}`;
+  if(type === 'theory' || type === 'question'){
+    const resolvedPid = pid || (type === 'theory' ? findModuleByTab(id) : findModuleByQuestion(id));
+    const mod = DATA.modules?.[resolvedPid];
+    const tab = (mod?.tabs || []).find(t=>type === 'theory' ? t.id===id : (t.questions || []).some(q=>q.id===id));
+    if(!tab) return;
+    mod.activeTab = tab.id;
+    if(type === 'question') MODULE_QSRC_FILTER[`${resolvedPid}:${tab.id}`] = 'all';
+    saveData();
+    const targetHash = buildCardHash(type, id, resolvedPid);
+    // Manual tab changes leave the URL intact, so a repeated target still needs rendering.
+    if(location.hash === targetHash) renderModule(resolvedPid);
+    else location.hash = targetHash;
     return;
   }
 }
@@ -5351,8 +6137,12 @@ function handleSlotDragEnd(ev){
 
 
 function addToSlot(date, sIdx, ref) {
+  if(timelineAdding) return;
   const slot = DATA.dailyHistory[date].slots[sIdx];
   if(ref.type==='adhoc' || !slot.cardIds.some(x => x.id === ref.id && x.type === ref.type)) {
+    const minute = selectorState?.date === date && selectorState.slotIdx === sIdx ? selectorState.startMinute : undefined;
+    placePlannedCard(slot, ref,minute);
+    if(minute != null) selectorState.startMinute = ref.endMinute;
     slot.cardIds.push(ref);
     saveData(); renderDailySidebar();
   }
@@ -5409,17 +6199,15 @@ function editAdhocTitle(date, sIdx, cIdx) {
 
 function removeDailyCard(ev,d,s,c) {
   ev.stopPropagation();
+  const ref = DATA.dailyHistory[d].slots[s].cardIds[c];
+  if(ref?.type === 'adhoc' && ref.isRunning) tickOneSecond();
   DATA.dailyHistory[d].slots[s].cardIds.splice(c,1);
   saveData();
   renderDailySidebar();
 }
 
 function addDailySlot() {
-  const l=prompt("블록 이름");
-  if(l){
-    ensureDailyData(VIEW_DATE).slots.push({id:uid('slot'), label:l, cardIds:[]});
-    saveData(); renderDailySidebar();
-  }
+  timelineAdding = !timelineAdding; timelinePendingSlot = null; renderDailySidebar();
 }
 function editDailySlotLabel(date, sIdx){
   const slot = DATA.dailyHistory?.[date]?.slots?.[sIdx];
@@ -5428,8 +6216,6 @@ function editDailySlotLabel(date, sIdx){
   const newLabel = prompt('블록 제목을 입력하세요:', slot.label || '');
   if(newLabel === null) return;
   const trimmed = newLabel.trim();
-  if(!trimmed) return;
-
   slot.label = trimmed;
   saveData();
   renderDailySidebar();
@@ -5437,31 +6223,67 @@ function editDailySlotLabel(date, sIdx){
 
 function removeSlot(d,i) {
   if(confirm('삭제?')){
-    DATA.dailyHistory[d].slots.splice(i,1);
+    const daily = DATA.dailyHistory[d], [slot] = daily.slots.splice(i,1);
+    if(slot?.cardIds.length) ungroupedTimelineCards(daily).cardIds.push(...slot.cardIds);
     saveData(); renderDailySidebar();
   }
 }
 function resetDailyToday() {
-  if(confirm(`[${VIEW_DATE}] 계획을 초기화하시겠습니까?`)){
-    delete DATA.dailyHistory[VIEW_DATE];
-    ensureDailyData(VIEW_DATE);
-    saveData(); renderDailySidebar();
+  const date = VIEW_DATE;
+  if(!confirm(`[${date}] 실행시간 기록만 초기화하시겠습니까?\n계획, 시간 블록, 세부목표, 완료 상태와 목표시간은 유지됩니다.`)) return;
+  tickOneSecond();
+  const daily = ensureDailyData(date);
+  daily.totalSeconds = 0;
+  daily.sessions = [];
+  (daily.slots || []).forEach(slot=>(slot.cardIds || []).forEach(ref=>{ ref.time = 0; }));
+  if(date === getLogicalDate()){
+    // Keep running timers active, with no pre-reset fraction in the next session.
+    __lastTimerTickAt = Date.now(); __timerCarryMs = 0;
   }
+  saveData(); renderDailySidebar();
 }
 
-function copyDailyPlan() {
-  const daily = DATA.dailyHistory[VIEW_DATE];
-  if(!daily) { alert("계획이 없습니다."); return; }
-  let txt = `📅 [${VIEW_DATE}] 일일 계획\n\n`;
-  daily.slots.forEach(s => {
-    txt += `■ ${s.label}\n`;
-    (s.cardIds||[]).forEach(c => {
+function buildDailyPlanText(date){
+  const daily = DATA.dailyHistory[date];
+  if(!daily) return null;
+  // Storage ownership is retained when a card moves; export its visible region.
+  const groups = daily.slots.filter(s=>!s.cardOnly).map(slot=>({slot,cards:[]}));
+  const outside = {label:'영역 밖 계획',cards:[]}, unscheduled = {label:'시간 미지정',cards:[]};
+  daily.slots.forEach(owner=>(owner.cardIds || []).forEach(card=>{
+    let target;
+    if(hasTimelineRange(card)){
+      let bestOverlap = 0;
+      groups.forEach(group=>{
+        if(!hasTimelineRange(group.slot)) return;
+        const overlap = Math.min(card.endMinute,group.slot.endMinute)-Math.max(card.startMinute,group.slot.startMinute);
+        if(overlap > bestOverlap){ bestOverlap=overlap; target=group; }
+      });
+      target ||= outside;
+    } else target = groups.find(group=>group.slot === owner) || unscheduled;
+    target.cards.push(card);
+  }));
+  groups.sort((a,b)=>(a.slot.startMinute ?? Infinity)-(b.slot.startMinute ?? Infinity));
+  let txt = `📅 [${date}] 일일 계획\n\n`;
+  [...groups,...[outside,unscheduled].filter(group=>group.cards.length)].forEach(group=>{
+    const label = group.label || timelineSlotLabel(group.slot).trim() || (hasTimelineRange(group.slot) ? timelineRange(group.slot) : '시간 미지정');
+    txt += `■ ${label}\n`;
+    group.cards.sort((a,b)=>(a.startMinute ?? Infinity)-(b.startMinute ?? Infinity)).forEach(c => {
       const info = getCardInfo(c);
-      txt += `  - [${info.done?'v':' '}] ${info.title} (${formatTime(c.time||0)})\n`;
+      const progress = timelinePlanProgress(c);
+      txt += `  - [${progress.done === progress.total?'v':' '}] ${info.title} (${formatTime(c.time||0)})\n`;
+      selectedTimelineSubgoals(c).forEach(target=>{
+        const child = getCardInfo(target);
+        txt += `    - [${child.done?'v':' '}] ${child.title}\n`;
+      });
     });
     txt += `\n`;
   });
   txt += `⏱ Total: ${formatTime(daily.totalSeconds||0)} / Goal: ${daily.goalStr||"00:00:00"}`;
+  return txt;
+}
+function copyDailyPlan() {
+  const txt = buildDailyPlanText(VIEW_DATE);
+  if(txt == null) { alert("계획이 없습니다."); return; }
   navigator.clipboard.writeText(txt).then(() => showToast('클립보드에 복사되었습니다')).catch(()=>{
     // fallback
     const ta = document.createElement('textarea');
@@ -5539,6 +6361,7 @@ function syncDailyTimerRunningState(activeDate = getLogicalDate()){
   Object.entries(DATA.dailyHistory || {}).forEach(([date, daily])=>{
     (daily.slots || []).forEach(slot=>{
       (slot.cardIds || []).forEach(ref=>{
+        if(ref.type === 'adhoc') return;
         if(date !== activeDate){
           ref.isRunning = false;
           return;
@@ -5624,6 +6447,14 @@ function tickOneSecond(){
   });
 
   const parentsToBump = new Map();
+  const countedStartMs = countedEndMs - deltaSeconds * 1000;
+  runningRefs.forEach(ref=>recordTimelineSession(ref,countedStartMs,countedEndMs));
+  const runningAdhoc = Object.values(DATA.dailyHistory || {}).flatMap(d=>(d.slots || []).flatMap(s=>s.cardIds || []))
+    .filter(ref=>ref.type === 'adhoc' && ref.isRunning);
+  runningAdhoc.forEach(ref=>{
+    ref.time = (ref.time || 0) + deltaSeconds;
+    recordTimelineSession(ref,countedStartMs,countedEndMs);
+  });
   if(runningRefs.length){
     runningRefs.forEach(r=>{
       const parents = getParentRefsForRunning(r);
@@ -5636,14 +6467,10 @@ function tickOneSecond(){
 
   dateSegments.forEach(segment=>{
     const daily = ensureDailyData(segment.date);
-    let anyRunningAdhoc = false;
+    const anyRunningAdhoc = runningAdhoc.length > 0;
     (daily.slots || []).forEach(slot=>{
       (slot.cardIds || []).forEach(ref=>{
         if(ref.type === 'adhoc'){
-          if(ref.isRunning){
-            ref.time = (ref.time || 0) + segment.seconds;
-            anyRunningAdhoc = true;
-          }
           return;
         }
         const running = runningRefs.find(item => timerRefMatches(ref, item));
@@ -5674,6 +6501,7 @@ function tickOneSecond(){
 
   updateTimerDOM();
   updateSidebarTimerDOM();
+  updateTimelineExecution();
 
   if(document.getElementById('daily-sidebar')?.classList.contains('open')){
     const dailyView = ensureDailyData(VIEW_DATE);
@@ -5768,6 +6596,7 @@ function toggleTimer(level, pid, idx, tabId){
   }
   if(!target) return;
   target.isRunning = !target.isRunning;
+  __lastTimerTickAt = Date.now(); __timerCarryMs = 0;
   setDailyRefRunning(type, id, refPid, target.isRunning);
   __timerDirty = true;
   persistTimerState(true);
@@ -5783,10 +6612,7 @@ function toggleTimerFromSidebar(type, id, pid, sIdx, cIdx){
   const canonical = type === 'adhoc' ? null : findCanonicalTimerItem(type, id, pid);
   const isRunning = type === 'adhoc' ? !!ref.isRunning : !!canonical?.isRunning;
   const nextRunning = !isRunning;
-  if(nextRunning && VIEW_DATE !== today){
-    alert('타이머는 오늘 계획에서만 시작할 수 있습니다.');
-    return;
-  }
+  // The viewed plan date never changes the clock or the date of execution logs.
   if(type !== 'adhoc' && !canonical){
     ref.isRunning = false;
     alert('연결된 카드를 찾을 수 없습니다. 일일 계획에서 이 항목을 삭제한 뒤 다시 추가해 주세요.');
@@ -5798,9 +6624,11 @@ function toggleTimerFromSidebar(type, id, pid, sIdx, cIdx){
     canonical.isRunning = nextRunning;
     setDailyRefRunning(type, id, pid, nextRunning, today);
   }
+  __lastTimerTickAt = Date.now(); __timerCarryMs = 0;
   __timerDirty = true;
   persistTimerState(true);
   renderWithScrollPreserved();
+  return nextRunning;
 }
 
 function toggleCheck(el, level, pid, idx, tabId){
@@ -6339,6 +7167,11 @@ function purgeDailyRefs(predicate){
     (day.slots||[]).forEach(slot=>{
       if(!Array.isArray(slot.cardIds)) return;
       slot.cardIds = slot.cardIds.filter(ref=>!predicate(ref));
+      slot.cardIds.forEach(ref=>{
+        if(!Array.isArray(ref.progressTargets)) return;
+        ref.progressTargets = ref.progressTargets.filter(target=>!predicate(target));
+        if(!ref.progressTargets.length) delete ref.progressTargets;
+      });
     });
   });
 }
@@ -6780,10 +7613,10 @@ function exportAnki(mid){
 /* =========================
    SELECTOR MODAL
 ========================= */
-function openSlotSelector(date, sIdx) {
+function openSlotSelector(date, sIdx, startMinute) {
   selectorMode = 'add';
   moveState = null;
-  selectorState = { date, slotIdx: sIdx, stack: [{level:'root', id:null, title:'과목 선택'}] };
+  selectorState = { date, slotIdx: sIdx, startMinute, stack: [{level:'root', id:null, title:'과목 선택'}] };
   document.getElementById('selectorModal').style.display = 'flex';
   document.getElementById('adhocInput').value = '';
   renderSelectorUI();
@@ -6966,6 +7799,7 @@ function __updateDailyRefs(pred, mut){
       if(!slot || !Array.isArray(slot.cardIds)) continue;
       for(const ref of slot.cardIds){
         if(ref && pred(ref)) mut(ref);
+        (ref?.progressTargets || []).forEach(target=>{ if(pred(target)) mut(target); });
       }
     }
   }
@@ -7165,7 +7999,7 @@ async function init(){
   const theme = localStorage.getItem(THEME_KEY) || 'light';
   applyTheme(theme);
 
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = readStoredPlannerRaw();
   if(raw){
     try{
       DATA = JSON.parse(raw);
