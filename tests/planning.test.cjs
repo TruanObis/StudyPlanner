@@ -45,12 +45,84 @@ test('schema five migrates stable plan identities without altering plans or exec
     {id:'s',label:'오전',startMinute:300,endMinute:360,cardIds:[{type:'subject',id:'a',startMinute:310,endMinute:330,time:60,progressTargets:[{type:'theory',id:'core',pid:'m'}]}]}],
     sessions:[{id:'run',ref:{type:'subject',id:'a'},startMs:now-60000,endMs:now}]};
     const original=clonePlain(DATA); const migrated=migratePlannerData(DATA);`);
-  assert.equal(a.run('migrated.schemaVersion'),6);
+  assert.equal(a.run('migrated.schemaVersion'),7);
   assert.deepEqual(a.json('migrated.periodGoals'),[]);
   assert.ok(a.run('migrated.dailyHistory[VIEW_DATE].slots[0].cardIds[0].planId'));
   assert.deepEqual(a.json('migrated.dailyHistory[VIEW_DATE].sessions'),a.json('original.dailyHistory[VIEW_DATE].sessions'));
   a.run('delete migrated.dailyHistory[VIEW_DATE].slots[0].cardIds[0].planId');
   assert.deepEqual(a.json('migrated.dailyHistory'),a.json('original.dailyHistory'));
+});
+
+test('monthly allocation creates weekly topic goals and independent daily learning cards',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal({...config,startDate:'2026-10-19',endDate:'2026-10-30',weekdays:[1,2,3,4,5]});
+    const preview=planningBuildAllocation(goal.id); planningApplyAllocation(preview);
+    const children=DATA.periodGoals.filter(g=>g.parentGoalId===goal.id);
+    const plans=Object.keys(DATA.dailyHistory).sort().flatMap(date=>planningPlans(date));`);
+  assert.deepEqual(a.json('plans.map(p=>p.ref.id)'),['core','q1','other','q2','loose']);
+  assert.ok(a.run('plans.every(p=>p.ref.type!=="subject" && !p.ref.progressTargets && p.ref.startMinute===null)'));
+  assert.ok(a.run('children.length>0 && children.every(g=>g.kind==="week" && g.root.type==="detail")'));
+  assert.ok(a.run('plans.every(p=>children.some(g=>g.id===p.ref.goalId && g.startDate<=p.date && g.endDate>=p.date && g.targets.some(r=>planningKey(r)===planningKey(p.ref))))'));
+  assert.ok(a.run('preview.weeks.length>0'));
+  a.run(`VIEW_DATE='2026-10-19'; renderPlanningPage('week');`);
+  const weekly=a.nodes.get('planningContent').innerHTML;
+  assert.match(weekly,/주간 목표/);
+  assert.match(weekly,/동기부여/);
+  assert.doesNotMatch(weekly,/class="planning-badge">월간 목표/);
+  a.run(`renderPlanningPage('month');`);
+  assert.doesNotMatch(a.nodes.get('planningContent').innerHTML,/class="planning-badge">주간 목표/);
+  assert.doesNotThrow(()=>a.run('validateImportedPlannerData(unpackPlannerBackup(buildPlannerBackupEnvelope(DATA)).data)'));
+});
+
+test('schema six expands untimed allocated wrappers without moving plans or rewriting execution',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal(config); DATA.schemaVersion=6;
+    DATA.dailyHistory[VIEW_DATE]={totalSeconds:60,slots:[{id:'s',cardOnly:true,cardIds:[
+      {type:'subject',id:'a',planId:'legacy',goalId:goal.id,startMinute:null,endMinute:null,time:0,progressTargets:goal.targets.slice(0,3)},
+      {type:'subject',id:'a',planId:'timed',goalId:goal.id,startMinute:540,endMinute:600,time:60,progressTargets:goal.targets.slice(3)},
+      {type:'subject',id:'a',planId:'manual',startMinute:null,endMinute:null,time:0}]}],
+      sessions:[{id:'run',ref:{type:'subject',id:'a'},startMs:now-60000,endMs:now}]};
+    const before=clonePlain(DATA); const migrated=migratePlannerData(DATA);
+    const converted=migrated.dailyHistory[VIEW_DATE].slots[0].cardIds;`);
+  assert.equal(a.run('migrated.schemaVersion'),7);
+  assert.deepEqual(a.json('converted.map(r=>r.id)'),['core','q1','other','a','a']);
+  assert.equal(a.run('converted[0].planId'),'legacy');
+  assert.deepEqual(a.json('converted.slice(3)'),a.json('before.dailyHistory[VIEW_DATE].slots[0].cardIds.slice(1)'));
+  assert.deepEqual(a.json('migrated.dailyHistory[VIEW_DATE].sessions'),a.json('before.dailyHistory[VIEW_DATE].sessions'));
+  assert.deepEqual(a.json('migratePlannerData(migrated)'),a.json('migrated'));
+  assert.doesNotThrow(()=>a.run('validateImportedPlannerData(migrated)'));
+});
+
+test('moving a generated daily card across weeks updates its weekly topic goal and deleting the month detaches all plans',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal({...config,endDate:'2026-10-31'});
+    planningApplyAllocation(planningBuildAllocation(goal.id));
+    const plan=planningPlans(VIEW_DATE)[0].ref, old=plan.goalId;
+    planningMovePlan(plan.planId,'2026-10-26',600,630);
+    const child=planningGoal(plan.goalId);`);
+  assert.notEqual(a.run('plan.goalId'),a.run('old'));
+  assert.equal(a.run('child.parentGoalId'),a.run('goal.id'));
+  assert.equal(a.run('child.startDate'),'2026-10-26');
+  assert.ok(a.run('child.targets.some(r=>planningKey(r)===planningKey(plan))'));
+  a.run(`planningDeleteGoal(goal.id);`);
+  assert.equal(a.run('DATA.periodGoals.length'),0);
+  assert.equal(a.run('plan.goalId'),undefined);
+  assert.equal(a.run('planningFindPlan(plan.planId).date'),'2026-10-26');
+});
+
+test('migration preserves generated wrappers whose canonical source timer is running in the imported data',()=>{
+  for(const root of [{type:'subject',id:'a'},{type:'detail',id:'topic',pid:'a'}]){
+    const a=app();
+    a.run(`const goal=planningCreateGoal({...config,root:${JSON.stringify(root)}});
+      DATA.dailyHistory['2026-10-18']={slots:[{id:'s',cardOnly:true,cardIds:[
+        {...goal.scope,planId:'running',goalId:goal.id,startMinute:null,endMinute:null,time:0,isRunning:false,progressTargets:goal.targets}]}],sessions:[]};
+      const imported=clonePlain(DATA); imported.schemaVersion=6;
+      const source=goal.root.type==='subject' ? imported.home.subjects[0] : imported.details.a.cards[0];source.isRunning=true;
+      const migrated=migratePlannerData(imported);`);
+    assert.deepEqual(a.json('migrated.dailyHistory'),a.json('imported.dailyHistory'));
+    assert.deepEqual(a.json('migrated.periodGoals'),a.json('imported.periodGoals'));
+    assert.equal(a.run('migrated.schemaVersion'),7);
+  }
 });
 
 test('period goals retain only unique learning units and survive official backup',()=>{
@@ -111,7 +183,7 @@ test('parent plans without selected subgoals do not block allocating their child
     assert.deepEqual(a.json('preview.skipped'),[]);
     a.run('planningApplyAllocation(preview);');
     assert.deepEqual(a.json('existing'),a.json('before'));
-    assert.equal(a.run("planningPlans('2026-10-18').length"),1);
+    assert.equal(a.run("planningPlans('2026-10-18').length"),2);
     assert.match(a.run("planningDayHTML('2026-10-18')"),/기출2/);
     assert.match(a.run("planningDayHTML('2026-10-18')"),/요약/);
     a.run('const repeated=planningBuildAllocation(goal.id);');
@@ -135,7 +207,7 @@ test('allocation respects remaining weekdays and refuses stale plans without mov
   assert.throws(()=>a.run(`planningBuildAllocation(goal.id,undefined,'2026-10-01','2026-10-02')`),/날짜/);
 });
 
-test('new-card allocation appends to a scheduled plan without moving its time or changing existing targets',()=>{
+test('new-card allocation adds a separate plan without moving existing cards or changing their targets',()=>{
   const a=app();
   assert.equal(a.run('typeof planningCreateGoal'),'function');
   a.run(`const goal=planningCreateGoal({...config,endDate:VIEW_DATE});
@@ -146,7 +218,10 @@ test('new-card allocation appends to a scheduled plan without moving its time or
     const added=planningNewCards(VIEW_DATE,VIEW_DATE)[0].ref;
     planningApplyAllocation(planningBuildAllocation(goal.id,[added]));`);
   assert.deepEqual(a.json('[scheduled.startMinute,scheduled.endMinute]'),[540,600]);
-  assert.equal(a.run('scheduled.progressTargets.length'),6);
+  assert.equal(a.run('planningPlans(VIEW_DATE).length'),6);
+  assert.equal(a.run('scheduled.progressTargets'),undefined);
+  assert.equal(a.run('planningPlans(VIEW_DATE).at(-1).ref.id'),'new-q');
+  assert.equal(a.run('planningNewCards(VIEW_DATE,VIEW_DATE).length'),0);
   assert.deepEqual(a.json('planningNewCards(VIEW_DATE,VIEW_DATE)'),[]);
 });
 
@@ -217,7 +292,7 @@ test('daily details expose assigned subgoals and completion changes the original
   const a=app();
   assert.equal(a.run('typeof renderPlanningPage'),'function');
   a.run(`const goal=planningCreateGoal({...config,endDate:VIEW_DATE}); planningApplyAllocation(planningBuildAllocation(goal.id));
-    location.hash='#/plans/day'; renderPlanningPage('day'); const plan=planningPlans(VIEW_DATE)[0].ref;`);
+    location.hash='#/plans/day'; renderPlanningPage('day'); const plan=planningPlans(VIEW_DATE).find(p=>p.ref.id==='q1').ref;`);
   assert.match(a.nodes.get('planningContent').innerHTML,/핵심이론/);
   assert.match(a.nodes.get('planningContent').innerHTML,/기출1/);
   assert.match(a.nodes.get('planningContent').innerHTML,/시간 미지정/);
@@ -246,9 +321,8 @@ test('detail timer controls do not navigate away and stale completion targets ca
     const plan=planningPlans(VIEW_DATE)[0].ref; location.hash='#/plans/day';
     planningToggleTimer(plan.planId);`);
   assert.equal(a.run('location.hash'),'#/plans/day');
-  assert.equal(a.run('DATA.home.subjects[0].isRunning'),true);
-  a.run(`plan.progressTargets=plan.progressTargets.filter(r=>r.id!=='q1');
-    planningToggleDone(plan.planId,planningKey({type:'question',id:'q1',pid:'m'}),true);`);
+  assert.equal(a.run('DATA.modules.m.tabs[0].isRunning'),true);
+  a.run(`planningToggleDone(plan.planId,planningKey({type:'question',id:'q1',pid:'m'}),true);`);
   assert.equal(a.run('DATA.modules.m.tabs[0].questions[0].done'),false);
 });
 
@@ -310,18 +384,34 @@ test('moving a goal root follows its new scope and preserves allocated targets, 
     plan.startMinute=540;plan.endMinute=600;
     moveState={fromMid:'m',fromTabId:'core'}; selectorMoveTheory('n');`);
   assert.deepEqual(a.json('goal.scope'),{type:'detail',id:'destination',pid:'a'});
-  assert.equal(a.run('plan.id'),'topic');
-  assert.deepEqual(a.json('selectedTimelineSubgoals(plan).map(r=>r.id).sort()'),['core','other','q1']);
+  assert.equal(a.run('plan.id'),'core');
+  assert.equal(a.run('plan.pid'),'n');
+  assert.deepEqual(a.json('planningGoal(plan.goalId).root'),{type:'detail',id:'destination',pid:'a'});
+  assert.deepEqual(a.json('planningPlans(VIEW_DATE).map(p=>p.ref.id).sort()'),['core','other','q1']);
   assert.deepEqual(a.json('[plan.startMinute,plan.endMinute]'),[540,600]);
   a.run(`DATA.modules.n.tabs[0].questions.push({id:'new-n',src:'새 기출'});
     const fresh=planningNewCards(VIEW_DATE,VIEW_DATE).find(r=>r.ref.id==='new-n');
     planningApplyAllocation(planningBuildAllocation(goal.id,[fresh.ref]));`);
-  assert.equal(a.run('planningPlans(VIEW_DATE).length'),1);
-  assert.equal(a.run('selectedTimelineSubgoals(plan).length'),4);
+  assert.equal(a.run('planningPlans(VIEW_DATE).length'),4);
   a.run(`planningApplyCopy(planningCopyPreview(VIEW_DATE,['2026-10-18'],true)); planningDeleteGoal(goal.id);`);
-  assert.equal(a.run('selectedTimelineSubgoals(plan).length'),4);
-  assert.equal(a.run("selectedTimelineSubgoals(planningPlans('2026-10-18')[0].ref).length"),4);
+  assert.equal(a.run('planningPlans(VIEW_DATE).length'),4);
+  assert.equal(a.run("planningPlans('2026-10-18').length"),4);
   assert.doesNotThrow(()=>a.run('validateImportedPlannerData(unpackPlannerBackup(buildPlannerBackupEnvelope(DATA)).data)'));
+});
+
+test('monthly assignments spanning weeks expose topic goals and discover new cards only through their parent',()=>{
+  const a=app();
+  a.run(`DATA.modules.m.tabs[1].questions.push(...Array.from({length:20},(_,i)=>({id:'extra-'+i,src:'문제 '+i})));
+    const goal=planningCreateGoal({...config,startDate:'2026-10-19',endDate:'2026-10-30',weekdays:[1,2,3,4,5]});
+    planningApplyAllocation(planningBuildAllocation(goal.id));
+    const children=DATA.periodGoals.filter(g=>g.parentGoalId===goal.id);
+    DATA.modules.m.tabs[1].questions.push({id:'late',src:'새 문제'});
+    const found=planningNewCards('2026-10-19','2026-10-25');`);
+  assert.deepEqual(a.json('[...new Set(children.map(g=>g.startDate))]'),['2026-10-19','2026-10-26']);
+  assert.deepEqual(a.json('found.map(r=>[r.ref.id,r.goalIds])'),[['late',[a.run('goal.id')]]]);
+  assert.equal(a.run('children.reduce((sum,g)=>sum+g.targets.length,0)'),25);
+  a.run(`const invalid=clonePlain(DATA); invalid.periodGoals.find(g=>g.parentGoalId).parentGoalId='missing';`);
+  assert.throws(()=>a.run('validateImportedPlannerData(invalid)'),/상위 월간 목표/);
 });
 
 test('planning opens alongside the current card page and stays open through source navigation',()=>{

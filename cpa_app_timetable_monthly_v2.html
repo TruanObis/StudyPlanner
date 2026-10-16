@@ -266,13 +266,14 @@
     .tl-next-day { position:absolute; left:0; right:0; background:rgba(99,102,241,.05); pointer-events:none; }
     .tl-slot,.tl-plan { position:absolute; border-radius:6px; touch-action:none; cursor:grab; }
     .tl-slot { border-radius:0; }
-    .tl-slot-shape { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+    .tl-slot-shape,.tl-plan-shape,.tl-actual-shape { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
     .tl-slot-shape polygon { fill:hsl(var(--tl-color) / .05); stroke:hsl(var(--tl-color) / .7); stroke-width:1; stroke-dasharray:3 2; vector-effect:non-scaling-stroke; }
     .tl-slot.selected .tl-slot-shape polygon { stroke-width:2; }
-    .tl-slot-edge { position:absolute; width:9px; }
+    .tl-slot-edge,.tl-plan-edge { position:absolute; width:9px; }
     .tl-slot-label { position:absolute; top:0; left:10px; right:10px; overflow:hidden; white-space:nowrap; font-size:clamp(7px,2cqh,9px); line-height:1; color:var(--text-sub); }
-    .tl-plan { display:flex; align-items:center; gap:3px; padding:0 10px; border:1px solid hsl(var(--tl-color) / .5); color:var(--text);
-      background:hsl(var(--tl-color) / .16); overflow:hidden; font-size:clamp(8px,2.4cqh,11px); line-height:1; }
+    .tl-plan { border-radius:0; color:var(--text); font-size:clamp(8px,2.4cqh,11px); line-height:1; }
+    .tl-plan-shape polygon { fill:hsl(var(--tl-color) / .16); stroke:hsl(var(--tl-color) / .5); stroke-width:1; vector-effect:non-scaling-stroke; }
+    .tl-plan-label { position:absolute; display:flex; align-items:center; gap:3px; padding:0 10px; overflow:hidden; pointer-events:none; }
     .tl-plan strong,.tl-plan small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .tl-plan small { flex-shrink:0; font-size:9px; color:var(--text-sub); }
     .tl-plan-group { display:contents; }
@@ -287,14 +288,16 @@
     .tl-resize::after { content:''; position:absolute; width:2px; height:60%; max-height:12px; background:currentColor; opacity:.6; left:3px; top:50%; transform:translateY(-50%); }
     .tl-plan:focus-visible,.tl-slot:focus-visible,.tl-resize:focus-visible { outline:3px solid var(--accent); }
     #timelineActual { position:absolute; inset:0; pointer-events:none; }
-    .tl-actual { position:absolute; border-radius:4px; background:hsl(var(--tl-color) / .9); color:white;
-      display:flex; align-items:center; padding:0 4px; overflow:hidden; font-size:clamp(7px,2cqh,10px); line-height:1; box-shadow:0 1px 2px #0002; }
+    .tl-actual { position:absolute; color:white; font-size:clamp(7px,2cqh,10px); line-height:1; }
+    .tl-actual-shape polygon { fill:hsl(var(--tl-color) / .9); }
+    .tl-actual-label { position:absolute; display:flex; align-items:center; padding:0 4px; overflow:hidden; }
     .tl-actual span { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .tl-now { position:absolute; width:2px; height:calc(100% / 26); background:var(--danger); pointer-events:none; z-index:6; }
     #timelineGhost { position:absolute; inset:0; pointer-events:none; z-index:8; }
     .tl-ghost { position:absolute; border:2px solid var(--primary); background:rgba(59,130,246,.22); pointer-events:none; font-size:10px; overflow:hidden; }
     .tl-unscheduled { padding:6px 12px; font-size:12px; max-height:120px; overflow:auto; border-bottom:1px solid var(--line); }
     .tl-menu { position:fixed; z-index:2000; min-width:140px; padding:5px; background:var(--card-bg); border:1px solid var(--line); border-radius:8px; box-shadow:0 4px 18px #0002; }
+    #planningCalendarMenu { max-height:calc(100dvh - 8px); overflow-y:auto; }
     .tl-menu button { display:block; width:100%; padding:8px 12px; text-align:left; border:0; border-radius:4px; color:var(--text); background:transparent; cursor:pointer; }
     .tl-menu button:hover,.tl-menu button:focus-visible { background:var(--bg); }
     .tl-menu-colors { border-top:1px solid var(--line); margin-top:4px; padding-top:6px; }
@@ -396,7 +399,7 @@
     .planning-calendar-day.is-selected { box-shadow:inset 0 0 0 1px var(--primary); }
     .planning-calendar-day.drag-over { background:color-mix(in srgb,var(--primary) 12%,var(--card-bg)); box-shadow:inset 0 0 0 2px var(--primary); }
     .planning-date-button { display:block; padding:1px 3px; margin-bottom:5px; border:0; border-radius:4px; background:transparent; color:inherit; font:inherit; font-size:11px; font-weight:700; cursor:pointer; }
-    .planning-calendar-card { display:block; width:100%; min-width:0; border:0; border-left:2px solid var(--primary); border-radius:3px; background:color-mix(in srgb,var(--primary) 9%,var(--card-bg)); color:var(--text); padding:3px; margin:3px 0; font:inherit; font-size:10px; line-height:1.4; text-align:left; overflow-wrap:anywhere; cursor:grab; }
+    .planning-calendar-card { display:block; width:100%; min-width:0; border:0; border-left:2px solid hsl(var(--tl-color)); border-radius:3px; background:color-mix(in srgb,hsl(var(--tl-color)) 9%,var(--card-bg)); color:var(--text); padding:3px; margin:3px 0; font:inherit; font-size:10px; line-height:1.4; text-align:left; overflow-wrap:anywhere; cursor:grab; -webkit-touch-callout:none; user-select:none; }
     .planning-calendar.week .planning-calendar-card { font-size:12px; padding:5px; }
     .planning-calendar-card small { display:block; color:var(--text-sub); font-size:9px; }
     .planning-calendar.month .planning-calendar-card { height:28px; padding:2px; line-height:12px; overflow:hidden; }
@@ -770,6 +773,7 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
 </div>
 
 <aside id="planningPanel" aria-label="계획 상세" hidden><div id="planningContent"></div></aside>
+<div id="planningCalendarMenu" class="tl-menu" role="menu" aria-label="계획 카드 메뉴" hidden></div>
 
 <div id="planningModal" class="modal-overlay" onclick="if(event.target===this) planningCloseModal()" onkeydown="planningModalKeydown(event)">
   <form class="modal planning-dialog" role="dialog" aria-modal="true" aria-labelledby="planningModalTitle" onsubmit="event.preventDefault(); planningSubmitModal()">
@@ -908,10 +912,10 @@ const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
 const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
 const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-10-17-planning-workspace-5';
+const APP_BUILD_ID = '2026-10-17-planning-workspace-6';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
-const PLANNER_SCHEMA_VERSION = 6;
+const PLANNER_SCHEMA_VERSION = 7;
 const PLANNER_BACKUP_FORMAT = 'inmonite-studyplanner-backup';
 const PLANNER_BACKUP_FORMAT_VERSION = 1;
 const OBSIDIAN_EXPORT_FORMAT = 'inmonite-studyplanner-obsidian';
@@ -2626,6 +2630,12 @@ function migratePlannerSchema5To6(data){
   return data;
 }
 
+function migratePlannerSchema6To7(data){
+  planningMigrateAllocations(data);
+  data.schemaVersion = 7;
+  return data;
+}
+
 function migratePlannerData(value){
   if(!isPlainRecord(value)) throw new Error('플래너 데이터 구조가 올바르지 않습니다.');
   let data = clonePlain(value);
@@ -2636,6 +2646,7 @@ function migratePlannerData(value){
     else if(version === 3) data = migratePlannerSchema3To4(data);
     else if(version === 4) data = migratePlannerSchema4To5(data);
     else if(version === 5) data = migratePlannerSchema5To6(data);
+    else if(version === 6) data = migratePlannerSchema6To7(data);
     else throw new Error(`지원하지 않는 플래너 스키마 버전입니다: v${version}`);
     version = readPlannerSchemaVersion(data);
   }
@@ -5008,21 +5019,27 @@ function validatePlanningData(data,checkId,checkUnique){
     }
   });
   checkUnique((data.periodGoals || []).map(g=>g.id),'기간 목표');
+  (data.periodGoals || []).forEach(goal=>{
+    if(goal.parentGoalId===undefined) return;
+    checkId(goal.parentGoalId,'상위 기간 목표');
+    const parent=data.periodGoals.find(g=>g.id===goal.parentGoalId);
+    if(goal.kind!=='week' || parent?.kind!=='month' || parent.parentGoalId!==undefined) throw new Error('주간 목표의 상위 월간 목표가 올바르지 않습니다.');
+  });
   const ids=Object.values(data.dailyHistory || {}).flatMap(d=>(d?.slots || []).flatMap(s=>(s?.cardIds || []).map(r=>r?.planId).filter(Boolean)));
   checkUnique(ids,'일간 계획');
 }
-function planningCatalog(){
+function planningCatalog(data=DATA){
   const entries=[],seen=new Set();
   const add=(ref,label,path,unit,scope)=>{
     if(seen.has(planningKey(ref))) return;
     seen.add(planningKey(ref)); entries.push({ref:planningRef(ref),label,path,unit,scope:planningRef(scope || ref)});
   };
-  (DATA.home.subjects || []).forEach(subject=>{
+  (data.home?.subjects || []).forEach(subject=>{
     const root={type:'subject',id:subject.id},subjectName=subject.name || subject.title || '(과목)';
     add(root,subjectName,'',false,root);
-    (DATA.details?.[subject.id]?.cards || []).forEach(card=>{
+    (data.details?.[subject.id]?.cards || []).forEach(card=>{
       const ref={type:'detail',id:card.id,pid:subject.id},mid=card.module || card.moduleId;
-      const tabs=DATA.modules?.[mid]?.tabs || [],title=card.title || '(단원)';
+      const tabs=data.modules?.[mid]?.tabs || [],title=card.title || '(단원)';
       add(ref,title,subjectName,!tabs.length,ref);
       tabs.forEach(tab=>{
         const path=`${subjectName} / ${title}`;
@@ -5033,12 +5050,63 @@ function planningCatalog(){
   });
   return entries;
 }
-function planningWithin(root){
-  const keys=new Set([planningKey(root),...timelineSubgoalOptions(root).map(planningKey)]);
-  return planningCatalog().filter(item=>keys.has(planningKey(item.ref)));
+function planningWithin(root,data=DATA){
+  const key=planningKey(root),questionIds=new Set(root.type==='theory' ?
+    (data.modules?.[root.pid]?.tabs?.find(t=>t.id===root.id)?.questions || []).map(q=>q.id) : []);
+  return planningCatalog(data).filter(item=>planningKey(item.ref)===key ||
+    (root.type==='subject' && item.scope.pid===root.id) ||
+    (root.type==='detail' && planningKey(item.scope)===key) ||
+    (root.type==='theory' && item.ref.type==='question' && item.ref.pid===root.pid && questionIds.has(item.ref.id)));
 }
 function planningUnits(root){ return planningWithin(root).filter(item=>item.unit).map(item=>item.ref); }
 function planningGoal(id){ return (DATA.periodGoals || []).find(g=>g.id===id); }
+function planningWeeklyGoal(data,parent,date,ref,catalog=planningCatalog(data)){
+  const entry=catalog.find(item=>planningKey(item.ref)===planningKey(ref));
+  if(!entry) return parent;
+  const root=entry.scope,bounds=planningPeriodBounds('week',date);
+  const start=[bounds.start,parent.startDate].sort().at(-1),end=[bounds.end,parent.endDate].sort()[0];
+  let goal=data.periodGoals.find(g=>g.parentGoalId===parent.id && planningKey(g.root)===planningKey(root) &&
+    g.startDate<=date && g.endDate>=date && planningPeriodBounds('week',g.startDate).start===bounds.start);
+  if(!goal){
+    goal={id:uid('goal'),kind:'week',parentGoalId:parent.id,root:planningRef(root),scope:planningRef(root),
+      startDate:start,endDate:end,weekdays:[...parent.weekdays],targets:[],knownRefs:planningWithin(root,data).map(item=>item.ref)};
+    data.periodGoals.push(goal);
+  }
+  goal.targets=planningUnique([...goal.targets,ref]);
+  goal.knownRefs=planningUnique([...goal.knownRefs,ref]);
+  return goal;
+}
+function planningMigrateAllocations(data){
+  if(!Array.isArray(data.periodGoals) || !data.periodGoals.length) return data;
+  const catalog=planningCatalog(data),entries=new Map(catalog.map(item=>[planningKey(item.ref),item]));
+  const sourceRunning=ref=>{
+    if(ref.type==='subject') return data.home?.subjects?.find(s=>s.id===ref.id)?.isRunning;
+    if(ref.type==='detail') return data.details?.[ref.pid]?.cards?.find(c=>c.id===ref.id)?.isRunning;
+    const tabs=data.modules?.[ref.pid]?.tabs || [];
+    return (ref.type==='theory' ? tabs.find(t=>t.id===ref.id) : tabs.flatMap(t=>t.questions || []).find(q=>q.id===ref.id))?.isRunning;
+  };
+  Object.entries(data.dailyHistory || {}).forEach(([date,day])=>{
+    if(!parseYMD(date) || !Array.isArray(day?.slots)) return;
+    day.slots.forEach(slot=>{
+      if(!Array.isArray(slot?.cardIds)) return;
+      slot.cardIds=slot.cardIds.flatMap(ref=>{
+        const goal=data.periodGoals.find(g=>g.id===ref.goalId);
+        // Only generated wrappers with no user timing/recording can be split losslessly.
+        if(!goal || !['week','month'].includes(goal.kind) || ref.startMinute!=null || ref.endMinute!=null ||
+          ref.time || ref.isRunning || sourceRunning(ref) || ref.done || planningKey(ref)!==planningKey(goal.scope) ||
+          !Array.isArray(ref.progressTargets) || !ref.progressTargets.length) return [ref];
+        const targets=planningUnique(ref.progressTargets);
+        if(targets.some(r=>!entries.get(planningKey(r))?.unit)) return [ref];
+        return targets.map((target,index)=>{
+          const owner=goal.kind==='month' && date>=goal.startDate && date<=goal.endDate ? planningWeeklyGoal(data,goal,date,target,catalog) : goal;
+          return {...target,planId:index===0 && ref.planId ? ref.planId : uid('plan'),goalId:owner.id,
+            startMinute:null,endMinute:null,time:0,isRunning:false};
+        });
+      });
+    });
+  });
+  return data;
+}
 function planningCreateGoal(config){
   planningEnsureData(DATA);
   const entry=planningCatalog().find(item=>planningKey(item.ref)===planningKey(config.root));
@@ -5079,7 +5147,7 @@ function planningAssignments(){
 function planningVisibleGoals(start,end){ return (DATA.periodGoals || []).filter(g=>g.startDate<=end && g.endDate>=start); }
 function planningNewCards(start,end){
   const found=new Map(),assigned=planningAssignments();
-  planningVisibleGoals(start,end).forEach(goal=>{
+  planningVisibleGoals(start,end).filter(goal=>!goal.parentGoalId).forEach(goal=>{
     const known=new Set(goal.knownRefs.map(planningKey));
     planningWithin(goal.scope).filter(item=>item.unit && !known.has(planningKey(item.ref))).forEach(item=>{
       const key=planningKey(item.ref);
@@ -5106,7 +5174,7 @@ function planningDates(start,end,weekdays=[0,1,2,3,4,5,6]){
 function planningAllocationStamp(goal){
   const units=planningWithin(goal.scope).map(item=>[planningKey(item.ref),item.unit,getCardInfo(item.ref).done]);
   const plans=Object.keys(DATA.dailyHistory || {}).sort().flatMap(date=>planningPlans(date).map(({ref})=>[date,ref.planId,ref.goalId,ref.startMinute,ref.endMinute,planningKey(ref),(ref.progressTargets || []).map(planningKey)]));
-  return JSON.stringify([goal,units,plans]);
+  return JSON.stringify([goal,(DATA.periodGoals || []).filter(g=>g.parentGoalId===goal.id),units,plans]);
 }
 function planningBuildAllocation(goalId,refs,from,to){
   const goal=planningGoal(goalId); if(!goal) throw new Error('기간 목표를 찾을 수 없습니다.');
@@ -5123,12 +5191,24 @@ function planningBuildAllocation(goalId,refs,from,to){
     if(getCardInfo(ref).done || existing?.length) skipped.push({ref,reason:getCardInfo(ref).done?'완료':'이미 배정',dates:[...new Set((existing || []).map(a=>a.date))]});
     else available.push(ref);
   });
-  const loads=dates.map(date=>planningPlans(date).filter(p=>p.ref.goalId===goal.id).reduce((sum,p)=>sum+timelinePlanProgress(p.ref).total,0));
+  const goalIds=new Set([goal.id,...(DATA.periodGoals || []).filter(g=>g.parentGoalId===goal.id).map(g=>g.id)]);
+  const loads=dates.map(date=>planningPlans(date).filter(p=>goalIds.has(p.ref.goalId)).reduce((sum,p)=>sum+timelinePlanProgress(p.ref).total,0));
   const quota=dates.map(()=>0);
   available.forEach(()=>{ const i=loads.indexOf(Math.min(...loads)); loads[i]++; quota[i]++; });
   let offset=0;
   const entries=dates.map((date,i)=>{const row={date,refs:available.slice(offset,offset+quota[i])};offset+=quota[i];return row;}).filter(e=>e.refs.length);
-  return {goalId,refs:requested,from:start,to:end,entries,skipped,stamp:planningAllocationStamp(goal)};
+  const weeks=[];
+  if(goal.kind==='month'){
+    const catalog=new Map(planningCatalog().map(item=>[planningKey(item.ref),item]));
+    entries.forEach(({date,refs})=>refs.forEach(ref=>{
+      const root=catalog.get(planningKey(ref)).scope,bounds=planningPeriodBounds('week',date);
+      const key=`${bounds.start}:${planningKey(root)}`;
+      let week=weeks.find(w=>w.key===key);
+      if(!week){ week={key,root,startDate:[bounds.start,goal.startDate].sort().at(-1),endDate:[bounds.end,goal.endDate].sort()[0],refs:[]};weeks.push(week); }
+      week.refs.push(ref);
+    }));
+  }
+  return {goalId,refs:requested,from:start,to:end,entries,weeks,skipped,stamp:planningAllocationStamp(goal)};
 }
 function planningApplyAllocation(preview){
   const current=planningBuildAllocation(preview.goalId,preview.refs,preview.from,preview.to);
@@ -5139,14 +5219,11 @@ function planningApplyAllocation(preview){
   let applied=0;
   current.entries.forEach(({date,refs})=>{
     const daily=ensureDailyData(date);
-    let ref=planningPlans(date).find(p=>p.ref.goalId===goal.id)?.ref;
-    if(!ref){
-      ref={...planningRef(goal.scope),planId:uid('plan'),goalId:goal.id,startMinute:null,endMinute:null,time:0,isRunning:false};
-      ungroupedTimelineCards(daily).cardIds.push(ref);
-    }
-    ref.progressTargetsFollowMoves=true;
-    const targets=planningUnique([...(ref.progressTargets || []),...refs]).filter(r=>planningKey(r)!==planningKey(ref));
-    if(targets.length) ref.progressTargets=targets;
+    refs.forEach(target=>{
+      const owner=goal.kind==='month' ? planningWeeklyGoal(DATA,goal,date,target) : goal;
+      ungroupedTimelineCards(daily).cardIds.push({...planningRef(target),planId:uid('plan'),goalId:owner.id,
+        startMinute:null,endMinute:null,time:0,isRunning:false});
+    });
     applied+=refs.length;
   });
   saveData(); return {applied,stale:false};
@@ -5164,12 +5241,20 @@ function planningMovePlan(id,date,start,end){
   }
   item.ref.startMinute=start ?? null; item.ref.endMinute=end ?? null;
   const goal=planningGoal(item.ref.goalId);
-  if(goal && (date<goal.startDate || date>goal.endDate)) delete item.ref.goalId;
+  const parent=goal?.parentGoalId ? planningGoal(goal.parentGoalId) : null;
+  if(parent && date>=parent.startDate && date<=parent.endDate){
+    item.ref.goalId=planningWeeklyGoal(DATA,parent,date,item.ref).id;
+    if(goal.id!==item.ref.goalId){
+      const stillAssigned=Object.keys(DATA.dailyHistory || {}).some(day=>planningPlans(day).some(p=>p.ref.goalId===goal.id && planningKey(p.ref)===planningKey(item.ref)));
+      if(!stillAssigned) goal.targets=goal.targets.filter(r=>planningKey(r)!==planningKey(item.ref));
+    }
+  } else if(goal && (date<goal.startDate || date>goal.endDate)) delete item.ref.goalId;
   saveData(); return item.ref;
 }
 function planningDeleteGoal(id){
-  DATA.periodGoals=(DATA.periodGoals || []).filter(g=>g.id!==id);
-  Object.keys(DATA.dailyHistory || {}).forEach(date=>planningPlans(date).forEach(({ref})=>{if(ref.goalId===id) delete ref.goalId;}));
+  const removed=new Set([id,...(DATA.periodGoals || []).filter(g=>g.parentGoalId===id).map(g=>g.id)]);
+  DATA.periodGoals=(DATA.periodGoals || []).filter(g=>!removed.has(g.id));
+  Object.keys(DATA.dailyHistory || {}).forEach(date=>planningPlans(date).forEach(({ref})=>{if(removed.has(ref.goalId)) delete ref.goalId;}));
   saveData();
 }
 function planningCopyContent(date){
@@ -5252,6 +5337,7 @@ function openPlanningPage(){
   planningActiveView='day'; renderDailySidebar(); renderPlanningPage('day');
 }
 function closePlanningPage(){
+  cancelPlanningCalendarHold();closeTimelineMenu();
   planningActiveView=null;
   planningCloseModal(); document.body.classList.remove('planning-page-active');
   document.getElementById('planningPanel').hidden=true;
@@ -5339,8 +5425,10 @@ function planningCalendarHTML(view,bounds){
     return `<div class="planning-calendar-day${outside?' outside':''}${date===getLogicalDate()?' is-today':''}${date===VIEW_DATE?' is-selected':''}" data-plan-date="${date}"
       ondragover="planningDropOver(event)" ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('drag-over')" ondrop="planningCalendarDrop(event,'${date}')">
       <button type="button" class="planning-date-button" aria-label="${date} 일간 계획" onclick="${planningCall('planningSetDate',[date,'day'])}">${view==='week'?`${date.slice(5)} ${weekday}`:Number(date.slice(8))}</button>
-      ${(view==='month'?rows.slice(0,2):rows).map(({ref})=>{const progress=timelinePlanProgress(ref);return `<button type="button" class="planning-calendar-card${progress.done===progress.total?' done':''}" draggable="${!timelineAdding}" aria-label="${escapeHtml(getCardInfo(ref).title)} ${date} 계획 편집"
-        ondragstart="${planningCall('planningDragCalendar',[],`event,${JSON.stringify(ref.planId)}`)}" onclick="${planningCall('planningOpenEdit',[ref.planId])}"><span>${escapeHtml(getCardInfo(ref).title)}</span>${hasTimelineRange(ref)?`<small>${timelineRange(ref)}</small>`:''}</button>`;}).join('')}
+      ${(view==='month'?rows.slice(0,2):rows).map(({ref})=>{const progress=timelinePlanProgress(ref);return `<button type="button" class="planning-calendar-card${progress.done===progress.total?' done':''}" style="--tl-color:${timelineColor(ref)}" draggable="${!timelineAdding}" aria-label="${escapeHtml(getCardInfo(ref).title)} ${date} 계획 편집" aria-haspopup="menu"
+        ondragstart="${planningCall('planningDragCalendar',[],`event,${JSON.stringify(ref.planId)}`)}" ondragend="finishPlanningCalendarPointer(event)"
+        onpointerdown="${planningCall('startPlanningCalendarHold',[],`event,${JSON.stringify(ref.planId)}`)}" oncontextmenu="${planningCall('planningOpenCalendarMenu',[],`event,${JSON.stringify(ref.planId)}`)}"
+        onkeydown="${planningCall('planningCalendarKey',[],`event,${JSON.stringify(ref.planId)}`)}" onclick="${planningCall('planningCalendarClick',[],`event,${JSON.stringify(ref.planId)}`)}"><span>${escapeHtml(getCardInfo(ref).title)}</span>${hasTimelineRange(ref)?`<small>${timelineRange(ref)}</small>`:''}</button>`;}).join('')}
       ${view==='month'&&rows.length>2?`<button class="planning-calendar-more" onclick="${planningCall('planningSetDate',[date,'day'])}">+${rows.length-2}</button>`:''}
       </div>`;
   }).join('')}</div>`;
@@ -5378,10 +5466,63 @@ function planningCalendarDrop(ev,date){
   }catch(error){planningRefresh(error.message);}
 }
 function planningDragCalendar(ev,id){
+  cancelPlanningCalendarHold();
+  if(planningCalendarClickBlock?.id===id && Date.now()<planningCalendarClickBlock.until){ev.preventDefault();return;}
   const item=planningFindPlan(id);if(!item||timelineAdding){ev.preventDefault();return;}
+  planningCalendarClickBlock={id,until:Infinity,pointerId:ev.pointerId};
   ev.stopPropagation();ev.dataTransfer.effectAllowed='move';
   ev.dataTransfer.setData('application/json',JSON.stringify({source:'planning',planId:id,date:item.date}));
 }
+let planningCalendarHold=null,planningCalendarClickBlock=null;
+function cancelPlanningCalendarHold(){
+  if(planningCalendarHold) clearTimeout(planningCalendarHold.timer);
+  planningCalendarHold=null;
+}
+function planningOpenCalendarMenu(ev,id,fromTouch=false){
+  if(!fromTouch && ev.pointerType==='touch'){ev.preventDefault();ev.stopPropagation();return;}
+  cancelPlanningCalendarHold();
+  openTimelineMenu(ev,-1,-1,fromTouch,id);
+}
+function startPlanningCalendarHold(ev,id){
+  cancelPlanningCalendarHold();
+  if(ev.isPrimary===false || ev.button!==0 || !['touch','pen'].includes(ev.pointerType) || timelineAdding) return;
+  const item=planningFindPlan(id);if(!item)return;
+  const hold=planningCalendarHold={id,date:VIEW_DATE,view:planningView(),target:ev.currentTarget,pointerId:ev.pointerId,x:ev.clientX,y:ev.clientY};
+  hold.timer=setTimeout(()=>{
+    if(planningCalendarHold!==hold)return;
+    if(hold.date!==VIEW_DATE || hold.view!==planningView() || timelineAdding || hold.target.isConnected===false){cancelPlanningCalendarHold();return;}
+    planningCalendarClickBlock={id,until:Infinity,pointerId:hold.pointerId};
+    timelineTouchMenuUntil=Date.now()+800;
+    planningOpenCalendarMenu({clientX:hold.x,clientY:hold.y,preventDefault(){},stopPropagation(){}},id,true);
+  },500);
+}
+function finishPlanningCalendarPointer(ev){
+  if(planningCalendarHold && (ev.pointerId==null || ev.pointerId===planningCalendarHold.pointerId)) cancelPlanningCalendarHold();
+  if(planningCalendarClickBlock && (ev.pointerId==null || ev.pointerId===planningCalendarClickBlock.pointerId)){
+    planningCalendarClickBlock.until=Date.now()+800;
+    timelineTouchMenuUntil=Date.now()+800;
+  }
+}
+function planningCalendarClick(ev,id){
+  if(planningCalendarClickBlock?.id===id && Date.now()<planningCalendarClickBlock.until){ev.preventDefault();ev.stopPropagation();return;}
+  planningOpenEdit(id);
+}
+function planningCalendarKey(ev,id){
+  if(ev.key!=='ContextMenu' && !(ev.key==='F10' && ev.shiftKey))return;
+  ev.preventDefault();ev.stopPropagation();
+  const rect=ev.currentTarget.getBoundingClientRect();
+  planningOpenCalendarMenu({clientX:rect.left,clientY:rect.bottom,preventDefault(){},stopPropagation(){}},id);
+}
+document.addEventListener('pointerdown',ev=>{
+  if(planningCalendarClickBlock?.until!==Infinity) planningCalendarClickBlock=null;
+  if(planningCalendarHold && (ev.isPrimary===false || ev.pointerId!==planningCalendarHold.pointerId)) cancelPlanningCalendarHold();
+},true);
+document.addEventListener('pointermove',ev=>{
+  const hold=planningCalendarHold;
+  if(hold && ev.pointerId===hold.pointerId && Math.hypot(ev.clientX-hold.x,ev.clientY-hold.y)>8) cancelPlanningCalendarHold();
+},true);
+document.addEventListener('pointerup',finishPlanningCalendarPointer,true);
+document.addEventListener('pointercancel',finishPlanningCalendarPointer,true);
 function planningAssignPeriodGoal(view,data){
   if(!['week','month'].includes(view)||!data||timelineAdding) return null;
   let ref;
@@ -5412,13 +5553,13 @@ function planningDropGoal(ev,view){
   }catch(error){planningRefresh(error.message);}
 }
 function planningPeriodHTML(view,bounds){
-  const goals=planningVisibleGoals(bounds.start,bounds.end),catalog=planningCatalog(),keys=new Set(catalog.map(e=>planningKey(e.ref)));
+  const goals=planningVisibleGoals(bounds.start,bounds.end).filter(g=>g.kind===view),catalog=planningCatalog(),keys=new Set(catalog.map(e=>planningKey(e.ref)));
   planningNewRows=planningNewCards(bounds.start,bounds.end);
   const goalHTML=goals.map(goal=>{
     const targets=goal.targets.filter(r=>keys.has(planningKey(r))),done=targets.filter(r=>getCardInfo(r).done).length;
     return `<article class="planning-item"><div class="planning-item-head"><div><span class="planning-badge">${goal.kind==='week'?'주간 목표':'월간 목표'}</span>
       <button type="button" class="planning-title" onclick="${planningCall('planningOpenSource',[goal.root])}">${escapeHtml(getCardInfo(goal.root).title)}</button>
-      <div class="planning-muted">${goal.startDate} – ${goal.endDate} · ${done} / ${targets.length} 완료</div></div>
+      <div class="planning-muted">${goal.startDate} – ${goal.endDate} · ${done} / ${targets.length} 완료${goal.parentGoalId?` · ${escapeHtml(getCardInfo(planningGoal(goal.parentGoalId)?.root || goal.root).title)} 월간 목표`:''}</div></div>
       <div class="planning-actions">${planningButton('배분','planningOpenAllocation',[goal.id],true)}${planningButton('편집','planningOpenGoal',[goal.id])}${planningButton('삭제','planningRemoveGoal',[goal.id])}</div></div></article>`;
   }).join('');
   const newHTML=planningNewRows.length ? `<div class="planning-new"><div>${planningNewRows.map((row,index)=>`<label class="planning-check"><input type="checkbox" class="planning-new-check" value="${index}"><span><strong>${escapeHtml(row.label)}</strong><span class="planning-muted">${escapeHtml(row.path)}<br>${row.goalIds.map(id=>escapeHtml(getCardInfo(planningGoal(id).root).title)).join(' · ')}${getCardInfo(row.ref).done?' · 완료':''}${row.assignedDates.length?` · 배정: ${row.assignedDates.join(', ')}`:''}</span></span></label>`).join('')}</div>
@@ -5558,7 +5699,9 @@ function planningChangeAllocationGoal(id){
   state.goalId=id;document.getElementById('planningFrom').value=[goal.startDate,getLogicalDate()].sort().at(-1);document.getElementById('planningTo').value=goal.endDate;planningPreviewAllocation();
 }
 function planningRenderAllocation(preview){
-  document.getElementById('planningAllocationPreview').innerHTML=preview.entries.map(row=>`<div class="planning-preview-row"><strong>${row.date} · ${row.refs.length}개</strong><div class="planning-muted">${row.refs.map(ref=>escapeHtml(planningLabel(ref))).join('<br>')}</div></div>`).join('') || '<p class="planning-muted">추가로 배분할 항목이 없습니다.</p>';
+  const weeks=(preview.weeks || []).map(week=>`<div class="planning-preview-row"><strong>${week.startDate} – ${week.endDate} · ${escapeHtml(getCardInfo(week.root).title)}</strong><div class="planning-muted">주간 목표 · 세부 카드 ${week.refs.length}개</div></div>`).join('');
+  const days=preview.entries.map(row=>`<div class="planning-preview-row"><strong>${row.date} · ${row.refs.length}개</strong><div class="planning-muted">${row.refs.map(ref=>escapeHtml(planningLabel(ref))).join('<br>')}</div></div>`).join('');
+  document.getElementById('planningAllocationPreview').innerHTML=(weeks?`<h3>주별 단원 목표</h3>${weeks}<h3>날짜별 세부 카드</h3>`:'')+days || '<p class="planning-muted">추가로 배분할 항목이 없습니다.</p>';
   if(preview.skipped.length) document.getElementById('planningAllocationPreview').innerHTML+=`<p class="planning-muted">${preview.skipped.length}개 제외: ${preview.skipped.map(row=>`${escapeHtml(planningLabel(row.ref))} (${row.reason}${row.dates.length?' · '+row.dates.join(', '):''})`).join('<br>')}</p>`;
 }
 function planningPreviewAllocation(){
@@ -5937,6 +6080,49 @@ function timelineSlotShape(slot){
     : [[start,0],[100,0],[100,(rows-1)*100/rows],[end,(rows-1)*100/rows],[end,100],[0,100],[0,100/rows],[start,100/rows]];
   return {firstHour,rows,start,end,points};
 }
+function timelinePlanShape(ref,inset=0){
+  const shape = timelineSlotShape(ref), lanes = ref.lanes || 1, lane = ref.lane || 0;
+  const rowHeight = 100/shape.rows, height = rowHeight/lanes, padding = height*Math.min(lanes > 1 ? Math.max(2,inset) : inset,12)/48;
+  const bands = timelineSegments(ref).map((piece,index)=>({
+    left:piece.left,right:(piece.endMinute-piece.hour*60)/60*100,width:piece.width,
+    top:index*rowHeight+lane*height+padding,bottom:index*rowHeight+(lane+1)*height-padding,height:height-padding*2
+  }));
+  let points = shape.points.map(([x,y])=>[x,y === 0 ? padding : y === 100 ? 100-padding : y]);
+  const disjointEnds = shape.rows === 2 && shape.start >= shape.end;
+  if(lanes === 1 && !padding && disjointEnds){
+    // Overlap both bands with a thin filled bridge at their shared hour boundary.
+    const width = Math.min(.8,bands[0].width,bands[1].width), half = rowHeight/48;
+    const right = Math.min(100,shape.start+width), left = Math.max(0,shape.end-width);
+    points = [[shape.start,0],[100,0],[100,rowHeight],[right,rowHeight],[right,rowHeight+half],
+      [shape.end,rowHeight+half],[shape.end,100],[0,100],[0,rowHeight],[left,rowHeight],
+      [left,rowHeight-half],[shape.start,rowHeight-half]];
+  } else if(lanes > 1 || disjointEnds){
+    // Narrow connectors join the hourly lane bands without covering the other lanes.
+    const joins = bands.slice(0,-1).map((band,index)=>{
+      const next = bands[index+1], left = Math.max(band.left,next.left), right = Math.min(band.right,next.right);
+      if(right > left){
+        const width = Math.min(.8,right-left), end = band.right === 100 && next.right === 100 ? right : left+width;
+        return {right:[[end,band.bottom],[end,next.top]],left:[[end-width,next.top],[end-width,band.bottom]]};
+      }
+      const middle = (band.bottom+next.top)/2, half = Math.min((next.top-band.bottom)/6,rowHeight/48);
+      const width = Math.min(.8,band.width,next.width);
+      return {right:[[band.left+width,band.bottom],[band.left+width,middle+half],[next.right,middle+half],[next.right,next.top]],
+        left:[[next.right-width,next.top],[next.right-width,middle-half],[band.left,middle-half],[band.left,band.bottom]]};
+    });
+    points = [[bands[0].left,bands[0].top]];
+    bands.forEach((band,index)=>{
+      points.push([band.right,band.top],[band.right,band.bottom]);
+      if(joins[index]) points.push(...joins[index].right);
+    });
+    points.push([bands[bands.length-1].left,bands[bands.length-1].bottom]);
+    for(let index=bands.length-1;index>=0;index--){
+      points.push([bands[index].left,bands[index].top]);
+      if(index > 0) points.push(...joins[index-1].left,[bands[index-1].left,bands[index-1].bottom]);
+    }
+  }
+  const label = bands.reduce((widest,band)=>band.width > widest.width ? band : widest,bands[0]);
+  return {...shape,points,first:bands[0],last:bands[bands.length-1],label};
+}
 function timelineMinuteAt(clientX,clientY){
   const canvas = document.getElementById('timelineCanvas');
   const rect = canvas.getBoundingClientRect();
@@ -5972,15 +6158,17 @@ function renderTimeline(daily){
   const cards = timelineLanes(daily.slots.flatMap((slot,sIdx)=>slot.cardIds.map((ref,index)=>({...ref,index,sIdx}))).filter(hasTimelineRange));
   const cardHtml = cards.map(ref=>{
       const info = getCardInfo(ref);
-      const cardPieces = timelineSegments(ref);
+      const shape = timelinePlanShape(ref);
       const touchSelected = timelineTouchSelection?.date === VIEW_DATE && timelineTouchSelection.slotId === daily.slots[ref.sIdx].id && timelineTouchSelection.cardIndex === ref.index;
-      return `<div class="tl-plan-group ${touchSelected ? 'touch-selected' : ''}" data-slot="${ref.sIdx}" data-card="${ref.index}">${cardPieces.map((piece,pieceIndex)=>`<div class="tl-plan" data-slot="${ref.sIdx}" data-card="${ref.index}" role="button" tabindex="${timelineAdding ? '-1' : '0'}" aria-disabled="${timelineAdding}"
+      return `<div class="tl-plan-group ${touchSelected ? 'touch-selected' : ''}" data-slot="${ref.sIdx}" data-card="${ref.index}"><div class="tl-plan" data-slot="${ref.sIdx}" data-card="${ref.index}" role="button" tabindex="${timelineAdding ? '-1' : '0'}" aria-disabled="${timelineAdding}"
         aria-pressed="${!!info.isRunning}" aria-label="계획 ${escapeHtml(info.title)} ${timelineRange(ref)}. 클릭하여 기록 ${info.isRunning ? '정지' : '시작'}, 방향키로 이동, Shift와 방향키로 길이 변경"
-        style="--tl-color:${timelineColor(ref)};${timelineSegmentStyle(piece,ref.lane,ref.lanes,2)}"
+        style="--tl-color:${timelineColor(ref)};top:${shape.firstHour*100/26}%;height:${shape.rows*100/26}%;left:0;width:100%;clip-path:polygon(${shape.points.map(([x,y])=>`${x}% ${y}%`).join(',')})"
         onpointerdown="startTimelineGesture(event,'card',${ref.sIdx},${ref.index})" onkeydown="timelineKey(event,'card',${ref.sIdx},${ref.index})" oncontextmenu="openTimelineMenu(event,${ref.sIdx},${ref.index})">
-        <strong>${escapeHtml(info.title)}</strong><small>${info.isRunning ? '● ' : ''}${ref.endMinute-ref.startMinute}분</small>
-        ${timelineAdding ? '' : timelineHandles('card',ref.sIdx,ref.index,`${info.title} 계획`,pieceIndex===0,pieceIndex===cardPieces.length-1)}
-      </div>`).join('')}</div>`;
+        <svg class="tl-plan-shape" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon points="${shape.points.map(p=>p.join(',')).join(' ')}"/></svg>
+        <div class="tl-plan-label" style="left:${shape.label.left}%;top:${shape.label.top}%;width:${shape.label.width}%;height:${shape.label.height}%"><strong>${escapeHtml(info.title)}</strong><small>${info.isRunning ? '● ' : ''}${ref.endMinute-ref.startMinute}분</small></div>
+        ${timelineAdding ? '' : `<div class="tl-plan-edge" style="left:${shape.first.left}%;top:${shape.first.top}%;height:${shape.first.height}%">${timelineHandles('card',ref.sIdx,ref.index,`${info.title} 계획`,true,false)}</div>
+          <div class="tl-plan-edge" style="right:${100-shape.last.right}%;top:${shape.last.top}%;height:${shape.last.height}%">${timelineHandles('card',ref.sIdx,ref.index,`${info.title} 계획`,false,true)}</div>`}
+      </div></div>`;
   }).join('');
   const unscheduled = daily.slots.map((slot,index)=>({slot,index})).filter(({slot})=>(!slot.cardOnly && !hasTimelineRange(slot)) || slot.cardIds.some(ref=>!hasTimelineRange(ref)));
   container.innerHTML = `${unscheduled.length ? `<details class="tl-unscheduled"><summary>시간 미지정 ${unscheduled.length}개</summary>${unscheduled.map(({slot,index})=>`<div><span oncontextmenu="openTimelineMenu(event,${index})">${escapeHtml(slot.label || '시간 미지정')}</span> <button class="btn btn-outline" ${timelineAdding ? '' : 'disabled'} onclick="scheduleLegacySlot(${index})">시간표에 배치</button>
@@ -6001,9 +6189,20 @@ function renderTimeline(daily){
 function updateTimelineExecution(){
   const layer = document.getElementById('timelineActual');
   if(!layer || !DATA || !VIEW_DATE) return;
-  layer.innerHTML = timelineLanes(getTimelineSessions(VIEW_DATE)).flatMap(s=>timelineSegments(s).map(piece=>`<div class="tl-actual" role="img"
-    aria-label="실행 ${escapeHtml(s.ref.title)} ${timelineRange(s)}" style="--tl-color:${timelineColor(s.ref)};${timelineSegmentStyle(piece,s.lane,s.lanes,7)};min-width:2px">
-    <span>${escapeHtml(s.ref.title)}</span></div>`)).join('');
+  const sessions = [];
+  getTimelineSessions(VIEW_DATE).sort((a,b)=>a.startMs-b.startMs).forEach(session=>{
+    const previous = sessions.findLast(item=>timerRefMatches(item.ref,session.ref));
+    if(previous && previous.endMs === session.startMs){
+      previous.endMs = session.endMs; previous.endMinute = session.endMinute;
+    } else sessions.push(session);
+  });
+  layer.innerHTML = timelineLanes(sessions).map(s=>{
+    const shape = timelinePlanShape(s,7);
+    return `<div class="tl-actual" role="img" aria-label="실행 ${escapeHtml(s.ref.title)} ${timelineRange(s)}"
+      style="--tl-color:${timelineColor(s.ref)};top:${shape.firstHour*100/26}%;height:${shape.rows*100/26}%;left:0;width:100%;clip-path:polygon(${shape.points.map(([x,y])=>`${x}% ${y}%`).join(',')})">
+      <svg class="tl-actual-shape" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon points="${shape.points.map(p=>p.join(',')).join(' ')}"/></svg>
+      <div class="tl-actual-label" style="left:${shape.label.left}%;top:${shape.label.top}%;width:${shape.label.width}%;height:${shape.label.height}%"><span>${escapeHtml(s.ref.title)}</span></div></div>`;
+  }).join('');
   const now = document.getElementById('timelineNow');
   if(now){
     const minute = (Date.now() - (ymdToUtcDayMs(VIEW_DATE) - KST_OFFSET_MS))/60000;
@@ -6014,27 +6213,43 @@ function updateTimelineExecution(){
 }
 let timelinePendingSlot = null;
 let timelineMenuState = null;
+function currentTimelineMenu(){
+  return document.getElementById(timelineMenuState?.planId?'planningCalendarMenu':'timelineMenu');
+}
 function closeTimelineMenu(){
-  const menu = document.getElementById('timelineMenu');
+  const menu = currentTimelineMenu();
   if(menu) menu.hidden = true;
   timelineMenuState = null;
 }
 function positionTimelineMenu(){
-  const menu = document.getElementById('timelineMenu'), state = timelineMenuState;
+  const menu = currentTimelineMenu(), state = timelineMenuState;
   if(!menu || !state) return;
   menu.style.left = `${Math.max(4,Math.min(state.clientX,window.innerWidth-menu.offsetWidth-4))}px`;
   menu.style.top = `${Math.max(4,Math.min(state.clientY,window.innerHeight-menu.offsetHeight-4))}px`;
 }
-function openTimelineMenu(ev,sIdx=-1,cIdx=-1,fromTouch=false){
+function resolveTimelineMenuState(state=timelineMenuState){
+  if(!state || state.editing!==timelineAdding) return null;
+  if(state.planId){
+    if(timelineAdding || state.viewDate!==VIEW_DATE) return null;
+    const item=planningFindPlan(state.planId);
+    return item ? {...state,date:item.date,sIdx:item.sIdx,cIdx:item.cIdx} : null;
+  }
+  return state.date===VIEW_DATE ? state : null;
+}
+function openTimelineMenu(ev,sIdx=-1,cIdx=-1,fromTouch=false,planId=null){
   ev.preventDefault(); ev.stopPropagation();
   if(!fromTouch && (ev.pointerType === 'touch' || timelineGesture?.touch || Date.now() < timelineTouchMenuUntil)) return;
   if(timelineGesture || (timelineAdding && (sIdx < 0 || cIdx >= 0))) return;
-  const slot = DATA.dailyHistory?.[VIEW_DATE]?.slots?.[sIdx], ref = slot?.cardIds[cIdx];
-  timelineMenuState = {date:VIEW_DATE,sIdx,cIdx,minute:Math.min(TIMELINE_END-10,timelineMinuteAt(ev.clientX,ev.clientY)),editing:timelineAdding,clientX:ev.clientX,clientY:ev.clientY};
+  const item=planId ? planningFindPlan(planId) : null;
+  if(planId && !item) return;
+  closeTimelineMenu();
+  if(item){sIdx=item.sIdx;cIdx=item.cIdx;}
+  const date=item?.date || VIEW_DATE,slot = DATA.dailyHistory?.[date]?.slots?.[sIdx], ref = slot?.cardIds[cIdx];
+  timelineMenuState = {date,sIdx,cIdx,minute:item?null:Math.min(TIMELINE_END-10,timelineMinuteAt(ev.clientX,ev.clientY)),editing:timelineAdding,clientX:ev.clientX,clientY:ev.clientY,...(item?{planId,viewDate:VIEW_DATE}:{})};
   const actions = timelineAdding ? [['rename',timelineSlotLabel(slot) ? '이름 변경' : '이름 설정'],['delete','블록 삭제']] : ref
-    ? [...(ref.type === 'adhoc' ? [['done',ref.done ? '미완료로 표시' : '완료로 표시'],['rename','이름 변경']] : []),...(timelineSubgoalOptions(ref).length || ref.progressTargets?.length ? [['subgoals','세부목표 설정']] : []),['delete','계획에서 제거']]
+    ? [...(item ? [['edit','날짜·시간'],['timer',getCardInfo(ref).isRunning?'기록 정지':'기록 시작'],...(ref.type==='adhoc'?[]:[['source','원본 카드 열기']])] : []),...(ref.type === 'adhoc' ? [['done',ref.done ? '미완료로 표시' : '완료로 표시'],['rename','이름 변경']] : []),...(timelineSubgoalOptions(ref).length || ref.progressTargets?.length ? [['subgoals','세부목표 설정']] : []),['delete','계획에서 제거']]
     : [['add','카드 추가']];
-  const menu = document.getElementById('timelineMenu');
+  const menu = currentTimelineMenu();
   menu.innerHTML = actions.map(([action,label])=>`<button role="menuitem" onclick="timelineMenuAction('${action}')">${label}</button>`).join('');
   if(ref || (timelineAdding && slot)){
     const selectedHue = ref ? DATA.timelineColors?.[timelineColorKey(ref)] : slot.colorHue;
@@ -6045,8 +6260,8 @@ function openTimelineMenu(ev,sIdx=-1,cIdx=-1,fromTouch=false){
   positionTimelineMenu();
 }
 function setTimelineMenuColor(hue){
-  const state = timelineMenuState; closeTimelineMenu();
-  if(!state || state.date !== VIEW_DATE || state.editing !== timelineAdding || (hue !== null && !isTimelineHue(hue))) return;
+  const state = resolveTimelineMenuState(); closeTimelineMenu();
+  if(!state || (hue !== null && !isTimelineHue(hue))) return;
   const slot = DATA.dailyHistory?.[state.date]?.slots?.[state.sIdx];
   if(!slot) return;
   if(state.cIdx >= 0 && !timelineAdding){
@@ -6062,15 +6277,26 @@ function setTimelineMenuColor(hue){
   saveData(); renderDailySidebar();
 }
 function timelineMenuAction(action){
-  const state = timelineMenuState;
-  if(!state || state.date !== VIEW_DATE || state.editing !== timelineAdding) return;
+  const state = resolveTimelineMenuState();
+  if(!state) return;
   const {date,sIdx,cIdx,minute} = state, daily = ensureDailyData(date);
+  if(state.planId && action!=='rename'){
+    const ref=daily.slots[sIdx]?.cardIds[cIdx];
+    closeTimelineMenu();
+    if(action==='edit') planningOpenEdit(state.planId);
+    else if(action==='timer') planningToggleTimer(state.planId);
+    else if(action==='source') planningOpenSource(ref);
+    else if(action==='subgoals') planningEditSubgoals(state.planId);
+    else if(action==='delete') planningRemovePlan(state.planId);
+    else if(action==='done' && ref?.type==='adhoc') planningToggleDone(state.planId,planningKey(ref),!ref.done);
+    return;
+  }
   if(action === 'subgoals'){ openTimelineSubgoals(date,sIdx,cIdx); return; }
   if(action === 'rename'){
     const slot = daily.slots[sIdx], ref = slot?.cardIds[cIdx];
     if(!slot || (cIdx >= 0 && (timelineAdding || ref?.type !== 'adhoc')) || (cIdx < 0 && !timelineAdding)) return;
     const value = cIdx >= 0 ? ref.title || '' : timelineSlotLabel(slot);
-    document.getElementById('timelineMenu').innerHTML = `<form class="tl-name-editor" onsubmit="event.preventDefault(); saveTimelineName()"><label for="timelineNameInput">${cIdx >= 0 ? '카드 이름' : '영역 이름'}</label><input id="timelineNameInput" value="${escapeHtml(value)}" autocomplete="off" onkeydown="event.stopPropagation(); if(event.key==='Escape') closeTimelineMenu()"><div><button type="button" onclick="closeTimelineMenu()">취소</button><button type="submit">저장</button></div></form>`;
+    currentTimelineMenu().innerHTML = `<form class="tl-name-editor" onsubmit="event.preventDefault(); saveTimelineName()"><label for="timelineNameInput">${cIdx >= 0 ? '카드 이름' : '영역 이름'}</label><input id="timelineNameInput" value="${escapeHtml(value)}" autocomplete="off" onkeydown="event.stopPropagation(); if(event.key==='Escape') closeTimelineMenu()"><div><button type="button" onclick="closeTimelineMenu()">취소</button><button type="submit">저장</button></div></form>`;
     positionTimelineMenu();
     const input = document.getElementById('timelineNameInput'); input.focus(); input.select();
     return;
@@ -6091,8 +6317,8 @@ function timelineMenuAction(action){
   }
 }
 function saveTimelineName(){
-  const state = timelineMenuState;
-  if(!state || state.date !== VIEW_DATE || state.editing !== timelineAdding) return;
+  const state = resolveTimelineMenuState();
+  if(!state) return;
   const slot = DATA.dailyHistory?.[state.date]?.slots?.[state.sIdx];
   if(!slot) return;
   const value = document.getElementById('timelineNameInput').value.trim();
@@ -6106,8 +6332,8 @@ function saveTimelineName(){
 }
 document.addEventListener('pointerdown',ev=>{
   if(timelineGesture && (ev.isPrimary === false || !ev.target.closest?.('#timelineCanvas'))) cancelTimelineGesture();
-  if(!ev.target.closest?.('#timelineMenu')) closeTimelineMenu();
-  if(!ev.target.closest?.('.tl-plan,#timelineMenu')) selectTimelineTouchCard();
+  if(!ev.target.closest?.('#timelineMenu,#planningCalendarMenu')) closeTimelineMenu();
+  if(!ev.target.closest?.('.tl-plan,#timelineMenu,#planningCalendarMenu')) selectTimelineTouchCard();
 },true);
 function scheduleLegacySlot(index){
   if(!timelineAdding) return;
@@ -8028,6 +8254,7 @@ function autoGrowTextarea(el, minHeightPx){
 
 function purgeDailyRefs(predicate){
   const removedGoals=(DATA.periodGoals || []).filter(g=>predicate(g.root) || predicate(g.scope)).map(g=>g.id);
+  (DATA.periodGoals || []).filter(g=>removedGoals.includes(g.parentGoalId)).forEach(g=>removedGoals.push(g.id));
   DATA.periodGoals=(DATA.periodGoals || []).filter(g=>!removedGoals.includes(g.id));
   DATA.periodGoals.forEach(g=>{
     g.targets=g.targets.filter(r=>!predicate(r));
@@ -8683,6 +8910,16 @@ function __updateDailyRefs(pred, mut){
   (DATA.periodGoals || []).forEach(goal=>{
     const root=catalog.find(item=>planningKey(item.ref)===planningKey(goal.root));
     if(root) goal.scope=planningRef(root.scope);
+  });
+  Object.keys(dh).forEach(date=>planningPlans(date).forEach(({ref})=>{
+    const goal=planningGoal(ref.goalId),parent=planningGoal(goal?.parentGoalId);
+    if(parent && date>=parent.startDate && date<=parent.endDate && catalog.some(item=>planningKey(item.ref)===planningKey(ref))){
+      ref.goalId=planningWeeklyGoal(DATA,parent,date,ref,catalog).id;
+    }
+  }));
+  (DATA.periodGoals || []).filter(goal=>goal.parentGoalId).forEach(goal=>{
+    const allowed=new Set(planningUnits(goal.scope).map(planningKey));
+    goal.targets=goal.targets.filter(ref=>allowed.has(planningKey(ref)));
   });
 }
 

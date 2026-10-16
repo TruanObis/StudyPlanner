@@ -118,19 +118,19 @@ the source cards' cumulative study times remain; active timers keep recording
 from the reset moment. Next-day execution shown in the 26-hour view belongs to
 that next date and is reset from that date.
 
-The main app uses schema 5; the current V2 planning experiment uses schema 6.
+The main app uses schema 5; the current V2 planning experiment uses schema 7.
 The main app keeps the existing
 `universal_planner_v28_data` key and automatically migrates supported older data.
 V2 uses the separate `studyplanner_v2_timeline_data` key. On its first use in a
 browser profile, V2 copies and migrates the main record if present. Subsequent
 changes are independent. Updating the main app never replaces its planner with
-V2's experimental data. Schema-6 V2 backups can be restored in V2, but cannot
+V2's experimental data. Schema-7 V2 backups can be restored in V2, but cannot
 yet be imported into the schema-5 main app. Keep the main backup when testing V2.
 Old time labels such as `오전 (09-12)` are placed on the grid; blocks without a
 recognizable range remain available under **시간 미지정 블록** for manual placement.
 Plans, notes, completion states, and accumulated times are retained. Older totals
 have no timestamp history, so the app does not invent execution blocks for them.
-Both current apps can import schema-5 official backups; V2 migrates them to schema 6.
+Both current apps can import schema-5 official backups; V2 migrates them to schema 7.
 Older schema-3 builds cannot import these backups.
 
 Image blobs share the IndexedDB database. A full reset in either app preserves
@@ -149,7 +149,7 @@ Run the same suite against V2 in PowerShell:
 
 ```powershell
 $env:PLANNER_APP_FILE = 'cpa_app_timetable_monthly_v2.html'
-node --test tests/timeline.test.cjs tests/planning.test.cjs
+node --test tests/timeline.test.cjs tests/planning.test.cjs tests/planning-calendar.test.cjs
 Remove-Item Env:PLANNER_APP_FILE
 ```
 
@@ -169,6 +169,8 @@ browser's date picker, without an extra dialog or tooltip. Numeric edits commit
 on Enter or when leaving the field; picker selections apply immediately.
 Clicking the date text or calendar icon opens the native dropdown in both the
 sidebar and details panel. Keyboard focus still allows direct numeric entry.
+Multi-hour planned cards have one connected outline and one name/duration label,
+with their start/end handles at the actual ten-minute edges.
 
 * **일간** lists every plan for the selected date, including unscheduled plans.
   Assigned subgoals are expanded by default. Check completion, edit subgoals,
@@ -189,11 +191,18 @@ sidebar and details panel. Keyboard focus still allows direct numeric entry.
   their recorded dates. Click a plan to edit it, or a date to see its daily
   list. Month cells show two compact cards and **+N** for the remaining plans.
   Calendar plans can also be dragged onto the timetable to set their time.
+  Right-click a calendar plan, use the keyboard context-menu key, or hold it on
+  touch screens to edit its date/time, subgoals or color, open its source, control
+  its timer, or remove it. Removing a plan preserves its source and execution.
 * **주간 / 월간 → + 목표** creates a period goal for a subject or topic, with
   dates, study weekdays, and selected learning cards. **배분** previews an even,
   ordered distribution over the remaining eligible dates. Confirming creates
-  unscheduled daily parent plans with those cards as subgoals. Existing
-  assignments and completed cards are skipped. No duration is guessed.
+  separate unscheduled plans for the actual theory/question cards. Monthly
+  subject goals also create linked weekly goals grouped by owning topic and
+  calendar week. A long topic can continue into another week. The preview shows
+  both weekly topics and daily cards; the weekly tab lists weekly goals and the
+  monthly tab lists monthly goals. Existing assignments and completed cards are
+  skipped. No duration is guessed, and new allocations leave existing times intact.
   A parent plan without selected subgoals counts only as that parent; it does
   not prevent its children from being allocated. Explicitly selected subgoals
   still prevent duplicate assignments, including descendants of selected topics.
@@ -216,6 +225,14 @@ Allocation and copy previews are rechecked before applying; changed source or
 destination plans require a fresh confirmation. A single operation supports up
 to 366 dates. Editing or deleting a period goal preserves its existing daily
 plans. These planning features are V2-only and are not yet promoted to main.
+Deleting a monthly goal removes its generated weekly goals while preserving
+their daily plans. Moving a linked daily card into another week within the
+monthly period updates its weekly topic goal.
+
+V2 automatically converts older allocated, untimed parent plans into their
+individual selected learning cards at the same dates. Manually timed, running,
+or recorded parent plans remain intact; execution history is never split or
+reattributed. Manually added parent plans retain their selected subgoals.
 
 ## Backup, Restore, and Export
 

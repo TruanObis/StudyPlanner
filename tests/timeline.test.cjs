@@ -58,6 +58,15 @@ function gestureApp() {
   return a;
 }
 
+function polygonContainsPoint(points,x,y) {
+  let inside=false;
+  for(let i=0,j=points.length-1;i<points.length;j=i++) {
+    const [xi,yi]=points[i],[xj,yj]=points[j];
+    if((yi>y)!==(yj>y) && x<(xj-xi)*(y-yi)/(yj-yi)+xi) inside=!inside;
+  }
+  return inside;
+}
+
 function startupApp() {
   const a = app();
   a.run(`applyTheme=()=>{}; updateDDayPanel=()=>{}; updateClock=()=>{};
@@ -262,11 +271,79 @@ test('a multi-hour block renders one outline, one name and exactly two edge hand
   assert.equal((markup.match(/class="tl-slot /g) || []).length, 1);
   assert.equal((markup.match(/class="tl-slot-label"/g) || []).length, 1);
   assert.equal((markup.match(/class="tl-slot-edge"/g) || []).length, 2);
-  assert.equal((markup.match(/<polygon /g) || []).length, 1);
+  assert.equal((markup.match(/class="tl-slot-shape"/g) || []).length, 1);
   assert.deepEqual(a.json('timelineSlotShape({startMinute:260,endMinute:460})'), {
     firstHour:4,rows:4,start:20/60*100,end:40/60*100,
     points:[[20/60*100,0],[100,0],[100,75],[40/60*100,75],[40/60*100,100],[0,100],[0,25],[20/60*100,25]]
   });
+});
+
+test('a V2 multi-hour plan has one continuous surface, one label and two terminal handles', {skip:!IS_V2}, () => {
+  for (const [startMinute,endMinute] of [[240,480],[260,460],[590,640],[1440,1560]]) {
+    const a = gestureApp();
+    a.run(`DATA.home.subjects[0].name='경영학'; const slot=DATA.dailyHistory[VIEW_DATE].slots[0]; slot.cardOnly=true;
+      Object.assign(slot.cardIds[0],{startMinute:${startMinute},endMinute:${endMinute}});
+      renderTimeline(DATA.dailyHistory[VIEW_DATE]);`);
+    const markup = a.run("node('dailySlots').innerHTML");
+    assert.equal((markup.match(/class="tl-plan"/g) || []).length,1,`${startMinute}–${endMinute}`);
+    assert.equal((markup.match(/<polygon /g) || []).length,1);
+    assert.equal((markup.match(/<strong>경영학<\/strong>/g) || []).length,1);
+    assert.equal((markup.match(new RegExp(`<small>${endMinute-startMinute}분<\\/small>`,'g')) || []).length,1);
+    assert.equal((markup.match(/class="tl-resize start"/g) || []).length,1);
+    assert.equal((markup.match(/class="tl-resize end"/g) || []).length,1);
+    assert.match(markup,/onpointerdown="startTimelineGesture\(event,'card',0,0\)"/);
+    assert.match(markup,/onkeydown="timelineKey\(event,'card',0,0\)"/);
+    assert.match(markup,/oncontextmenu="openTimelineMenu\(event,0,0\)"/);
+  }
+});
+
+test('V2 short wrapped cards have a filled connection between their first and last hourly bands', {skip:!IS_V2}, () => {
+  const a=app(), missing=[];
+  const cases=[
+    {lane:0,lanes:1,inset:0,path:[[90,25],[83.7,25],[83.7,50],[66.2,50],[66.2,75]]},
+    {lane:0,lanes:1,inset:7,path:[[90,25],[83.7,25],[83.7,50],[66.2,50],[66.2,75]]},
+    {lane:0,lanes:2,inset:0,path:[[90,12.5],[83.7,12.5],[83.7,37.5],[66.2,37.5],[66.2,62.5]]},
+    {lane:1,lanes:2,inset:0,path:[[90,37.5],[83.7,37.5],[83.7,62.5],[66.2,62.5],[66.2,87.5]]}
+  ];
+  for(const {lane,lanes,inset,path} of cases) {
+    const points=a.json(`timelinePlanShape({startMinute:590,endMinute:640,lane:${lane},lanes:${lanes}},${inset}).points`);
+    // A corridor with positive width must connect the interiors of 09:50–10:00 and 10:00–10:40.
+    let failure;
+    for(let index=1;index<path.length && !failure;index++) {
+      const [x0,y0]=path[index-1],[x1,y1]=path[index];
+      const steps=Math.ceil(Math.hypot(x1-x0,y1-y0)/.2);
+      for(let step=0;step<=steps && !failure;step++) {
+        const x=x0+(x1-x0)*step/steps,y=y0+(y1-y0)*step/steps;
+        if([[.1,0],[-.1,0],[0,.1],[0,-.1]].some(([dx,dy])=>!polygonContainsPoint(points,x+dx,y+dy))) failure=[x,y];
+      }
+    }
+    if(failure) missing.push({lane,lanes,inset,point:failure});
+  }
+  assert.deepEqual(missing,[]);
+});
+
+test('V2 overlapping continuous plans keep their hourly lanes and exact terminal positions', {skip:!IS_V2}, () => {
+  const a = gestureApp();
+  a.run(`const slot=DATA.dailyHistory[VIEW_DATE].slots[0]; slot.cardOnly=true;
+    slot.cardIds=[{type:'subject',id:'a',startMinute:260,endMinute:460},
+      {type:'adhoc',id:'other',title:'문제 풀이',startMinute:300,endMinute:420}];
+    renderTimeline(DATA.dailyHistory[VIEW_DATE]);`);
+  const markup = a.run("node('dailySlots').innerHTML");
+  assert.equal((markup.match(/class="tl-plan"/g) || []).length,2);
+  const polygons = [...markup.matchAll(/<polygon points="([^"]+)"/g)].map(match=>match[1].split(' ').map(pair=>pair.split(',').map(Number)));
+  assert.equal(polygons.length,2);
+  // First card is lane 0 across 04:20–07:40; second is lane 1 across 05:00–07:00.
+  assert.equal(polygonContainsPoint(polygons[0],50,31.25),true);
+  assert.equal(polygonContainsPoint(polygons[0],50,43.75),false);
+  assert.equal(polygonContainsPoint(polygons[1],50,37.5),true);
+  assert.equal(polygonContainsPoint(polygons[1],50,12.5),false);
+  const shape=a.json('timelinePlanShape({startMinute:260,endMinute:460,lane:0,lanes:2})');
+  assert.equal(shape.firstHour,4);
+  assert.equal(shape.rows,4);
+  assert.equal(shape.first.left,20/60*100);
+  assert.equal(shape.last.right,40/60*100);
+  assert.equal(shape.first.top < shape.last.top,true);
+  assert.equal(shape.label.width,100);
 });
 
 test('copy assigns a crossing card once to its largest overlap and keeps unnamed tasks', () => {
@@ -326,6 +403,51 @@ test('unplanned execution is recorded, continuous ticks merge, and a pause remai
   assert.equal(a.run('DATA.dailyHistory[VIEW_DATE].sessions.length'),2);
   assert.equal(a.run('DATA.dailyHistory[VIEW_DATE].slots.length'),0);
   assert.equal(a.run('DATA.dailyHistory[VIEW_DATE].sessions[0].endMs - DATA.dailyHistory[VIEW_DATE].sessions[0].startMs'),120000);
+});
+
+test('V2 multi-hour execution renders once per session with precise times and a preserved pause', {skip:!IS_V2}, () => {
+  const a=gestureApp();
+  a.run(`const ref={type:'subject',id:'a',title:'경영학'};
+    recordTimelineSession(ref,Date.parse('2026-10-17T04:20:30+09:00'),Date.parse('2026-10-17T07:40:15+09:00'));
+    recordTimelineSession(ref,Date.parse('2026-10-17T08:15:20+09:00'),Date.parse('2026-10-17T09:10:40+09:00'));`);
+  const recorded=a.json('DATA.dailyHistory[VIEW_DATE].sessions');
+  a.run('updateTimelineExecution()');
+  const markup=a.run("node('timelineActual').innerHTML");
+  assert.equal((markup.match(/class="tl-actual"/g) || []).length,2);
+  assert.equal((markup.match(/<span>경영학<\/span>/g) || []).length,2);
+  const polygons=[...markup.matchAll(/<polygon points="([^"]+)"/g)].map(match=>match[1].split(' ').map(pair=>pair.split(',').map(Number)));
+  assert.equal(polygons.length,2);
+  assert.equal(polygons[0][0][0],20.5/60*100);
+  assert.equal(polygons[0][3][0],40.25/60*100);
+  const positions=[...markup.matchAll(/class="tl-actual"[^>]*style="[^"]*top:([^%;]+)%;height:([^%;]+)%/g)].map(match=>match.slice(1).map(Number));
+  assert.deepEqual(positions,[[4*100/26,4*100/26],[8*100/26,2*100/26]]);
+  assert.deepEqual(a.json('DATA.dailyHistory[VIEW_DATE].sessions'),recorded);
+});
+
+test('V2 overlapping execution near an hour boundary keeps its fractional-minute endpoints', {skip:!IS_V2}, () => {
+  const a=gestureApp();
+  a.run(`for(const id of ['a','b']) recordTimelineSession({type:'subject',id,title:id},
+    Date.parse('2026-10-17T09:59:59.500+09:00'),Date.parse('2026-10-17T10:00:00.500+09:00'));
+    updateTimelineExecution();`);
+  const markup=a.run("node('timelineActual').innerHTML");
+  assert.equal((markup.match(/class="tl-actual"/g) || []).length,2);
+  const polygons=[...markup.matchAll(/<polygon points="([^"]+)"/g)].map(match=>match[1].split(' ').map(pair=>pair.split(',').map(Number)));
+  assert.equal(polygons.length,2);
+  for(const points of polygons) {
+    assert.equal(points.every(([x,y])=>x>=0 && x<=100 && y>=0 && y<=100),true);
+    assert.ok(Math.abs(points[0][0]-99.98611111111111)<1e-9);
+  }
+});
+
+test('V2 overnight execution joins only adjacent same-source sessions for display', {skip:!IS_V2}, () => {
+  const a=gestureApp();
+  a.run(`recordTimelineSession({type:'subject',id:'a',title:'경영학'},
+    Date.parse('2026-10-17T23:50:00+09:00'),Date.parse('2026-10-18T00:40:00+09:00'));
+    updateTimelineExecution();`);
+  const markup=a.run("node('timelineActual').innerHTML");
+  assert.equal((markup.match(/class="tl-actual"/g) || []).length,1);
+  assert.equal((markup.match(/<span>경영학<\/span>/g) || []).length,1);
+  assert.deepEqual(a.json('getTimelineSessions(VIEW_DATE).map(s=>[s.startMinute,s.endMinute])'),[[1430,1440],[1440,1480]]);
 });
 
 test('midnight execution appears in both 26-hour views without duplicate stored sessions', () => {

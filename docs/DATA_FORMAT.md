@@ -10,7 +10,7 @@ Planner records are stored in `localStorage` under:
 `universal_planner_v28_data` (main) and `studyplanner_v2_timeline_data` (V2).
 V2 copies the main record only when its own record is absent. Main reads only its
 own record and never adopts V2 storage automatically. Main migrates supported
-older records to schema 5; the V2 planning experiment migrates them to schema 6.
+older records to schema 5; the V2 planning experiment migrates them to schema 7.
 Migration failures preserve the original record.
 
 Attached image blobs are stored separately in IndexedDB:
@@ -25,8 +25,8 @@ cleanup considers references in both planner records before deleting any assets.
 
 ## Planner Schema
 
-The main planner schema is version 5 (example below). V2 uses version 6 and
-adds the planning fields described below. A V2 schema-6 backup cannot be
+The main planner schema is version 5 (example below). V2 uses version 7 and
+adds the planning fields described below. A V2 schema-7 backup cannot be
 imported into the schema-5 main app.
 
 ```json
@@ -78,7 +78,7 @@ stale list counts the parent plan once. Duplicate targets in a single selection
 are counted once; separate planned copies continue to count separately. Source
 identity changes update these references, and source deletion removes them.
 
-### V2 Period Goals and Planning Identity (Schema 6)
+### V2 Period Goals and Planning Identity (Schema 7)
 
 V2 adds a root `periodGoals` array:
 
@@ -104,22 +104,40 @@ New-card detection compares current identities to this set, so renaming is not
 a new card, while newly added or moved-in identities are. Allocation or explicit
 exclusion acknowledges the selected identities. No timestamp is required.
 
-Each daily reference receives a globally unique, stable `planId`. Allocated
-references also carry `goalId` and `progressTargets`; initially their time range
-is null. Allocation appends to the goal's existing daily parent without moving
-its time. Already assigned units (across dates/goals) and completed units are
-skipped. Moving a plan outside its goal's date range detaches `goalId`; deleting
-the goal detaches links but preserves all daily plans and execution history.
+Each daily reference receives a globally unique, stable `planId`. Allocation
+creates one reference to the actual learning unit, with `goalId` and a null time
+range. It does not wrap units in a daily subject/topic card. Existing plans and
+their times remain intact. Assigned units (across dates/goals) and completed
+units are skipped. Monthly allocation also creates topic-level weekly goals
+with `parentGoalId` pointing to the monthly goal. Their dates are the calendar
+week clipped to the monthly period, and their targets are the units allocated
+to that topic/week. Daily plans link to the weekly goal. A topic can span weeks.
+Parent links must reference an existing monthly goal; only weekly goals can
+have them. Generated children do not independently discover new cards: their
+parent scope handles discovery in both period views.
+
+Moving a generated plan within the monthly period relinks it to the destination
+week's topic goal. Moving outside its goal's date range detaches `goalId`.
+Deleting a monthly goal also removes generated weekly goals and detaches their
+plans. All daily plans and execution history remain. Source identity moves also
+relink generated plans to the correct topic while retaining plan IDs and times.
+
+The 6-to-7 migration splits only generated parent wrappers with explicit valid
+learning-unit subgoals and no assigned time, elapsed time, running state, or
+completion flag. It preserves the original date and first plan ID; additional
+units get new IDs. Monthly wrappers gain weekly topic links. Manual plans,
+timed/recorded wrappers, stale targets, and all execution sessions are preserved.
+The migration is idempotent and operates on a cloned record before validation.
 
 Allocated plans set `progressTargetsFollowMoves: true`. This retains their
 explicit, still-existing selected cards even after those cards move outside the
 daily parent's hierarchy. The daily parent's source identity and timer remain
 unchanged. The flag survives copy and goal detachment. A moved goal root updates
-its watched scope; subsequent allocations still append to any existing plan for
-the same goal/date. New dates use the new scope as their parent.
+its watched scope. New allocations create independent learning-card plans.
 
-Duplicate-allocation checks expand an assigned subject or non-leaf topic into
-its covered learning units. An assigned theory covers that theory only, since
+Duplicate-allocation checks expand explicitly selected subject/topic subgoals
+into their covered learning units. An unconfigured parent reserves only itself.
+An assigned theory covers that theory only, since
 theory and questions are separate learning units. Distribution uses the current
 source-card order, regardless of checkbox selection order.
 
@@ -209,7 +227,7 @@ The lossless backup format is:
 `data` contains the complete migrated planner. `assets` contains referenced IndexedDB
 records with a base64 data URL. Asset hash collisions are remapped during import, and
 all affected `app://asset/` references are rewritten.
-The envelope's `schemaVersion` is 5 for main and 6 for V2.
+The envelope's `schemaVersion` is 5 for main and 7 for V2.
 
 Legacy root JSON backups and root-level `__assets` are still accepted and migrated.
 
