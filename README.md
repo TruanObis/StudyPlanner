@@ -195,7 +195,14 @@ with their start/end handles at the actual ten-minute edges.
   touch screens to edit its date/time, subgoals or color, open its source, control
   its timer, or remove it. Removing a plan preserves its source and execution.
 * **주간 / 월간 → + 목표** creates a period goal for a subject or topic, with
-  dates, study weekdays, and selected learning cards. **배분** previews an even,
+  dates, study weekdays, and selected learning cards. **배분할 카드** has two
+  panes: topics/parent cards on the left and the active topic's learning cards
+  on the right. Click a topic name to browse its cards without changing the
+  selection. Its checkbox selects or clears all its available cards, including
+  completed ones; individual checkboxes update the parent's partial-selection
+  state and selected count. **미완료 선택** and **선택 해제** apply to the entire
+  list. Selection is a draft until the goal is saved, and does not change card
+  completion. **배분** previews an even,
   ordered distribution over the remaining eligible dates. Confirming creates
   separate unscheduled plans for the actual theory/question cards. Monthly
   subject goals also create linked weekly goals grouped by owning topic and

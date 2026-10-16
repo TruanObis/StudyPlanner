@@ -417,6 +417,79 @@ test('new goal forms default to the selected period even when it is in the past'
   assert.match(body,/id="planningTo"[^>]*value="2026-09-30"/);
 });
 
+test('goal target picker groups units by topic and browsing a group preserves selection and source data',()=>{
+  const a=app();
+  a.run('const before=clonePlain(DATA); planningOpenGoal();');
+  assert.equal(a.run('typeof planningSelectGoalTargetGroup'),'function');
+  assert.deepEqual(a.json('planningModalState.targetGroups.map(g=>[g.label,g.indices.length])'),[['동기부여',4],['요약',1]]);
+  const details=a.nodes.get('planningGoalTargetDetails').innerHTML;
+  for(const text of ['핵심이론','기출1','기타이론','기출2']) assert.ok(details.includes(text));
+  assert.ok(!details.includes('요약'));
+  a.run('const selected=clonePlain(planningModalState.targets); planningSelectGoalTargetGroup(1);');
+  assert.match(a.nodes.get('planningGoalTargetDetails').innerHTML,/요약/);
+  assert.doesNotMatch(a.nodes.get('planningGoalTargetDetails').innerHTML,/기출1|기출2/);
+  assert.deepEqual(a.json('planningModalState.targets'),a.json('selected'));
+  assert.deepEqual(a.json('DATA'),a.json('before'));
+});
+
+test('topic selection includes every child and individual changes synchronize partial selection without changing completion',()=>{
+  const a=app();
+  a.run('DATA.modules.m.tabs[0].done=true; const before=clonePlain(DATA); planningOpenGoal();');
+  assert.equal(a.run('typeof planningToggleGoalTargetGroup'),'function');
+  const group=a.nodes.get('planningGoalGroupCheck0');
+  assert.equal(group.checked,false);
+  assert.equal(group.indeterminate,true);
+  a.run('planningToggleGoalTargetGroup(0,true);');
+  assert.deepEqual(a.json('planningModalState.targets.map(r=>r.id).sort()'),['core','loose','other','q1','q2']);
+  assert.equal(group.checked,true);
+  assert.equal(group.indeterminate,false);
+  a.run('planningToggleGoalTarget(1,false);');
+  assert.equal(group.checked,false);
+  assert.equal(group.indeterminate,true);
+  a.run('planningToggleGoalTargetGroup(0,false);');
+  assert.deepEqual(a.json('planningModalState.targets.map(r=>r.id)'),['loose']);
+  assert.equal(group.indeterminate,false);
+  a.run('planningSelectGoalTargets(true);');
+  assert.deepEqual(a.json('planningModalState.targets.map(r=>r.id)'),['q1','other','q2','loose']);
+  assert.equal(group.indeterminate,true);
+  a.run('planningSelectGoalTargets(false);');
+  assert.deepEqual(a.json('planningModalState.targets'),[]);
+  assert.equal(group.checked,false);
+  assert.equal(group.indeterminate,false);
+  assert.deepEqual(a.json('DATA'),a.json('before'));
+});
+
+test('same-named topics stay independent and switching the goal root replaces its visible groups',()=>{
+  const a=app();
+  a.run(`DATA.details.a.cards.push({id:'topic2',title:'동기부여',module:'m2'});
+    DATA.modules.m2={id:'m2',title:'동기부여',tabs:[{id:'extra',label:'추가이론',questions:[]}]}; planningOpenGoal();`);
+  assert.equal(a.run('typeof planningToggleGoalTargetGroup'),'function');
+  assert.deepEqual(a.json('planningModalState.targetGroups.map(g=>g.label)'),['동기부여','요약','동기부여']);
+  a.run('planningToggleGoalTargetGroup(2,false);');
+  assert.deepEqual(a.json('planningModalState.targets.map(r=>r.id)'),['core','q1','other','q2','loose']);
+  a.run(`planningChangeGoalRoot(planningModalState.roots.findIndex(e=>e.ref.type==='theory' && e.ref.id==='core'));`);
+  assert.deepEqual(a.json('planningModalState.candidates.map(e=>e.ref.id)'),['core','q1']);
+  assert.deepEqual(a.json('planningModalState.targetGroups.map(g=>g.indices.length)'),[2]);
+  assert.match(a.nodes.get('planningGoalTargetDetails').innerHTML,/핵심이론/);
+  assert.doesNotMatch(a.nodes.get('planningGoalTargetDetails').innerHTML,/추가이론|기타이론/);
+});
+
+test('grouped goal editing saves only selected leaf cards and cancelling a later draft preserves the saved goal',()=>{
+  const a=app();
+  a.run('const goal=planningCreateGoal(config); planningOpenGoal(goal.id);');
+  assert.equal(a.run('typeof planningToggleGoalTargetGroup'),'function');
+  a.run(`planningToggleGoalTargetGroup(0,false); planningToggleGoalTarget(3,true);
+    document.getElementById('planningFrom').value=config.startDate; document.getElementById('planningTo').value=config.endDate;
+    document.querySelectorAll=selector=>selector.includes('planningWeekday')?config.weekdays.map(value=>({value})):[];
+    planningSaveGoal(); planningOpenGoal(goal.id);`);
+  assert.deepEqual(a.json('goal.targets.map(r=>r.id).sort()'),['loose','q2']);
+  assert.deepEqual(a.json('planningModalState.targets.map(r=>r.id).sort()'),['loose','q2']);
+  assert.equal(a.nodes.get('planningGoalGroupCheck0').indeterminate,true);
+  a.run('const before=clonePlain(DATA); planningToggleGoalTargetGroup(0,true); planningCloseModal();');
+  assert.deepEqual(a.json('DATA'),a.json('before'));
+  assert.doesNotThrow(()=>a.run('validateImportedPlannerData(DATA)'));
+});
+
 test('allocation uses current source order rather than checkbox selection history',()=>{
   const a=app();
   a.run(`const goal=planningCreateGoal(config); goal.targets.push(goal.targets.shift());`);

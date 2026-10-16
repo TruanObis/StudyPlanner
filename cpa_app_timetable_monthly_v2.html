@@ -382,7 +382,20 @@
     .planning-field.full { grid-column:1 / -1; }
     .planning-weekdays { display:flex; flex-wrap:wrap; gap:12px; padding:8px 0; }
     .planning-weekdays label { display:flex; gap:4px; align-items:center; font-size:13px; }
-    .planning-picker { max-height:260px; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:0 10px; margin-top:10px; }
+    .planning-target-picker { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,3fr); height:300px; max-height:45vh; min-height:220px; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin-top:10px; }
+    .planning-target-pane { display:flex; flex-direction:column; min-width:0; min-height:0; }
+    .planning-target-pane:first-child { border-right:1px solid var(--line); }
+    .planning-target-heading { padding:10px; min-height:58px; border-bottom:1px solid var(--line); background:var(--input-bg); box-sizing:border-box; }
+    .planning-target-heading strong { display:block; font-size:13px; overflow-wrap:anywhere; }
+    .planning-target-list { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding:0 8px; }
+    .planning-target-group { display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--line); }
+    .planning-target-group:last-child { border-bottom:0; }
+    .planning-target-group input { accent-color:var(--primary); width:17px; height:17px; flex-shrink:0; }
+    .planning-target-group button { flex:1; min-width:0; padding:10px 4px; border:0; background:transparent; color:var(--text); font:inherit; text-align:left; cursor:pointer; }
+    .planning-target-group button strong { display:block; font-size:13px; overflow-wrap:anywhere; }
+    .planning-target-group button[aria-pressed="true"] { color:var(--primary); background:color-mix(in srgb,var(--primary) 8%,transparent); }
+    .planning-target-group button:focus-visible { outline:2px solid var(--primary); outline-offset:-2px; border-radius:4px; }
+    .planning-target-empty { grid-column:1 / -1; padding:12px; font-size:13px; color:var(--text-sub); }
     .planning-preview-row { padding:10px 0; border-bottom:1px solid var(--line); font-size:13px; }
     .planning-dialog-footer { display:flex; justify-content:flex-end; gap:8px; padding-top:14px; border-top:1px solid var(--line); margin-top:12px; }
     .planning-error { color:var(--danger); font-size:13px; margin-top:10px; }
@@ -912,7 +925,7 @@ const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
 const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
 const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-10-17-planning-workspace-8';
+const APP_BUILD_ID = '2026-10-17-planning-workspace-9';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
 const PLANNER_SCHEMA_VERSION = 7;
@@ -5644,7 +5657,7 @@ function planningOpenGoal(id){
   planningShowModal(goal?'기간 목표 편집':'기간 목표 만들기',`<label class="planning-field">과목·단원<select id="planningRoot" ${goal?'disabled':''} onchange="planningChangeGoalRoot(this.value)">${roots.map((entry,i)=>`<option value="${i}" ${planningKey(entry.ref)===planningKey(root)?'selected':''}>${escapeHtml([entry.path,entry.label].filter(Boolean).join(' / '))}</option>`).join('')}</select></label>
     ${planningRangeFields(goal?.startDate || bounds.start,goal?.endDate || bounds.end)}
     <span class="planning-muted">공부할 요일</span>${planningWeekdayHTML(goal?.weekdays || [1,2,3,4,5])}
-    <p class="planning-muted" id="planningScopeLabel"></p><div class="planning-section-head"><strong>배분할 카드</strong><div class="planning-actions">${planningButton('미완료 선택','planningSelectGoalTargets',[true])}${planningButton('선택 해제','planningSelectGoalTargets',[false])}</div></div><div id="planningGoalTargets" class="planning-picker"></div>
+    <p class="planning-muted" id="planningScopeLabel"></p><div class="planning-section-head"><strong>배분할 카드</strong><div class="planning-actions">${planningButton('미완료 선택','planningSelectGoalTargets',[true])}${planningButton('선택 해제','planningSelectGoalTargets',[false])}</div></div><div id="planningGoalTargets" class="planning-target-picker"></div>
     ${goal?'<p class="planning-muted">목표를 편집해도 이미 배정한 일간 계획은 유지됩니다.</p>':''}`);
   planningRenderGoalTargets();
 }
@@ -5654,19 +5667,74 @@ function planningChangeGoalRoot(index){
 }
 function planningRenderGoalTargets(){
   const state=planningModalState;if(state?.type!=='goal') return;
-  const scope=planningCatalog().find(e=>planningKey(e.ref)===planningKey(state.root))?.scope || state.root;
+  const catalog=new Map(planningCatalog().map(e=>[planningKey(e.ref),e]));
+  const scope=catalog.get(planningKey(state.root))?.scope || state.root;
   const candidates=planningWithin(state.id?planningGoal(state.id).scope:state.root).filter(e=>e.unit);
-  state.candidates=candidates; const selected=new Set(state.targets.map(planningKey));
+  state.candidates=candidates;
+  const groups=new Map();
+  candidates.forEach((entry,index)=>{
+    const key=planningKey(entry.scope);
+    if(!groups.has(key)) groups.set(key,{key,label:catalog.get(key)?.label || entry.label,indices:[]});
+    groups.get(key).indices.push(index);
+  });
+  state.targetGroups=[...groups.values()];
+  if(!groups.has(state.activeTargetGroup)) state.activeTargetGroup=state.targetGroups[0]?.key;
   document.getElementById('planningScopeLabel').textContent=`새 카드 확인 범위: ${planningLabel(scope)}`;
-  document.getElementById('planningGoalTargets').innerHTML=candidates.map((entry,i)=>`<label class="planning-check"><input type="checkbox" ${selected.has(planningKey(entry.ref))?'checked':''} onchange="planningToggleGoalTarget(${i},this.checked)"><span><strong>${escapeHtml(entry.label)}${getCardInfo(entry.ref).done?' · 완료':''}</strong><span class="planning-muted">${escapeHtml(entry.path)}</span></span></label>`).join('') || '<p class="planning-muted">현재 하위 학습 카드가 없습니다. 목표를 저장하면 이후 추가되는 카드를 확인할 수 있습니다.</p>';
+  const host=document.getElementById('planningGoalTargets');
+  if(!state.targetGroups.length){host.innerHTML='<p class="planning-target-empty">현재 하위 학습 카드가 없습니다. 목표를 저장하면 이후 추가되는 카드를 확인할 수 있습니다.</p>';return;}
+  host.innerHTML=`<section class="planning-target-pane" aria-label="상위 카드"><div class="planning-target-heading"><strong>상위 카드</strong><span class="planning-muted">${state.targetGroups.length}개</span></div><div class="planning-target-list">${state.targetGroups.map((group,i)=>`<div class="planning-target-group"><input type="checkbox" id="planningGoalGroupCheck${i}" aria-label="${escapeHtml(group.label)} 하위 카드 전체 선택" onchange="planningToggleGoalTargetGroup(${i},this.checked)"><button type="button" id="planningGoalGroupButton${i}" aria-controls="planningGoalTargetDetails" onclick="planningSelectGoalTargetGroup(${i})"><strong>${escapeHtml(group.label)}</strong><span class="planning-muted" id="planningGoalGroupCount${i}"></span></button></div>`).join('')}</div></section>
+    <section class="planning-target-pane" aria-label="세부 카드"><div class="planning-target-heading"><strong id="planningGoalTargetHeading"></strong><span class="planning-muted" id="planningGoalTargetCount"></span></div><div id="planningGoalTargetDetails" class="planning-target-list"></div></section>`;
+  planningRenderGoalTargetDetails();
+}
+function planningRenderGoalTargetDetails(){
+  const state=planningModalState;if(state?.type!=='goal') return;
+  const group=state.targetGroups?.find(g=>g.key===state.activeTargetGroup);if(!group)return;
+  document.getElementById('planningGoalTargetHeading').textContent=group.label;
+  const details=document.getElementById('planningGoalTargetDetails');
+  details.innerHTML=group.indices.map(i=>{
+    const entry=state.candidates[i];
+    return `<label class="planning-check"><input type="checkbox" id="planningGoalTargetCheck${i}" onchange="planningToggleGoalTarget(${i},this.checked)"><span><strong>${escapeHtml(entry.label)}${getCardInfo(entry.ref).done?' · 완료':''}</strong><span class="planning-muted">${escapeHtml(entry.path)}</span></span></label>`;
+  }).join('');
+  details.scrollTop=0;
+  planningSyncGoalTargetSelection();
+}
+function planningSyncGoalTargetSelection(){
+  const state=planningModalState;if(state?.type!=='goal') return;
+  const selected=new Set(state.targets.map(planningKey));
+  (state.targetGroups || []).forEach((group,i)=>{
+    const count=group.indices.filter(index=>selected.has(planningKey(state.candidates[index].ref))).length;
+    const input=document.getElementById(`planningGoalGroupCheck${i}`);
+    if(input){input.checked=count===group.indices.length;input.indeterminate=count>0&&count<group.indices.length;}
+    const countLabel=document.getElementById(`planningGoalGroupCount${i}`);
+    if(countLabel) countLabel.textContent=`${count} / ${group.indices.length} 선택`;
+    const active=group.key===state.activeTargetGroup;
+    document.getElementById(`planningGoalGroupButton${i}`)?.setAttribute('aria-pressed',String(active));
+    if(active) document.getElementById('planningGoalTargetCount').textContent=`${count} / ${group.indices.length} 선택`;
+  });
+  state.candidates.forEach((entry,i)=>{
+    const input=document.getElementById(`planningGoalTargetCheck${i}`);
+    if(input) input.checked=selected.has(planningKey(entry.ref));
+  });
+}
+function planningSelectGoalTargetGroup(index){
+  const state=planningModalState,group=state?.targetGroups?.[index];if(state?.type!=='goal'||!group)return;
+  state.activeTargetGroup=group.key;planningRenderGoalTargetDetails();
+}
+function planningToggleGoalTargetGroup(index,checked){
+  const state=planningModalState,group=state?.targetGroups?.[index];if(state?.type!=='goal'||!group)return;
+  const refs=group.indices.map(i=>state.candidates[i].ref),keys=new Set(refs.map(planningKey));
+  state.targets=state.targets.filter(ref=>!keys.has(planningKey(ref)));
+  if(checked) state.targets.push(...refs);
+  planningSelectGoalTargetGroup(index);
 }
 function planningToggleGoalTarget(index,checked){
   const state=planningModalState,ref=state?.candidates?.[index]?.ref;if(state?.type!=='goal'||!ref)return;
   state.targets=state.targets.filter(r=>planningKey(r)!==planningKey(ref));if(checked)state.targets.push(ref);
+  planningSyncGoalTargetSelection();
 }
 function planningSelectGoalTargets(all){
   const state=planningModalState;if(state?.type!=='goal')return;
-  state.targets=all?state.candidates.map(e=>e.ref).filter(r=>!getCardInfo(r).done):[];planningRenderGoalTargets();
+  state.targets=all?state.candidates.map(e=>e.ref).filter(r=>!getCardInfo(r).done):[];planningSyncGoalTargetSelection();
 }
 function planningSaveGoal(){
   const state=planningModalState;
