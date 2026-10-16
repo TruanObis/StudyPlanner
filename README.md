@@ -118,18 +118,20 @@ the source cards' cumulative study times remain; active timers keep recording
 from the reset moment. Next-day execution shown in the 26-hour view belongs to
 that next date and is reset from that date.
 
-Both apps use schema 5. The main app keeps the existing
+The main app uses schema 5; the current V2 planning experiment uses schema 6.
+The main app keeps the existing
 `universal_planner_v28_data` key and automatically migrates supported older data.
 V2 uses the separate `studyplanner_v2_timeline_data` key. On its first use in a
 browser profile, V2 copies and migrates the main record if present. Subsequent
 changes are independent. Updating the main app never replaces its planner with
-V2's experimental data. To transfer a V2 planner intentionally, export its
-official JSON backup and import that backup in the main app.
+V2's experimental data. Schema-6 V2 backups can be restored in V2, but cannot
+yet be imported into the schema-5 main app. Keep the main backup when testing V2.
 Old time labels such as `오전 (09-12)` are placed on the grid; blocks without a
 recognizable range remain available under **시간 미지정 블록** for manual placement.
 Plans, notes, completion states, and accumulated times are retained. Older totals
 have no timestamp history, so the app does not invent execution blocks for them.
-Both current apps can import schema-5 official backups; older schema-3 builds cannot.
+Both current apps can import schema-5 official backups; V2 migrates them to schema 6.
+Older schema-3 builds cannot import these backups.
 
 Image blobs share the IndexedDB database. A full reset in either app preserves
 that image store. Unused-image cleanup checks both planners' references and
@@ -147,13 +149,47 @@ Run the same suite against V2 in PowerShell:
 
 ```powershell
 $env:PLANNER_APP_FILE = 'cpa_app_timetable_monthly_v2.html'
-node --test tests/timeline.test.cjs
+node --test tests/timeline.test.cjs tests/planning.test.cjs
 Remove-Item Env:PLANNER_APP_FILE
 ```
 
 The main file sets `IS_EXPERIMENTAL_BUILD` to `false`; V2 sets it to `true`.
 Release version checks use `app_version.json`'s `buildId` for main and
 `v2BuildId` for V2. Keep the appropriate field aligned with each file's `APP_BUILD_ID`.
+
+## V2 Experiment: Planning Details
+
+In `cpa_app_timetable_monthly_v2.html`, the arrow at the right of **일일 계획**
+opens **계획 상세**. The desktop timetable stays open alongside it; on mobile,
+**시간표로** returns to the timetable.
+
+* **일간** lists every plan for the selected date, including unscheduled plans.
+  Assigned subgoals are expanded by default. Check completion, edit subgoals,
+  move a plan to another date, set its time in 10-minute steps, start/stop its
+  timer, or open its source card. Completion uses the source card's current
+  state, including when viewing past dates.
+* **주간 / 월간 → + 목표** creates a period goal for a subject or topic, with
+  dates, study weekdays, and selected learning cards. **배분** previews an even,
+  ordered distribution over the remaining eligible dates. Confirming creates
+  unscheduled daily parent plans with those cards as subgoals. Existing
+  assignments and completed cards are skipped. No duration is guessed.
+* Both **주간** and **월간** show **새 카드** for goals overlapping the displayed
+  period. Cards added or moved into the watched subject/topic after goal
+  creation appear once, with their path, related goals, completion and assigned
+  dates. Lower-level goals watch their owning topic, including new siblings.
+  Select cards to allocate them or exclude them from the relevant goals.
+  Existing daily plans and times are not automatically rearranged.
+* **일간 → 다른 날짜로 복사** copies time blocks to a date range and selected
+  weekdays. **계획 카드도 포함** also copies placement and selected subgoals.
+  The preview reports overlaps; existing destination entries remain. Repeating
+  the same copy skips previously copied entries. Timers, elapsed time, and
+  execution sessions are never copied. Linked cards retain their source
+  completion state; copied ad-hoc cards start incomplete.
+
+Allocation and copy previews are rechecked before applying; changed source or
+destination plans require a fresh confirmation. A single operation supports up
+to 366 dates. Editing or deleting a period goal preserves its existing daily
+plans. These planning features are V2-only and are not yet promoted to main.
 
 ## Backup, Restore, and Export
 

@@ -9,8 +9,9 @@ Planner records are stored in `localStorage` under:
 
 `universal_planner_v28_data` (main) and `studyplanner_v2_timeline_data` (V2).
 V2 copies the main record only when its own record is absent. Main reads only its
-own record and never adopts V2 storage automatically. Both migrate supported
-older records to schema 5. Migration failures preserve the original record.
+own record and never adopts V2 storage automatically. Main migrates supported
+older records to schema 5; the V2 planning experiment migrates them to schema 6.
+Migration failures preserve the original record.
 
 Attached image blobs are stored separately in IndexedDB:
 
@@ -24,7 +25,9 @@ cleanup considers references in both planner records before deleting any assets.
 
 ## Planner Schema
 
-The main and V2 planner schema is version 5.
+The main planner schema is version 5 (example below). V2 uses version 6 and
+adds the planning fields described below. A V2 schema-6 backup cannot be
+imported into the schema-5 main app.
 
 ```json
 {
@@ -75,6 +78,51 @@ stale list counts the parent plan once. Duplicate targets in a single selection
 are counted once; separate planned copies continue to count separately. Source
 identity changes update these references, and source deletion removes them.
 
+### V2 Period Goals and Planning Identity (Schema 6)
+
+V2 adds a root `periodGoals` array:
+
+```json
+{
+  "id": "goal_example",
+  "kind": "month",
+  "root": {"type": "subject", "id": "subject_management"},
+  "scope": {"type": "subject", "id": "subject_management"},
+  "startDate": "2026-10-17",
+  "endDate": "2026-10-31",
+  "weekdays": [1, 2, 3, 4, 5],
+  "targets": [{"type": "theory", "id": "core", "pid": "module_example"}],
+  "knownRefs": []
+}
+```
+
+`kind` is `week` or `month`; both kinds share the same allocator. `root` is
+the chosen goal card and `scope` is the subject/topic watched for new cards.
+For theory/question roots, scope is the owning topic. `targets` stores selected
+learning units; `knownRefs` snapshots identities already reviewed in that scope.
+New-card detection compares current identities to this set, so renaming is not
+a new card, while newly added or moved-in identities are. Allocation or explicit
+exclusion acknowledges the selected identities. No timestamp is required.
+
+Each daily reference receives a globally unique, stable `planId`. Allocated
+references also carry `goalId` and `progressTargets`; initially their time range
+is null. Allocation appends to the goal's existing daily parent without moving
+its time. Already assigned units (across dates/goals) and completed units are
+skipped. Moving a plan outside its goal's date range detaches `goalId`; deleting
+the goal detaches links but preserves all daily plans and execution history.
+
+V2 ensures stable slot IDs, including imported legacy slots. Copies receive new
+slot/plan IDs and optional `copiedFromBlock` / `copiedFromPlan` provenance values
+in `sourceDate:sourceId` form. These prevent repeated copies from duplicating
+the same source entry. Copies retain geometry, colors and subgoal selection but
+exclude `goalId`, elapsed time, running state and execution sessions. Ad-hoc
+copies get a new card ID and start incomplete; linked-card completion remains
+the current source state, not a per-day historical snapshot.
+
+Official backups preserve these fields. Preview fingerprints are transient UI
+state, not persisted planner records. Allocation/copy recheck current data before
+applying a preview; changed plans require another review.
+
 Optional `timelineColors` at the planner root maps `type|id|pid` keys to integer
 HSL hues in `[0, 359]`; subject keys always have an empty `pid` component. Plans
 and actual sessions use the same mapping. Individual slots may have an optional
@@ -114,6 +162,7 @@ Data is migrated one version at a time before normalization.
 | 2 | 3 | Add root schema metadata and `meta.dataModel`. |
 | 3 | 4 | Add slot/card time ranges and empty execution-session arrays. Parse recognizable legacy slot time labels; retain unknown ranges as unscheduled. Preserve accumulated time and card references. |
 | 4 | 5 | Support optional per-plan progress targets. Existing plans keep parent-card progress without adding selections or modifying study records. |
+| 5 | 6 (V2 only) | Add an empty period-goal list and stable daily-plan/slot identities; retain existing plans, targets, names, colors and execution data. |
 
 Data without `schemaVersion` is treated as version 1 for backward compatibility.
 
@@ -148,6 +197,7 @@ The lossless backup format is:
 `data` contains the complete migrated planner. `assets` contains referenced IndexedDB
 records with a base64 data URL. Asset hash collisions are remapped during import, and
 all affected `app://asset/` references are rewritten.
+The envelope's `schemaVersion` is 5 for main and 6 for V2.
 
 Legacy root JSON backups and root-level `__assets` are still accepted and migrated.
 
@@ -182,8 +232,8 @@ and order. Wiki links preserve the subject-to-question navigation tree. App imag
 references are rewritten to Obsidian embeds under `attachments/`.
 
 `manifest.json` identifies every generated note and attachment.
-`planner-data.json` preserves the complete schema-v5 record for a future round-trip
-importer.
+`planner-data.json` preserves the complete record (schema 5 for main, 6 for V2)
+for a future round-trip importer.
 
 The current ZIP is export-only. Editing files in Obsidian and importing them back into
 StudyPlanner is not yet supported.

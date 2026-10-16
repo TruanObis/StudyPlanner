@@ -8,9 +8,10 @@ function app(){
   const html=fs.readFileSync(path.join(__dirname,'../cpa_app_timetable_monthly_v2.html'),'utf8');
   const script=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join('\n').replace(/\ninit\(\);\s*$/,'');
   const storage=new Map(), nodes=new Map();
+  const classes=()=>{const values=new Set();return {contains:v=>values.has(v),add:(...vs)=>vs.forEach(v=>values.add(v)),remove:(...vs)=>vs.forEach(v=>values.delete(v)),toggle(v,on){if(on??!values.has(v))values.add(v);else values.delete(v);}};};
   const node=id=>{
     if(!nodes.has(id)) nodes.set(id,{id,style:{},dataset:{},value:'',innerHTML:'',hidden:false,
-      classList:{contains:()=>false,add(){},remove(){},toggle(){}},addEventListener(){},setAttribute(){},focus(){},
+      classList:classes(),addEventListener(){},setAttribute(k,v){this[k]=v;},focus(){},
       querySelectorAll:()=>[],querySelector:()=>null});
     return nodes.get(id);
   };
@@ -188,4 +189,63 @@ test('source identity updates follow period goals and removing goals preserves a
   assert.equal(a.run('DATA.periodGoals.length'),0);
   assert.equal(a.run('Object.values(DATA.dailyHistory).flatMap(d=>d.slots.flatMap(s=>s.cardIds)).length'),count);
   assert.equal(a.run('Object.values(DATA.dailyHistory).flatMap(d=>d.slots.flatMap(s=>s.cardIds)).some(r=>r.goalId)'),false);
+});
+
+test('daily details expose assigned subgoals and completion changes the original card',()=>{
+  const a=app();
+  assert.equal(a.run('typeof renderPlanningPage'),'function');
+  a.run(`const goal=planningCreateGoal({...config,endDate:VIEW_DATE}); planningApplyAllocation(planningBuildAllocation(goal.id));
+    location.hash='#/plans/day'; renderPlanningPage('day'); const plan=planningPlans(VIEW_DATE)[0].ref;`);
+  assert.match(a.run('APP.innerHTML'),/핵심이론/);
+  assert.match(a.run('APP.innerHTML'),/기출1/);
+  assert.match(a.run('APP.innerHTML'),/시간 미지정/);
+  a.run(`planningToggleDone(plan.planId,planningKey({type:'question',id:'q1',pid:'m'}),true);`);
+  assert.equal(a.run('DATA.modules.m.tabs[0].questions[0].done'),true);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:5,done:1,pct:20});
+});
+
+test('both period tabs display the same new-card actions and correctly bound the selected date',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningPeriodBounds'),'function');
+  assert.deepEqual(a.json("planningPeriodBounds('week','2026-10-18')"),{start:'2026-10-12',end:'2026-10-18'});
+  a.run(`planningCreateGoal(config); DATA.modules.m.tabs[1].questions.push({id:'new-q',src:'새 기출문제'});`);
+  for(const view of ['week','month']){
+    a.run(`location.hash='#/plans/${view}'; renderPlanningPage('${view}');`);
+    assert.match(a.run('APP.innerHTML'),/새 기출문제/);
+    assert.match(a.run('APP.innerHTML'),/선택 카드 배분/);
+    assert.match(a.run('APP.innerHTML'),/이번 목표에서 제외/);
+  }
+});
+
+test('detail timer controls do not navigate away and stale completion targets cannot change unrelated cards',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningToggleTimer'),'function');
+  a.run(`const goal=planningCreateGoal({...config,endDate:VIEW_DATE}); planningApplyAllocation(planningBuildAllocation(goal.id));
+    const plan=planningPlans(VIEW_DATE)[0].ref; location.hash='#/plans/day';
+    planningToggleTimer(plan.planId);`);
+  assert.equal(a.run('location.hash'),'#/plans/day');
+  assert.equal(a.run('DATA.home.subjects[0].isRunning'),true);
+  a.run(`plan.progressTargets=plan.progressTargets.filter(r=>r.id!=='q1');
+    planningToggleDone(plan.planId,planningKey({type:'question',id:'q1',pid:'m'}),true);`);
+  assert.equal(a.run('DATA.modules.m.tabs[0].questions[0].done'),false);
+});
+
+test('returning from a directly opened planning page restores the mobile timetable and expand action',()=>{
+  const a=app();
+  a.run(`window.innerWidth=390; location.hash='#/plans/day'; renderPlanningPage('day'); closePlanningPage();`);
+  assert.equal(a.run('location.hash'),'#/');
+  assert.equal(a.run("document.getElementById('daily-sidebar').classList.contains('open')"),true);
+  assert.equal(a.nodes.get('body').classList.contains('sidebar-active'),true);
+  assert.equal(a.nodes.get('planningExpand')['aria-label'],'계획 상세 펼치기');
+});
+
+test('legacy blocks receive distinct stable identities before a copy preview',()=>{
+  const a=app();
+  a.run(`DATA.dailyHistory[VIEW_DATE]={slots:[{label:'오전',startMinute:540,endMinute:600,cardIds:[]},{label:'오후',startMinute:780,endMinute:840,cardIds:[]}],sessions:[]};
+    const preview=planningCopyPreview(VIEW_DATE,['2026-10-18'],false);`);
+  const ids=a.json('preview.rows[0].blocks.map(s=>s.id)');
+  assert.ok(ids.every(Boolean));
+  assert.equal(new Set(ids).size,2);
+  assert.equal(a.run('planningApplyCopy(preview).stale'),false);
+  assert.equal(a.run("planningCopyPreview(VIEW_DATE,['2026-10-18'],false).rows[0].blocks.length"),0);
 });
