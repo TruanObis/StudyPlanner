@@ -195,7 +195,13 @@ with their start/end handles at the actual ten-minute edges.
   touch screens to edit its date/time, subgoals or color, open its source, control
   its timer, or remove it. Removing a plan preserves its source and execution.
 * **주간 / 월간 → + 목표** creates a period goal for a subject or topic, with
-  dates, study weekdays, and selected learning cards. **배분할 카드** has two
+  dates, study weekdays, optional daily start/end times, and selected learning cards.
+  **기간 목표 편집 → 이 목표의 매일 공부 시간** sets a separate window for that
+  goal (for example, management 09:00–11:00 and economics 14:00–16:00), in
+  10-minute steps up to the following day's 02:00. Both times can be left unset.
+  Generated weekly goals inherit their monthly goal's window; uncheck
+  **월간 목표 시간 사용** to set an independent weekly window or leave it untimed.
+  **배분할 카드** has two
   panes: topics/parent cards on the left and the active topic's learning cards
   on the right. Click a topic name to browse its cards without changing the
   selection. Its checkbox selects or clears all its available cards, including
@@ -204,12 +210,21 @@ with their start/end handles at the actual ten-minute edges.
   list. Selection is a draft until the goal is saved, and does not change card
   completion. **배분** previews an even,
   ordered distribution over the remaining eligible dates. Confirming creates
-  separate unscheduled plans for the actual theory/question cards. Monthly
+  separate plans for the actual theory/question cards. With a daily time window,
+  the preview gives each card a contiguous share of the available 10-minute cells;
+  otherwise plans remain unscheduled. Monthly
   subject goals also create linked weekly goals grouped by owning topic and
   calendar week. A long topic can continue into another week. The preview shows
   both weekly topics and daily cards; the weekly tab lists weekly goals and the
   monthly tab lists monthly goals. Existing assignments and completed cards are
-  skipped. No duration is guessed, and new allocations leave existing times intact.
+  skipped for new allocation. Selected, incomplete, untimed plans already linked
+  to this goal can receive times on their existing eligible dates without being
+  duplicated. Save the goal, then use **배분 → 배분 미리보기 → 배분 확정** to apply
+  its window. Plans with times already set and all actual study records remain
+  intact. Other scheduled plans, including overlaps from adjacent dates, occupy
+  time in the window; time blocks alone do not. If fewer than 10 free minutes per
+  card remain, the preview asks for a wider window or fewer cards before applying
+  any changes. New cards use remaining free time without rearranging earlier plans.
   A parent plan without selected subgoals counts only as that parent; it does
   not prevent its children from being allocated. Explicitly selected subgoals
   still prevent duplicate assignments, including descendants of selected topics.

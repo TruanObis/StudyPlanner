@@ -91,6 +91,7 @@ V2 adds a root `periodGoals` array:
   "startDate": "2026-10-17",
   "endDate": "2026-10-31",
   "weekdays": [1, 2, 3, 4, 5],
+  "dailyTime": {"startMinute": 540, "endMinute": 660},
   "targets": [{"type": "theory", "id": "core", "pid": "module_example"}],
   "knownRefs": []
 }
@@ -104,11 +105,27 @@ New-card detection compares current identities to this set, so renaming is not
 a new card, while newly added or moved-in identities are. Allocation or explicit
 exclusion acknowledges the selected identities. No timestamp is required.
 
+Optional `dailyTime` specifies this goal's daily study window. Its integer
+endpoints must be multiples of 10, within 0–1560 minutes, with end after start.
+`null` explicitly leaves times unset. An absent field inherits the parent
+monthly goal's window for a generated weekly goal; independent goals with an
+absent field remain untimed. A weekly goal can override the inherited window or
+set `null`, and removing its field resumes inheritance. This additive field
+uses schema 7 and survives official backups without changing legacy goals.
+
 Each daily reference receives a globally unique, stable `planId`. Allocation
-creates one reference to the actual learning unit, with `goalId` and a null time
-range. It does not wrap units in a daily subject/topic card. Existing plans and
-their times remain intact. Assigned units (across dates/goals) and completed
-units are skipped. Monthly allocation also creates topic-level weekly goals
+creates one reference to the actual learning unit, with `goalId` and either a
+range within its effective `dailyTime` or null endpoints. It does not wrap units
+in a daily subject/topic card. Already timed plans and actual records remain
+intact. Assigned units (across dates/goals) and completed units are skipped for
+new plans. Selected, incomplete, untimed references linked to the goal or its
+generated children can receive times without changing their date or `planId`.
+Timing is applied only through allocation confirmation, not on goal save.
+The preview divides free 10-minute cells between that day's pending cards,
+keeping each card contiguous. Existing and newly proposed ranges reserve time
+across date boundaries; insufficient capacity aborts before any allocation is
+saved. Inherited monthly time changes also invalidate a weekly preview.
+Monthly allocation also creates topic-level weekly goals
 with `parentGoalId` pointing to the monthly goal. Their dates are the calendar
 week clipped to the monthly period, and their targets are the units allocated
 to that topic/week. Daily plans link to the weekly goal. A topic can span weeks.

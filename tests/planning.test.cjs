@@ -170,6 +170,193 @@ test('allocation divides ordered units evenly, creates unscheduled plans and ski
   assert.equal(a.run('p2.skipped.length'),5);
 });
 
+test('monthly and weekly goals divide their own daily study window into ten-minute card ranges',()=>{
+  for(const kind of ['month','week']){
+    const a=app();
+    a.run(`const goal=planningCreateGoal({...config,kind:'${kind}',dailyTime:{startMinute:540,endMinute:660}});
+      const preview=planningBuildAllocation(goal.id); planningApplyAllocation(preview);`);
+    assert.deepEqual(a.json('planningPlans(VIEW_DATE).map(p=>[p.ref.id,p.ref.startMinute,p.ref.endMinute])'),[['core',540,580],['q1',580,620],['other',620,660]]);
+    assert.deepEqual(a.json("planningPlans('2026-10-18').map(p=>[p.ref.id,p.ref.startMinute,p.ref.endMinute])"),[['q2',540,600],['loose',600,660]]);
+    const before=a.json('DATA');
+    a.run('planningApplyAllocation(planningBuildAllocation(goal.id));');
+    assert.deepEqual(a.json('DATA'),before);
+    a.run('const restored=unpackPlannerBackup(buildPlannerBackupEnvelope(DATA)).data; validateImportedPlannerData(restored);');
+    assert.deepEqual(a.json('restored.periodGoals'),a.json('DATA.periodGoals'));
+  }
+});
+
+test('goal time windows reject incomplete, reversed, off-grid and out-of-day values before saving',()=>{
+  for(const dailyTime of [{startMinute:540},{endMinute:660},{startMinute:660,endMinute:540},{startMinute:541,endMinute:660},{startMinute:-10,endMinute:60},{startMinute:1500,endMinute:1570}]){
+    const a=app();
+    assert.throws(()=>a.run(`planningCreateGoal({...config,dailyTime:${JSON.stringify(dailyTime)}})`),/시간|시각|10분/);
+    assert.equal(a.run('DATA.periodGoals.length'),0);
+  }
+  const a=app();
+  a.run('const goal=planningCreateGoal({...config,dailyTime:{startMinute:1440,endMinute:1560}});');
+  assert.deepEqual(a.json('goal.dailyTime'),{startMinute:1440,endMinute:1560});
+  assert.throws(()=>a.run('validateImportedPlannerData({...DATA,periodGoals:[{...goal,dailyTime:{startMinute:540,endMinute:540}}]})'),/시간|시각/);
+});
+
+test('time allocation fills existing untimed linked plans without moving timed, unrelated or recorded data',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal(config); planningApplyAllocation(planningBuildAllocation(goal.id));
+    const originalIds=planningPlans(VIEW_DATE).map(p=>p.ref.planId);
+    const timed=planningPlans(VIEW_DATE)[0].ref; timed.startMinute=540;timed.endMinute=580;
+    const unrelated=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'subject',id:'a'});
+    unrelated.startMinute=620;unrelated.endMinute=640;
+    DATA.dailyHistory[VIEW_DATE].totalSeconds=60;
+    DATA.dailyHistory[VIEW_DATE].sessions=[{id:'run',ref:{type:'theory',id:'core',pid:'m'},startMs:now-60000,endMs:now}];
+    const records=clonePlain(DATA.dailyHistory[VIEW_DATE].sessions);
+    goal.dailyTime={startMinute:540,endMinute:660}; const preview=planningBuildAllocation(goal.id); planningApplyAllocation(preview);`);
+  assert.deepEqual(a.json('originalIds.map(id=>{const r=planningFindPlan(id).ref;return [r.startMinute,r.endMinute]})'),[[540,580],[580,610],[610,620]]);
+  assert.deepEqual(a.json('[unrelated.startMinute,unrelated.endMinute]'),[620,640]);
+  assert.deepEqual(a.json('DATA.dailyHistory[VIEW_DATE].sessions'),a.json('records'));
+  assert.equal(a.run('DATA.dailyHistory[VIEW_DATE].totalSeconds'),60);
+  assert.equal(a.run('planningPlans(VIEW_DATE).length'),4);
+});
+
+test('generated weekly goals inherit monthly hours and a weekly override affects only its own cards',()=>{
+  const a=app();
+  a.run(`const month=planningCreateGoal(config); planningApplyAllocation(planningBuildAllocation(month.id));
+    const topic=DATA.periodGoals.find(g=>g.parentGoalId===month.id && g.root.id==='topic');
+    month.dailyTime={startMinute:540,endMinute:660}; topic.dailyTime={startMinute:840,endMinute:960};
+    planningApplyAllocation(planningBuildAllocation(month.id));`);
+  assert.deepEqual(a.json('planningPlans(VIEW_DATE).map(p=>[p.ref.startMinute,p.ref.endMinute])'),[[840,880],[880,920],[920,960]]);
+  assert.deepEqual(a.json("planningPlans('2026-10-18').map(p=>[p.ref.id,p.ref.startMinute,p.ref.endMinute])"),[['loose',540,660],['q2',840,960]]);
+  a.run('const inherited=DATA.periodGoals.find(g=>g.parentGoalId===month.id && g.root.id===\'loose\');');
+  assert.deepEqual(a.json('planningGoalDailyTime(inherited)'),{startMinute:540,endMinute:660});
+  a.run('inherited.dailyTime=null;');
+  assert.equal(a.run('planningGoalDailyTime(inherited)'),null);
+});
+
+test('time allocation detects insufficient capacity without creating partial plans and checks overnight conflicts',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal({...config,endDate:VIEW_DATE,dailyTime:{startMinute:540,endMinute:580}}); const before=clonePlain(DATA);`);
+  assert.throws(()=>a.run('planningBuildAllocation(goal.id)'),/시간|시각/);
+  assert.deepEqual(a.json('DATA'),a.json('before'));
+  a.run(`goal.targets=[goal.targets[0]]; goal.dailyTime={startMinute:1440,endMinute:1500};
+    const other=planningPlaceOnDate('2026-10-18',{source:'main',type:'subject',id:'a'});other.startMinute=0;other.endMinute=30;
+    planningApplyAllocation(planningBuildAllocation(goal.id));`);
+  assert.deepEqual(a.json('planningPlans(VIEW_DATE).map(p=>[p.ref.startMinute,p.ref.endMinute])'),[[1470,1500]]);
+});
+
+test('changing goal hours after preview requires a fresh allocation and old goals stay untimed',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal({...config,dailyTime:{startMinute:540,endMinute:660}});
+    const preview=planningBuildAllocation(goal.id); goal.dailyTime={startMinute:840,endMinute:960};
+    const result=planningApplyAllocation(preview);`);
+  assert.equal(a.run('result.stale'),true);
+  assert.deepEqual(a.json('DATA.dailyHistory'),{});
+  a.run('planningApplyAllocation(result.preview);');
+  assert.equal(a.run('planningPlans(VIEW_DATE)[0].ref.startMinute'),840);
+  const old=app();
+  old.run('const goal=planningCreateGoal(config); planningApplyAllocation(planningBuildAllocation(goal.id));');
+  assert.ok(old.run('Object.values(DATA.dailyHistory).every(d=>d.slots.every(s=>s.cardIds.every(r=>r.startMinute===null&&r.endMinute===null)))'));
+});
+
+test('goal forms save daily hours per goal, reject half-filled ranges and keep daily plans until allocation',()=>{
+  for(const kind of ['week','month']){
+    const a=app();
+    a.run(`location.hash='#/plans/${kind}'; planningOpenGoal();
+      document.getElementById('planningFrom').value=config.startDate; document.getElementById('planningTo').value=config.endDate;
+      document.querySelectorAll=selector=>selector.includes('planningWeekday')?config.weekdays.map(value=>({value})):[];
+      document.getElementById('planningGoalStart').value='540'; document.getElementById('planningGoalEnd').value='660';
+      planningSaveGoal(); const goal=DATA.periodGoals[0]; planningApplyAllocation(planningBuildAllocation(goal.id));
+      const dailyBefore=clonePlain(DATA.dailyHistory); planningOpenGoal(goal.id);`);
+    assert.equal(a.run('goal.kind'),kind);
+    assert.deepEqual(a.json('goal.dailyTime'),{startMinute:540,endMinute:660});
+    assert.match(a.nodes.get('planningModalBody').innerHTML,/value="540" selected/);
+    assert.match(a.nodes.get('planningModalBody').innerHTML,/value="660" selected/);
+    a.run(`document.getElementById('planningGoalStart').value='840'; document.getElementById('planningGoalEnd').value='';`);
+    assert.throws(()=>a.run('planningSaveGoal()'),/시각을 모두/);
+    assert.deepEqual(a.json('goal.dailyTime'),{startMinute:540,endMinute:660});
+    a.run(`document.getElementById('planningGoalEnd').value='960'; planningSaveGoal();`);
+    assert.deepEqual(a.json('goal.dailyTime'),{startMinute:840,endMinute:960});
+    assert.deepEqual(a.json('DATA.dailyHistory'),a.json('dailyBefore'));
+    assert.match(a.run(`planningPeriodHTML('${kind}',{start:config.startDate,end:config.endDate})`),/매일 14:00–16:00/);
+  }
+});
+
+test('weekly goal form can override, clear or resume inheriting its monthly hours',()=>{
+  const a=app();
+  a.run(`const month=planningCreateGoal({...config,dailyTime:{startMinute:540,endMinute:660}});
+    planningApplyAllocation(planningBuildAllocation(month.id)); const child=DATA.periodGoals.find(g=>g.parentGoalId===month.id);
+    planningOpenGoal(child.id);
+    document.getElementById('planningFrom').value=child.startDate; document.getElementById('planningTo').value=child.endDate;
+    document.querySelectorAll=selector=>selector.includes('planningWeekday')?config.weekdays.map(value=>({value})):[];`);
+  assert.match(a.nodes.get('planningModalBody').innerHTML,/id="planningInheritTime"[^>]*checked/);
+  assert.match(a.nodes.get('planningModalBody').innerHTML,/id="planningGoalStart" disabled/);
+  a.run(`document.getElementById('planningInheritTime').checked=false; planningToggleGoalTimeInheritance(false);
+    document.getElementById('planningGoalStart').value='840'; document.getElementById('planningGoalEnd').value='960';
+    planningSaveGoal();`);
+  assert.deepEqual(a.json('child.dailyTime'),{startMinute:840,endMinute:960});
+  assert.deepEqual(a.json('month.dailyTime'),{startMinute:540,endMinute:660});
+  a.run(`planningOpenGoal(child.id); document.getElementById('planningGoalStart').value=''; document.getElementById('planningGoalEnd').value=''; planningSaveGoal();`);
+  assert.equal(a.run('planningGoalDailyTime(child)'),null);
+  a.run(`planningOpenGoal(child.id); document.getElementById('planningInheritTime').checked=true; planningToggleGoalTimeInheritance(true); planningSaveGoal();`);
+  assert.equal(a.run('Object.hasOwn(child,"dailyTime")'),false);
+  assert.deepEqual(a.json('planningGoalDailyTime(child)'),{startMinute:540,endMinute:660});
+});
+
+test('changing inherited monthly hours invalidates a weekly preview and timing-only changes appear in preview',()=>{
+  const a=app();
+  a.run(`const month=planningCreateGoal(config); planningApplyAllocation(planningBuildAllocation(month.id));
+    const child=DATA.periodGoals.find(g=>g.parentGoalId===month.id); month.dailyTime={startMinute:540,endMinute:660};
+    const preview=planningBuildAllocation(child.id); planningRenderAllocation(preview);`);
+  const body=a.nodes.get('planningAllocationPreview').innerHTML;
+  assert.match(body,/09:00–09:40/);
+  assert.match(body,/기존 계획 시간 지정/);
+  assert.doesNotMatch(body,/개 제외/);
+  a.run(`month.dailyTime={startMinute:840,endMinute:960}; const result=planningApplyAllocation(preview);`);
+  assert.equal(a.run('result.stale'),true);
+  assert.equal(a.run('planningPlans(VIEW_DATE)[0].ref.startMinute'),null);
+  a.run('planningApplyAllocation(result.preview);');
+  assert.equal(a.run('planningPlans(VIEW_DATE)[0].ref.startMinute'),840);
+});
+
+test('proposed overnight allocations cannot overlap the next day in the same operation',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal({...config,dailyTime:{startMinute:0,endMinute:1560}});
+    planningApplyAllocation(planningBuildAllocation(goal.id));
+    const intervals=Object.keys(DATA.dailyHistory).flatMap(date=>planningPlans(date).map(({ref})=>[ymdToUtcDayMs(date)/60000+ref.startMinute,ymdToUtcDayMs(date)/60000+ref.endMinute])).sort((a,b)=>a[0]-b[0]);`);
+  const intervals=a.json('intervals');
+  for(let i=1;i<intervals.length;i++) assert.ok(intervals[i][0]>=intervals[i-1][1]);
+  assert.equal(a.run("planningPlans('2026-10-18').length"),2);
+});
+
+test('a broad monthly window preserves capacity for narrower and partially overlapping weekly windows',()=>{
+  for(const dailyTime of [{startMinute:540,endMinute:720},{startMinute:540,endMinute:630}]){
+    const a=app();
+    a.run(`const goal=planningCreateGoal(config); planningApplyAllocation(planningBuildAllocation(goal.id));
+      const topic=DATA.periodGoals.find(g=>g.parentGoalId===goal.id&&g.root.id==='topic');
+      goal.dailyTime=${JSON.stringify(dailyTime)}; topic.dailyTime={startMinute:600,endMinute:660};
+      planningApplyAllocation(planningBuildAllocation(goal.id));`);
+    assert.deepEqual(a.json("planningPlans('2026-10-18').map(p=>[p.ref.id,p.ref.startMinute,p.ref.endMinute])"),[['loose',540,600],['q2',600,660]]);
+  }
+});
+
+test('overnight windows preserve capacity for the following weeks narrower window',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal({...config,startDate:'2026-10-18',endDate:'2026-10-19'});
+    planningApplyAllocation(planningBuildAllocation(goal.id)); goal.dailyTime={startMinute:0,endMinute:1560};
+    const child=DATA.periodGoals.find(g=>g.parentGoalId===goal.id&&g.startDate==='2026-10-19'&&g.root.id==='topic');
+    child.dailyTime={startMinute:0,endMinute:120}; planningApplyAllocation(planningBuildAllocation(goal.id));
+    const intervals=Object.keys(DATA.dailyHistory).flatMap(date=>planningPlans(date).map(({ref})=>[ymdToUtcDayMs(date)/60000+ref.startMinute,ymdToUtcDayMs(date)/60000+ref.endMinute])).sort((a,b)=>a[0]-b[0]);`);
+  const intervals=a.json('intervals');
+  for(let i=1;i<intervals.length;i++) assert.ok(intervals[i][0]>=intervals[i-1][1]);
+  assert.ok(a.run("planningPlans('2026-10-19').find(p=>p.ref.id==='q2').ref.endMinute<=120"));
+});
+
+test('timing old and newly selected cards together retains source order',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal({...config,endDate:VIEW_DATE,targets:[{type:'theory',id:'core',pid:'m'}]});
+    planningApplyAllocation(planningBuildAllocation(goal.id)); const originalId=planningPlans(VIEW_DATE)[0].ref.planId;
+    goal.dailyTime={startMinute:540,endMinute:660}; goal.targets.push({type:'question',id:'q1',pid:'m'});
+    planningApplyAllocation(planningBuildAllocation(goal.id));`);
+  assert.deepEqual(a.json('planningPlans(VIEW_DATE).map(p=>[p.ref.id,p.ref.startMinute,p.ref.endMinute])'),[['core',540,600],['q1',600,660]]);
+  assert.equal(a.run('planningPlans(VIEW_DATE)[0].ref.planId'),a.run('originalId'));
+});
+
 test('parent plans without selected subgoals do not block allocating their children',()=>{
   for(const ref of [{type:'subject',id:'a'},{type:'detail',id:'topic',pid:'a'}]){
     const a=app();

@@ -925,7 +925,7 @@ const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
 const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
 const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-10-17-planning-workspace-9';
+const APP_BUILD_ID = '2026-10-17-planning-workspace-10';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
 const PLANNER_SCHEMA_VERSION = 7;
@@ -5026,6 +5026,7 @@ function validatePlanningData(data,checkId,checkUnique){
     checkId(goal.id,'기간 목표'); checkRef(goal.root); checkRef(goal.scope);
     if(!parseYMD(goal.startDate) || !parseYMD(goal.endDate) || goal.startDate>goal.endDate) throw new Error('기간 목표 날짜가 올바르지 않습니다.');
     if(!Array.isArray(goal.weekdays) || !goal.weekdays.length || goal.weekdays.some(d=>!Number.isInteger(d)||d<0||d>6)) throw new Error('기간 목표 요일이 올바르지 않습니다.');
+    if(goal.dailyTime!=null && (!isPlainRecord(goal.dailyTime) || !hasTimelineRange(goal.dailyTime))) throw new Error('목표의 공부 시작·종료 시각은 00:00–다음 날 02:00 안에서 10분 단위로 설정해 주세요.');
     for(const field of ['targets','knownRefs']){
       if(!Array.isArray(goal[field])) throw new Error('기간 목표 카드 목록이 올바르지 않습니다.');
       goal[field].forEach(checkRef);
@@ -5073,13 +5074,21 @@ function planningWithin(root,data=DATA){
 }
 function planningUnits(root){ return planningWithin(root).filter(item=>item.unit).map(item=>item.ref); }
 function planningGoal(id){ return (DATA.periodGoals || []).find(g=>g.id===id); }
+function planningGoalDailyTime(goal,data=DATA){
+  if(goal?.dailyTime!==undefined) return goal.dailyTime;
+  return (data.periodGoals || []).find(g=>g.id===goal?.parentGoalId)?.dailyTime ?? null;
+}
+function planningFindWeeklyGoal(data,parent,date,root){
+  const week=planningPeriodBounds('week',date).start;
+  return data.periodGoals.find(g=>g.parentGoalId===parent.id && planningKey(g.root)===planningKey(root) &&
+    g.startDate<=date && g.endDate>=date && planningPeriodBounds('week',g.startDate).start===week);
+}
 function planningWeeklyGoal(data,parent,date,ref,catalog=planningCatalog(data)){
   const entry=catalog.find(item=>planningKey(item.ref)===planningKey(ref));
   if(!entry) return parent;
   const root=entry.scope,bounds=planningPeriodBounds('week',date);
   const start=[bounds.start,parent.startDate].sort().at(-1),end=[bounds.end,parent.endDate].sort()[0];
-  let goal=data.periodGoals.find(g=>g.parentGoalId===parent.id && planningKey(g.root)===planningKey(root) &&
-    g.startDate<=date && g.endDate>=date && planningPeriodBounds('week',g.startDate).start===bounds.start);
+  let goal=planningFindWeeklyGoal(data,parent,date,root);
   if(!goal){
     goal={id:uid('goal'),kind:'week',parentGoalId:parent.id,root:planningRef(root),scope:planningRef(root),
       startDate:start,endDate:end,weekdays:[...parent.weekdays],targets:[],knownRefs:planningWithin(root,data).map(item=>item.ref)};
@@ -5129,6 +5138,7 @@ function planningCreateGoal(config){
     startDate:config.startDate,endDate:config.endDate,weekdays:[...new Set(config.weekdays || [])],
     targets:planningUnique(config.targets ?? planningUnits(config.root).filter(r=>!getCardInfo(r).done)).filter(r=>allowed.has(planningKey(r))),
     knownRefs:planningWithin(entry.scope).map(item=>item.ref)};
+  if(config.dailyTime!==undefined) goal.dailyTime=clonePlain(config.dailyTime);
   // Use the same validation as official backup import, before touching saved state.
   validateImportedPlannerData({...DATA,periodGoals:[...DATA.periodGoals,goal]});
   DATA.periodGoals.push(goal); saveData(); return goal;
@@ -5187,7 +5197,60 @@ function planningDates(start,end,weekdays=[0,1,2,3,4,5,6]){
 function planningAllocationStamp(goal){
   const units=planningWithin(goal.scope).map(item=>[planningKey(item.ref),item.unit,getCardInfo(item.ref).done]);
   const plans=Object.keys(DATA.dailyHistory || {}).sort().flatMap(date=>planningPlans(date).map(({ref})=>[date,ref.planId,ref.goalId,ref.startMinute,ref.endMinute,planningKey(ref),(ref.progressTargets || []).map(planningKey)]));
-  return JSON.stringify([goal,(DATA.periodGoals || []).filter(g=>g.parentGoalId===goal.id),units,plans]);
+  return JSON.stringify([goal,planningGoalDailyTime(goal),(DATA.periodGoals || []).filter(g=>g.parentGoalId===goal.id),units,plans]);
+}
+function planningAllocateTimes(goal,entries,selected,goalIds){
+  const catalog=new Map(planningCatalog().map((item,index)=>[planningKey(item.ref),{...item,index}])),groups=new Map();
+  // Absolute minutes also catch overlaps between 24:00–26:00 and the next day's 00:00–02:00.
+  const occupied=Object.keys(DATA.dailyHistory || {}).flatMap(date=>planningPlans(date).filter(p=>hasTimelineRange(p.ref)).map(({ref})=>{
+    const base=ymdToUtcDayMs(date)/60000; return [base+ref.startMinute,base+ref.endMinute];
+  }));
+  entries.forEach(row=>{
+    const ownerFor=ref=>goal.kind==='month' ? planningFindWeeklyGoal(DATA,goal,row.date,catalog.get(planningKey(ref)).scope) || goal : goal;
+    row.placements=row.refs.map(ref=>({ref,startMinute:null,endMinute:null}));
+    planningPlans(row.date).forEach(({ref})=>{
+      if(goalIds.has(ref.goalId) && selected.has(planningKey(ref)) && !getCardInfo(ref).done && !hasTimelineRange(ref) && planningGoalDailyTime(planningGoal(ref.goalId))){
+        row.placements.push({ref:planningRef(ref),planId:ref.planId,startMinute:null,endMinute:null});
+      }
+    });
+    row.placements.sort((a,b)=>catalog.get(planningKey(a.ref)).index-catalog.get(planningKey(b.ref)).index);
+    row.placements.forEach(placement=>{
+      const owner=placement.planId ? planningGoal(planningFindPlan(placement.planId).ref.goalId) : ownerFor(placement.ref);
+      const range=planningGoalDailyTime(owner); if(!range) return;
+      const key=`${row.date}:${range.startMinute}:${range.endMinute}`;
+      if(!groups.has(key)) groups.set(key,{...range,date:row.date,base:ymdToUtcDayMs(row.date)/60000,placements:[],reserved:[]});
+      groups.get(key).placements.push(placement);
+    });
+  });
+  const allGroups=[...groups.values()],minimumSlots=new Set();
+  const overlaps=min=>occupied.some(([start,end])=>min<end && start<min+10);
+  // Reserve one cell per card by earliest deadline before sharing spare time.
+  // Wide windows must not consume a narrower weekly or following-day window.
+  [...allGroups].sort((a,b)=>(a.base+a.endMinute)-(b.base+b.endMinute) || (a.base+a.startMinute)-(b.base+b.startMinute)).forEach(group=>{
+    for(let min=group.base+group.startMinute;min<group.base+group.endMinute && group.reserved.length<group.placements.length;min+=10){
+      if(overlaps(min) || minimumSlots.has(min)) continue;
+      group.reserved.push(min); minimumSlots.add(min);
+    }
+    if(group.reserved.length<group.placements.length) throw new Error(`${group.date}의 ${timelineRange(group)}에 빈 시간이 부족합니다. 카드당 최소 10분이 필요합니다. 목표 시간이나 배분할 카드를 조정해 주세요.`);
+  });
+  allGroups.sort((a,b)=>(a.base+a.startMinute)-(b.base+b.startMinute) || a.endMinute-b.endMinute).forEach(group=>{
+    group.reserved.forEach(min=>minimumSlots.delete(min));
+    const runs=[],base=group.base;
+    for(let min=group.startMinute;min<group.endMinute;min+=10){
+      if(overlaps(base+min) || minimumSlots.has(base+min)) continue;
+      if(runs.at(-1)?.endMinute===min) runs.at(-1).endMinute=min+10;
+      else runs.push({startMinute:min,endMinute:min+10});
+    }
+    let cells=runs.reduce((sum,run)=>sum+(run.endMinute-run.startMinute)/10,0);
+    group.placements.forEach((placement,i)=>{
+      const run=runs[0],count=Math.min((run.endMinute-run.startMinute)/10,Math.ceil(cells/(group.placements.length-i)));
+      placement.startMinute=run.startMinute; placement.endMinute=run.startMinute+count*10;
+      occupied.push([base+placement.startMinute,base+placement.endMinute]);
+      run.startMinute=placement.endMinute; cells-=count;
+      if(run.startMinute===run.endMinute) runs.shift();
+    });
+  });
+  return entries.filter(row=>row.placements.length);
 }
 function planningBuildAllocation(goalId,refs,from,to){
   const goal=planningGoal(goalId); if(!goal) throw new Error('기간 목표를 찾을 수 없습니다.');
@@ -5209,7 +5272,7 @@ function planningBuildAllocation(goalId,refs,from,to){
   const quota=dates.map(()=>0);
   available.forEach(()=>{ const i=loads.indexOf(Math.min(...loads)); loads[i]++; quota[i]++; });
   let offset=0;
-  const entries=dates.map((date,i)=>{const row={date,refs:available.slice(offset,offset+quota[i])};offset+=quota[i];return row;}).filter(e=>e.refs.length);
+  const entries=planningAllocateTimes(goal,dates.map((date,i)=>{const row={date,refs:available.slice(offset,offset+quota[i])};offset+=quota[i];return row;}),selected,goalIds);
   const weeks=[];
   if(goal.kind==='month'){
     const catalog=new Map(planningCatalog().map(item=>[planningKey(item.ref),item]));
@@ -5229,17 +5292,22 @@ function planningApplyAllocation(preview){
   const goal=planningGoal(preview.goalId);
   goal.targets=planningUnique([...goal.targets,...current.refs]);
   goal.knownRefs=planningUnique([...goal.knownRefs,...current.refs]);
-  let applied=0;
-  current.entries.forEach(({date,refs})=>{
+  let applied=0,timed=0;
+  current.entries.forEach(({date,placements})=>{
     const daily=ensureDailyData(date);
-    refs.forEach(target=>{
-      const owner=goal.kind==='month' ? planningWeeklyGoal(DATA,goal,date,target) : goal;
-      ungroupedTimelineCards(daily).cardIds.push({...planningRef(target),planId:uid('plan'),goalId:owner.id,
-        startMinute:null,endMinute:null,time:0,isRunning:false});
+    placements.forEach(({ref,planId,startMinute,endMinute})=>{
+      if(planId){
+        Object.assign(planningFindPlan(planId).ref,{startMinute,endMinute});
+      } else {
+        const owner=goal.kind==='month' ? planningWeeklyGoal(DATA,goal,date,ref) : goal;
+        ungroupedTimelineCards(daily).cardIds.push({...planningRef(ref),planId:uid('plan'),goalId:owner.id,
+          startMinute,endMinute,time:0,isRunning:false,progressTargetsFollowMoves:true});
+        applied++;
+      }
+      if(startMinute!=null) timed++;
     });
-    applied+=refs.length;
   });
-  saveData(); return {applied,stale:false};
+  saveData(); return {applied,timed,stale:false};
 }
 function planningMovePlan(id,date,start,end){
   const item=planningFindPlan(id); if(!item) throw new Error('계획을 찾을 수 없습니다.');
@@ -5583,9 +5651,10 @@ function planningPeriodHTML(view,bounds){
   planningNewRows=planningNewCards(bounds.start,bounds.end);
   const goalHTML=goals.map(goal=>{
     const targets=goal.targets.filter(r=>keys.has(planningKey(r))),done=targets.filter(r=>getCardInfo(r).done).length;
+    const dailyTime=planningGoalDailyTime(goal);
     return `<article class="planning-item"><div class="planning-item-head"><div><span class="planning-badge">${goal.kind==='week'?'주간 목표':'월간 목표'}</span>
       <button type="button" class="planning-title" onclick="${planningCall('planningOpenSource',[goal.root])}">${escapeHtml(getCardInfo(goal.root).title)}</button>
-      <div class="planning-muted">${goal.startDate} – ${goal.endDate} · ${done} / ${targets.length} 완료${goal.parentGoalId?` · ${escapeHtml(getCardInfo(planningGoal(goal.parentGoalId)?.root || goal.root).title)} 월간 목표`:''}</div></div>
+      <div class="planning-muted">${goal.startDate} – ${goal.endDate} · ${done} / ${targets.length} 완료${dailyTime?` · 매일 ${timelineRange(dailyTime)}`:''}${goal.parentGoalId?` · ${escapeHtml(getCardInfo(planningGoal(goal.parentGoalId)?.root || goal.root).title)} 월간 목표`:''}</div></div>
       <div class="planning-actions">${planningButton('배분','planningOpenAllocation',[goal.id],true)}${planningButton('편집','planningOpenGoal',[goal.id])}${planningButton('삭제','planningRemoveGoal',[goal.id])}</div></div></article>`;
   }).join('');
   const newHTML=planningNewRows.length ? `<div class="planning-new"><div>${planningNewRows.map((row,index)=>`<label class="planning-check"><input type="checkbox" class="planning-new-check" value="${index}"><span><strong>${escapeHtml(row.label)}</strong><span class="planning-muted">${escapeHtml(row.path)}<br>${row.goalIds.map(id=>escapeHtml(getCardInfo(planningGoal(id).root).title)).join(' · ')}${getCardInfo(row.ref).done?' · 완료':''}${row.assignedDates.length?` · 배정: ${row.assignedDates.join(', ')}`:''}</span></span></label>`).join('')}</div>
@@ -5648,6 +5717,20 @@ function planningSelectedWeekdays(){ return [...document.querySelectorAll('#plan
 function planningRangeFields(start,end){
   return `<div class="planning-fields"><label class="planning-field">시작 날짜<input id="planningFrom" type="date" value="${start}" onclick="planningOpenDatePicker(this,false)" required></label><label class="planning-field">종료 날짜<input id="planningTo" type="date" value="${end}" onclick="planningOpenDatePicker(this,false)" required></label></div>`;
 }
+function planningGoalTimeFields(goal){
+  const range=planningGoalDailyTime(goal),inherit=!!goal?.parentGoalId && goal.dailyTime===undefined;
+  return `<strong>이 목표의 매일 공부 시간</strong>
+    ${goal?.parentGoalId?`<label class="planning-check"><input id="planningInheritTime" type="checkbox" ${inherit?'checked':''} onchange="planningToggleGoalTimeInheritance(this.checked)">월간 목표 시간 사용</label>`:''}
+    <div class="planning-fields"><label class="planning-field">공부 시작<select id="planningGoalStart" ${inherit?'disabled':''}>${planningTimeOptions(range?.startMinute)}</select></label><label class="planning-field">공부 종료<select id="planningGoalEnd" ${inherit?'disabled':''}>${planningTimeOptions(range?.endMinute)}</select></label></div>
+    <p class="planning-muted">선택한 요일에 이 시간 안에서 세부 카드를 10분 단위로 나눕니다. 저장 후 ‘배분’에서 반영할 수 있습니다. 이미 시간을 정한 계획은 유지됩니다.</p>`;
+}
+function planningToggleGoalTimeInheritance(inherit){
+  const state=planningModalState,goal=planningGoal(state?.id);if(state?.type!=='goal'||!goal?.parentGoalId)return;
+  const start=document.getElementById('planningGoalStart'),end=document.getElementById('planningGoalEnd');
+  if(inherit) state.ownDailyTime={startMinute:start.value,endMinute:end.value};
+  const range=inherit ? planningGoalDailyTime(planningGoal(goal.parentGoalId)) : state.ownDailyTime || planningGoalDailyTime(goal);
+  start.value=range?.startMinute ?? '';end.value=range?.endMinute ?? '';start.disabled=inherit;end.disabled=inherit;
+}
 function planningOpenGoal(id){
   const goal=id?planningGoal(id):null;if(id&&!goal) return;
   const roots=planningCatalog(),view=planningView()==='week'?'week':'month',bounds=planningPeriodBounds(view);
@@ -5657,6 +5740,7 @@ function planningOpenGoal(id){
   planningShowModal(goal?'기간 목표 편집':'기간 목표 만들기',`<label class="planning-field">과목·단원<select id="planningRoot" ${goal?'disabled':''} onchange="planningChangeGoalRoot(this.value)">${roots.map((entry,i)=>`<option value="${i}" ${planningKey(entry.ref)===planningKey(root)?'selected':''}>${escapeHtml([entry.path,entry.label].filter(Boolean).join(' / '))}</option>`).join('')}</select></label>
     ${planningRangeFields(goal?.startDate || bounds.start,goal?.endDate || bounds.end)}
     <span class="planning-muted">공부할 요일</span>${planningWeekdayHTML(goal?.weekdays || [1,2,3,4,5])}
+    ${planningGoalTimeFields(goal)}
     <p class="planning-muted" id="planningScopeLabel"></p><div class="planning-section-head"><strong>배분할 카드</strong><div class="planning-actions">${planningButton('미완료 선택','planningSelectGoalTargets',[true])}${planningButton('선택 해제','planningSelectGoalTargets',[false])}</div></div><div id="planningGoalTargets" class="planning-target-picker"></div>
     ${goal?'<p class="planning-muted">목표를 편집해도 이미 배정한 일간 계획은 유지됩니다.</p>':''}`);
   planningRenderGoalTargets();
@@ -5740,11 +5824,19 @@ function planningSaveGoal(){
   const state=planningModalState;
   const config={kind:state.kind,root:state.root,startDate:document.getElementById('planningFrom').value,endDate:document.getElementById('planningTo').value,weekdays:planningSelectedWeekdays(),targets:state.targets};
   planningDates(config.startDate,config.endDate,config.weekdays);
+  const inherit=!!planningGoal(state.id)?.parentGoalId && document.getElementById('planningInheritTime').checked;
+  if(!inherit){
+    const start=document.getElementById('planningGoalStart').value,end=document.getElementById('planningGoalEnd').value;
+    if((start==='')!==(end==='')) throw new Error('공부 시작·종료 시각을 모두 선택해 주세요.');
+    config.dailyTime=start===''?null:{startMinute:Number(start),endMinute:Number(end)};
+  }
   if(state.id){
     const goal=planningGoal(state.id);if(!goal || JSON.stringify(goal)!==state.original) throw new Error('목표가 변경되었습니다. 편집창을 닫고 다시 열어 주세요.');
     const allowed=new Set(planningUnits(goal.scope).map(planningKey));
     const updated={...goal,...config,targets:planningUnique(config.targets).filter(r=>allowed.has(planningKey(r)))};
+    if(inherit) delete updated.dailyTime;
     validateImportedPlannerData({...DATA,periodGoals:DATA.periodGoals.map(g=>g.id===goal.id?updated:g)});
+    if(inherit) delete goal.dailyTime;
     Object.assign(goal,updated); saveData();
   } else planningCreateGoal(config);
   planningCloseModal();planningRefresh('기간 목표를 저장했습니다. 배분 버튼으로 날짜별 계획을 만들 수 있습니다.');
@@ -5793,7 +5885,7 @@ function planningOpenAllocation(id,refs,choices){
   const goal=planningGoal(id);if(!goal)return;
   planningModalState={type:'allocation',goalId:id,refs,choices:choices || [id],preview:null};
   planningShowModal('날짜별 배분',`<label class="planning-field">기간 목표<select id="planningAllocationGoal" onchange="planningChangeAllocationGoal(this.value)">${planningModalState.choices.map(key=>{const g=planningGoal(key);return `<option value="${escapeHtml(key)}" ${key===id?'selected':''}>${escapeHtml(getCardInfo(g.root).title)} · ${g.startDate}–${g.endDate}</option>`;}).join('')}</select></label>
-    ${planningRangeFields([goal.startDate,getLogicalDate()].sort().at(-1),goal.endDate)}<p class="planning-muted">목표에 정한 요일에 분량을 나눕니다. 이미 배정했거나 완료한 카드는 새로 배분하지 않습니다.</p>
+    ${planningRangeFields([goal.startDate,getLogicalDate()].sort().at(-1),goal.endDate)}<p class="planning-muted">목표에 정한 요일과 공부 시간에 분량을 나눕니다. 이미 배정한 시간 미지정 계획에는 시각만 반영하며, 시간을 정한 계획과 완료한 카드는 유지합니다.</p>
     ${planningButton('배분 미리보기','planningPreviewAllocation')}<div id="planningAllocationPreview"></div>`,'배분 확정');
   planningPreviewAllocation();
 }
@@ -5803,9 +5895,11 @@ function planningChangeAllocationGoal(id){
 }
 function planningRenderAllocation(preview){
   const weeks=(preview.weeks || []).map(week=>`<div class="planning-preview-row"><strong>${week.startDate} – ${week.endDate} · ${escapeHtml(getCardInfo(week.root).title)}</strong><div class="planning-muted">주간 목표 · 세부 카드 ${week.refs.length}개</div></div>`).join('');
-  const days=preview.entries.map(row=>`<div class="planning-preview-row"><strong>${row.date} · ${row.refs.length}개</strong><div class="planning-muted">${row.refs.map(ref=>escapeHtml(planningLabel(ref))).join('<br>')}</div></div>`).join('');
+  const days=preview.entries.map(row=>`<div class="planning-preview-row"><strong>${row.date} · ${row.placements.length}개</strong><div class="planning-muted">${row.placements.map(item=>`${escapeHtml(planningLabel(item.ref))} · ${hasTimelineRange(item)?timelineRange(item):'시간 미지정'}${item.planId?' (기존 계획 시간 지정)':''}`).join('<br>')}</div></div>`).join('');
   document.getElementById('planningAllocationPreview').innerHTML=(weeks?`<h3>주별 단원 목표</h3>${weeks}<h3>날짜별 세부 카드</h3>`:'')+days || '<p class="planning-muted">추가로 배분할 항목이 없습니다.</p>';
-  if(preview.skipped.length) document.getElementById('planningAllocationPreview').innerHTML+=`<p class="planning-muted">${preview.skipped.length}개 제외: ${preview.skipped.map(row=>`${escapeHtml(planningLabel(row.ref))} (${row.reason}${row.dates.length?' · '+row.dates.join(', '):''})`).join('<br>')}</p>`;
+  const timedKeys=new Set(preview.entries.flatMap(row=>row.placements.filter(item=>item.planId).map(item=>planningKey(item.ref))));
+  const skipped=preview.skipped.filter(row=>!timedKeys.has(planningKey(row.ref)));
+  if(skipped.length) document.getElementById('planningAllocationPreview').innerHTML+=`<p class="planning-muted">${skipped.length}개 제외: ${skipped.map(row=>`${escapeHtml(planningLabel(row.ref))} (${row.reason}${row.dates.length?' · '+row.dates.join(', '):''})`).join('<br>')}</p>`;
 }
 function planningPreviewAllocation(){
   const state=planningModalState;if(state?.type!=='allocation')return;
@@ -5821,7 +5915,10 @@ function planningConfirmAllocation(){
   if(!state.preview || JSON.stringify(range)!==JSON.stringify(state.formRange)){planningPreviewAllocation();throw new Error('변경한 날짜로 미리보기를 확인한 뒤 배분을 확정해 주세요.');}
   const result=planningApplyAllocation(state.preview);
   if(result.stale){state.preview=result.preview;planningRenderAllocation(result.preview);throw new Error('카드나 계획이 변경되어 미리보기를 갱신했습니다. 다시 확인해 주세요.');}
-  planningCloseModal();planningRefresh(`${result.applied}개 학습 항목을 날짜별로 배분했습니다.`);
+  const messages=[];
+  if(result.applied) messages.push(`${result.applied}개 학습 항목을 날짜별로 배분했습니다.`);
+  if(result.timed) messages.push(`${result.timed}개 계획에 공부 시간을 지정했습니다.`);
+  planningCloseModal();planningRefresh(messages.join(' ') || '추가로 배분할 항목이 없습니다.');
 }
 function planningTimeOptions(selected){
   return `<option value="" ${selected==null?'selected':''}>시간 미지정</option>${Array.from({length:157},(_,i)=>i*10).map(min=>`<option value="${min}" ${selected===min?'selected':''}>${min>=1440?'다음 날 ':''}${pad2(Math.floor(min/60)%24)}:${pad2(min%60)}</option>`).join('')}`;
