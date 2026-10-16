@@ -734,7 +734,7 @@ textarea.autogrow{ resize: vertical; overflow:hidden; }
       <button class="nav-btn" onclick="changeSidebarDate(-1)">❮</button>
 
       <input class="nav-date" id="navDateDisplay" type="date" aria-label="일일 계획 날짜"
-        onchange="planningDateInput(this)" onblur="planningDateInput(this,true)" onkeydown="planningDateKeydown(event,this)">
+        onclick="planningOpenDatePicker(this)" onchange="planningDateInput(this)" onblur="planningDateInput(this,true)" onkeydown="planningDateKeydown(event,this)">
 
       <div style="display:flex; align-items:center; gap:6px;">
         <button class="nav-today" onclick="goToday(); event.stopPropagation();" title="오늘(KST)로 이동">오늘로</button>
@@ -905,7 +905,7 @@ const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
 const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
 const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-10-17-planning-workspace-2';
+const APP_BUILD_ID = '2026-10-17-planning-workspace-3';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
 const PLANNER_SCHEMA_VERSION = 6;
@@ -5416,7 +5416,7 @@ function renderPlanningPage(view='day'){
   }else{
     host.innerHTML=`<div class="planning-page"><header class="planning-heading"><div><h1>계획 상세</h1><div class="planning-muted">${summary}</div></div><div class="planning-actions"><button class="btn btn-outline planning-mobile-return" onclick="closePlanningPage()">시간표</button><span class="planning-desktop-close">${planningButton('접기','closePlanningPage')}</span></div></header>
       <div class="planning-tabs" role="tablist" aria-label="계획 보기">${[['day','일간'],['week','주간'],['month','월간']].map(([key,label])=>`<button role="tab" data-planning-view="${key}" aria-selected="${view===key}" onclick="${planningCall('planningSelectView',[key])}">${label}</button>`).join('')}</div>
-      <div class="planning-toolbar"><div class="planning-nav">${planningButton('‹','planningShiftDate',[-1])}<input type="date" aria-label="계획 날짜" value="${date}" onchange="planningDateInput(this)" onblur="planningDateInput(this,true)" onkeydown="planningDateKeydown(event,this)">${planningButton('›','planningShiftDate',[1])}<button class="btn btn-outline" onclick="planningSetDate(getLogicalDate())">오늘</button></div><span class="planning-copy-action" ${view==='day'?'':'hidden'}>${planningButton('다른 날짜로 복사','planningOpenCopy')}</span></div>
+      <div class="planning-toolbar"><div class="planning-nav">${planningButton('‹','planningShiftDate',[-1])}<input type="date" aria-label="계획 날짜" value="${date}" onclick="planningOpenDatePicker(this)" onchange="planningDateInput(this)" onblur="planningDateInput(this,true)" onkeydown="planningDateKeydown(event,this)">${planningButton('›','planningShiftDate',[1])}<button class="btn btn-outline" onclick="planningSetDate(getLogicalDate())">오늘</button></div><span class="planning-copy-action" ${view==='day'?'':'hidden'}>${planningButton('다른 날짜로 복사','planningOpenCopy')}</span></div>
       <div class="planning-message" role="status">${escapeHtml(planningMessage)}</div><div class="planning-results">${contents}</div></div>`;
   }
   planningSyncExpand(true);
@@ -6317,6 +6317,11 @@ function setSidebarDate(date){
 function planningDateKeydown(ev,input){
   if(ev.key==='Enter'){ev.preventDefault();input.blur();}
   else if(/^[0-9]$/.test(ev.key)||ev.key==='Backspace'||ev.key==='Delete') input.dataset.typing='1';
+}
+function planningOpenDatePicker(input){
+  planningDateInput(input,true);
+  // Open from the date text as well as the browser's small calendar icon.
+  try{input.showPicker?.();}catch(_){/* Keep native keyboard/icon controls available. */}
 }
 function planningDateInput(input,commit=false){
   // Native date fields emit changes for partial years; preserve the draft while typing.

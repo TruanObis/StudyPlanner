@@ -167,6 +167,8 @@ between details and the timetable via **시간표**. Opening a source card keeps
 planning panel open. The daily sidebar date accepts direct numeric entry or the
 browser's date picker, without an extra dialog or tooltip. Numeric edits commit
 on Enter or when leaving the field; picker selections apply immediately.
+Clicking the date text or calendar icon opens the native dropdown in both the
+sidebar and details panel. Keyboard focus still allows direct numeric entry.
 
 * **일간** lists every plan for the selected date, including unscheduled plans.
   Assigned subgoals are expanded by default. Check completion, edit subgoals,
