@@ -20,7 +20,7 @@ function app(){
     window:{location,addEventListener(){},innerWidth:1280,scrollY:0,scrollTo(){}},location,
     document:{getElementById:node,querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){},documentElement:node('html'),body:node('body')},
     localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
-    navigator:{},setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,clearInterval(){},confirm:()=>true,alert(){}});
+    navigator:{},setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,clearInterval(){},requestAnimationFrame:()=>0,confirm:()=>true,alert(){}});
   vm.runInContext(script,context);
   const run=code=>vm.runInContext(code,context);
   run(`DATA=baseData(); VIEW_DATE='2026-10-17';
@@ -35,9 +35,95 @@ function app(){
     DATA.dailyHistory={};
     const root={type:'subject',id:'a'};
     const config={kind:'month',root,startDate:'2026-10-17',endDate:'2026-10-18',weekdays:[0,1,2,3,4,5,6]};
+    const realRenderDailySidebar=renderDailySidebar;
     renderWithScrollPreserved=()=>{}; renderDailySidebar=()=>{}; renderRouter=()=>{};`);
   return {run,storage,nodes,json:code=>JSON.parse(JSON.stringify(run(code)))};
 }
+
+function partialProgressApp(){
+  const a=app();
+  a.run(`DATA.details.a.cards=[{id:'topic',title:'단원',module:'m',time:10}];
+    DATA.modules.m.tabs=[{id:'core',label:'이론',done:true,time:20,questions:[]}];
+    const parentPlan={type:'subject',id:'a',planId:'plan',startMinute:540,endMinute:600,time:40};
+    DATA.dailyHistory[VIEW_DATE]={slots:[{id:'s',cardOnly:true,cardIds:[parentPlan]}],sessions:[],totalSeconds:40};`);
+  return a;
+}
+
+test('adding a second unfinished module card changes parent and daily progress from 100 to 50 percent',()=>{
+  const a=partialProgressApp();
+  assert.equal(a.run('calcSubjectStats("a").pct'),100);
+  assert.equal(a.run('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE]).pct'),100);
+  a.run(`DATA.modules.m.tabs[0].questions.push({id:'q',src:'문제',done:false,time:30});`);
+  assert.equal(a.run('calcModuleStats("m").pct'),50);
+  assert.equal(a.run('calcSubjectStats("a").pct'),50);
+  assert.equal(a.run('calcTotalStats().pct'),50);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:2,done:1,pct:50});
+  assert.equal(a.run('getCardInfo(parentPlan).done'),false);
+  assert.equal(a.run('calcSubjectStats("a").rawTime'),120);
+  assert.equal(a.run('parentPlan.time'),40);
+});
+
+test('subject and total progress weight individual learning cards across unequal topics',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.modules.m.tabs[0].questions=[{id:'q',done:false}];
+    DATA.details.a.cards.push({id:'second',title:'다른 단원',module:'n'},{id:'loose',done:false});
+    DATA.modules.n={id:'n',tabs:[{id:'n1',done:true,questions:[{id:'nq1',done:true},{id:'nq2',done:false}]}]};`);
+  assert.equal(a.run('calcSubjectStats("a").pct'),50);
+  assert.equal(a.run('calcTotalStats().pct'),50);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:6,done:3,pct:50});
+  a.run(`DATA.home.subjects.push({id:'b'});DATA.details.b={cards:[{id:'b1',done:false}]};`);
+  assert.equal(a.run('calcTotalStats().pct'),43);
+});
+
+test('selected parent subgoals retain partial progress while individual theory and question targets stay independent',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.modules.m.tabs[0].questions=[{id:'q',done:false}];
+    DATA.details.a.cards.push({id:'unselected',done:false});
+    setTimelineSubgoals(parentPlan,[{type:'detail',id:'topic',pid:'a'}]);`);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:2,done:1,pct:50});
+  a.run(`setTimelineSubgoals(parentPlan,[{type:'theory',id:'core',pid:'m'}]);`);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:1,done:1,pct:100});
+  a.run(`setTimelineSubgoals(parentPlan,[{type:'question',id:'q',pid:'m'}]);`);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:1,done:0,pct:0});
+  a.run(`setTimelineSubgoals(parentPlan,[]);parentPlan.type='detail';parentPlan.id='topic';parentPlan.pid='a';`);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:2,done:1,pct:50});
+});
+
+test('a rounded percentage never marks an unfinished parent complete',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.modules.m.tabs[0].questions=Array.from({length:200},(_,i)=>({id:'q'+i,done:i<199}));`);
+  assert.equal(a.run('getCardInfo(parentPlan).done'),false);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:201,done:200,pct:100});
+  a.run(`DATA.modules.m.tabs[0].questions[199].done=true;`);
+  assert.equal(a.run('getCardInfo(parentPlan).done'),true);
+});
+
+test('overlapping parent and child subgoals count each learning card once per plan',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.modules.m.tabs[0].questions=[{id:'q',done:false}];
+    setTimelineSubgoals(parentPlan,[{type:'detail',id:'topic',pid:'a'},{type:'theory',id:'core',pid:'m'}]);`);
+  assert.deepEqual(a.json('timelinePlanProgress(parentPlan)'),{total:2,done:1,pct:50});
+  a.run(`setTimelineSubgoals(parentPlan,[{type:'detail',id:'topic',pid:'a'},{type:'question',id:'q',pid:'m'}]);`);
+  assert.deepEqual(a.json('timelinePlanProgress(parentPlan)'),{total:2,done:1,pct:50});
+  a.run(`DATA.dailyHistory[VIEW_DATE].slots[0].cardIds.push({...clonePlain(parentPlan),planId:'repeat'});`);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:4,done:2,pct:50});
+});
+
+test('checking a module card refreshes detail and daily progress together without changing execution',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.modules.m.tabs[0].done=false;DATA.modules.m.tabs[0].questions=[{id:'q',src:'문제',done:false}];
+    renderRouter=()=>renderDetail('a');renderDailySidebar=realRenderDailySidebar;
+    toggleCheck({checked:true},'theory','m',0,'core');`);
+  assert.match(a.nodes.get('app').innerHTML,/진행률<\/span><span[^>]*>50%/);
+  assert.equal(a.nodes.get('dailyPct').innerText,'50%');
+  assert.equal(a.nodes.get('remainCount').innerText,1);
+  assert.equal(a.run('DATA.dailyHistory[VIEW_DATE].totalSeconds'),40);
+  a.run(`toggleCheck({checked:true},'module','m',0,'core');`);
+  assert.equal(a.nodes.get('dailyPct').innerText,'100%');
+  assert.equal(a.nodes.get('remainCount').innerText,0);
+  a.run(`toggleCheck({checked:false},'theory','m',0,'core');`);
+  assert.equal(a.nodes.get('dailyPct').innerText,'50%');
+});
 
 test('schema five migrates stable plan identities without altering plans or execution',()=>{
   const a=app();

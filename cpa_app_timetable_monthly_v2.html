@@ -928,7 +928,7 @@ const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
 const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
 const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-10-17-planning-workspace-13';
+const APP_BUILD_ID = '2026-10-17-planning-workspace-14';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
 const PLANNER_SCHEMA_VERSION = 7;
@@ -4449,11 +4449,13 @@ function isEscaped(text, index) {
 ========================= */
 function calcCardStats(c) {
   let t=c.time||0;
-  if(c.module && DATA.modules[c.module]) {
-    const m=calcModuleStats(c.module);
-    return { isComplete:m.isComplete, time:t+m.rawTime };
+  const mid=c.module || c.moduleId;
+  if(mid && DATA.modules[mid]) {
+    const m=calcModuleStats(mid);
+    t+=m.rawTime;
+    if(m.total) return { isComplete:m.isComplete, time:t, total:m.total, done:m.done };
   }
-  return { isComplete:!!c.done, time:t };
+  return { isComplete:!!c.done, time:t, total:1, done:c.done?1:0 };
 }
 function calcModuleStats(mid) {
   let t=0, d=0, tm=0;
@@ -4465,27 +4467,26 @@ function calcModuleStats(mid) {
       });
     });
   }
-  return { pct:t?Math.round((d/t)*100):0, timeStr:formatTime(tm), rawTime:tm, isComplete:(t>0&&t===d), total:t };
+  return { pct:t?Math.round((d/t)*100):0, timeStr:formatTime(tm), rawTime:tm, isComplete:(t>0&&t===d), total:t, done:d };
 }
 function calcSubjectStats(sid) {
   const s=DATA.home.subjects.find(x=>x.id===sid);
   let tm=(s?s.time:0)||0;
   const cArr=DATA.details[sid]?DATA.details[sid].cards:[];
-  let d=0;
+  let t=0,d=0;
   cArr.forEach(c=>{
     const st=calcCardStats(c);
     tm+=st.time;
-    if(st.isComplete)d++;
+    t+=st.total; d+=st.done;
   });
-  return { pct:cArr.length?Math.round((d/cArr.length)*100):0, timeStr:formatTime(tm), rawTime:tm };
+  return { pct:t?Math.round((d/t)*100):0, timeStr:formatTime(tm), rawTime:tm, total:t, done:d, isComplete:t>0&&t===d };
 }
 function calcTotalStats() {
   let t=0,d=0,tm=0;
   DATA.home.subjects.forEach(s=>tm+=calcSubjectStats(s.id).rawTime);
   if(DATA.details) {
     Object.values(DATA.details).forEach(x=>{
-      t+=x.cards.length;
-      x.cards.forEach(c=>{ if(calcCardStats(c).isComplete)d++; });
+      x.cards.forEach(c=>{ const st=calcCardStats(c); t+=st.total; d+=st.done; });
     });
   }
   return { pct:t?Math.round((d/t)*100):0, timeStr:formatTime(tm) };
@@ -4598,7 +4599,7 @@ function renderHome() {
 
           <div class="timer-box" onclick="event.stopPropagation()">
             <label class="chk-wrap">
-              <input type="checkbox" draggable="false" ondragstart="return false" onchange="toggleCheckAll('subject','${sub.id}',this.checked);" ${dStats.pct===100?'checked':''}
+              <input type="checkbox" draggable="false" ondragstart="return false" onchange="toggleCheckAll('subject','${sub.id}',this.checked);" ${dStats.isComplete?'checked':''}
                 onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
               <span>완료</span>
             </label>
@@ -6130,7 +6131,13 @@ function setTimelineSubgoals(ref,targets){
 
 function timelinePlanProgress(ref){
   const selected = selectedTimelineSubgoals(ref), targets = selected.length ? selected : [ref];
-  const total = targets.length, done = targets.filter(target=>getCardInfo(target).done).length;
+  const units=new Map();
+  targets.forEach(target=>{
+    const children=['subject','detail'].includes(target.type)?planningUnits(target):[];
+    // A selected parent and its selected descendants must not count the same work twice.
+    (children.length?children:[target]).forEach(unit=>units.set(planningKey(unit),unit));
+  });
+  const total=units.size,done=[...units.values()].filter(unit=>getCardInfo(unit).done).length;
   return {total,done,pct:Math.round(done/total*100)};
 }
 
@@ -6235,7 +6242,7 @@ function getCardInfo(ref){
     const s = DATA.home.subjects.find(x=>x.id===ref.id);
     out.title = s ? (s.name||'(과목)') : '(과목)';
     const ss = calcSubjectStats(ref.id);
-    out.done = !!s && (ss.pct===100);
+    out.done = !!s && ss.isComplete;
     out.isRunning = !!s && !!s.isRunning;
     out.totalStr = ss.timeStr;
 
@@ -8180,7 +8187,7 @@ function toggleDetailCardStatus(pid, idx, status){
   // 3) If subject now complete, stop subject timer
   if(v){
     const stats = calcSubjectStats(pid);
-    if(stats.pct === 100){
+    if(stats.isComplete){
       const subj = DATA.home?.subjects?.find(s=>s.id===pid);
       if(subj) stopCanonicalTimer('subject', subj.id, null);
     }

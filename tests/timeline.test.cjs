@@ -807,13 +807,14 @@ function subgoalApp() {
 
 test('daily progress replaces a parent with its selected subgoals only on that day', () => {
   const a = subgoalApp();
-  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:1,done:0,pct:0});
+  const parentProgress=IS_V2?{total:5,done:2,pct:40}:{total:1,done:0,pct:0};
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),parentProgress);
   a.run(`DATA.dailyHistory['2026-10-18']=JSON.parse(JSON.stringify(DATA.dailyHistory[VIEW_DATE]));
-    setTimelineSubgoals(parentPlan,[{type:'detail',id:'topic',pid:'a'},{type:'detail',id:'other-topic',pid:'a'}]);`);
+    setTimelineSubgoals(parentPlan,[{type:'theory',id:'other',pid:'m'},{type:'question',id:'core-q',pid:'m'}]);`);
   assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:2,done:1,pct:50});
-  assert.deepEqual(a.json("dailyPlanProgress(DATA.dailyHistory['2026-10-18'])"),{total:1,done:0,pct:0});
+  assert.deepEqual(a.json("dailyPlanProgress(DATA.dailyHistory['2026-10-18'])"),parentProgress);
   a.run('setTimelineSubgoals(parentPlan,[])');
-  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:1,done:0,pct:0});
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),parentProgress);
   assert.equal(a.run('parentPlan.progressTargets'),undefined);
 });
 
@@ -853,7 +854,7 @@ test('stale, unrelated and duplicate subgoals do not inflate progress and an emp
     {type:'question',id:'missing',pid:'m'},{type:'detail',id:'foreign',pid:'b'}]);`);
   assert.equal(a.run('parentPlan.progressTargets.length'),1);
   a.run(`DATA.modules.m.tabs[0].questions=[]`);
-  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:1,done:0,pct:0});
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),IS_V2?{total:4,done:2,pct:50}:{total:1,done:0,pct:0});
   a.run(`setTimelineSubgoals(parentPlan,[{type:'theory',id:'other',pid:'m'}]); purgeDailyRefs(r=>r.type==='theory' && r.id==='other');`);
   assert.equal(a.run('selectedTimelineSubgoals(parentPlan).length'),0);
 });

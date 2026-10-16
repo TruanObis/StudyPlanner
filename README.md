@@ -171,6 +171,16 @@ Clicking the date text or calendar icon opens the native dropdown in both the
 sidebar and details panel. Keyboard focus still allows direct numeric entry.
 Multi-hour planned cards have one connected outline and one name/duration label,
 with their start/end handles at the actual ten-minute edges.
+V2 carries partial completion through subject/topic parents into the home,
+detail and daily progress displays. Each theory card and question counts as one
+learning card; a detail card without module content counts on its own. A parent
+containing two learning cards therefore shows **50%** when one is complete.
+Daily progress and remaining tasks use these counts within the selected
+subgoals, or within the parent when no valid subgoals are set. Overlapping parent
+and child selections count each learning card once per plan; separate planned
+copies still count separately. Selecting only a theory card counts that card,
+not its questions. Adding another unfinished card updates progress immediately,
+without changing stored completion flags, plans or study-time records.
 **시간 미지정 N개** counts individual unscheduled cards across all groups.
 Its list stays expanded, retaining its scroll position, when a card is clicked
 or dragged and the timetable redraws. **시간표에 배치** places the list in order

@@ -72,11 +72,22 @@ slots and references can have null endpoints until they are placed.
 A daily plan reference may have `progressTargets: [{type, id, pid}, ...]`.
 These refer to selected descendant detail, theory, or question cards. The list
 belongs only to that date and plan; it never changes the source card's completion.
-Each currently valid selected card contributes one item to daily progress and
+In the main app, each currently valid selected card contributes one item to daily progress and
 remaining tasks, using its source completion state. An absent, empty, or entirely
 stale list counts the parent plan once. Duplicate targets in a single selection
 are counted once; separate planned copies continue to count separately. Source
 identity changes update these references, and source deletion removes them.
+
+V2 computes partial progress from learning-card counts instead of treating each
+parent as only complete/incomplete. Subject and detail progress sum the completed
+and total theory/question cards underneath; a detail with no module content is
+one item. Daily progress expands selected subject/detail targets (or the default
+parent) into those same learning units, deduplicating overlapping targets within
+each plan. Explicit theory and question targets each remain one item. Distinct
+plans count separately. These derived counts are not stored; adding/removing
+source cards or changing completion immediately updates the percentages without
+rewriting plans, completion flags or execution records. Full-completion checks
+compare counts exactly rather than relying on rounded percentages.
 
 ### V2 Period Goals and Planning Identity (Schema 7)
 
