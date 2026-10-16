@@ -188,9 +188,15 @@ with their start/end handles at the actual ten-minute edges.
   or a Monday-first month grid including adjacent dates. Drag a learning card
   onto a date to add an unscheduled plan. Drag a planned card to another date
   to move it, keeping its duration and subgoals; actual study records remain on
-  their recorded dates. Click a plan to edit it, or a date to see its daily
+  their recorded dates. Click a plan to open its source page (including its exact
+  module tab or question), without starting/stopping a timer, or a date to see its daily
   list. Month cells show two compact cards and **+N** for the remaining plans.
   Calendar plans can also be dragged onto the timetable to set their time.
+  Drag a timetable card's body onto a weekly/monthly date cell to move it there
+  while keeping its clock time, duration, and subgoals. The destination highlights
+  during the drag. Dropping outside the timetable and a valid target cancels
+  the move. Timetable cards can also be dropped into **기간 목표** to create a
+  goal while preserving the daily plan. Resizing handles remain for time changes.
   Right-click a calendar plan, use the keyboard context-menu key, or hold it on
   touch screens to edit its date/time, subgoals or color, open its source, control
   its timer, or remove it. Removing a plan preserves its source and execution.

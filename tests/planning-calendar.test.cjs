@@ -54,7 +54,7 @@ function app(){
 
 function calendarHandler(a,view,attribute){
   const html=a.run(`planningCalendarHTML('${view}',planningPeriodBounds('${view}'))`);
-  const title='경영학 2026-10-18 계획 편집';
+  const title='경영학 2026-10-18 계획';
   const card=[...html.matchAll(/<button\b[^>]*>/g)].map(m=>m[0]).find(tag=>tag.includes(title));
   assert.ok(card,`${view} should show the scheduled card`);
   const value=new RegExp(`${attribute}="([^"]*)"`).exec(card)?.[1];
@@ -82,6 +82,40 @@ test('weekly and monthly card menus edit the selected plan date and time while p
     assert.deepEqual(a.json("DATA.dailyHistory['2026-10-18'].sessions"),a.json('beforeSessions'));
     assert.equal(a.run("planningPlans('2026-10-17')[0].ref.planId"),a.run('current.planId'));
   }
+});
+
+test('weekly and monthly plan clicks open the source page without opening an editor or starting a timer',()=>{
+  for(const view of ['week','month']){
+    const a=app(),click=calendarHandler(a,view,'onclick');
+    a.run(`planningActiveView='${view}'; const before=clonePlain(DATA.dailyHistory); const event=pointer('mouse'); ${click}`);
+    assert.equal(a.run('location.hash'),'#/detail/a');
+    assert.equal(a.run('planningModalState'),null);
+    assert.equal(a.run('VIEW_DATE'),'2026-10-17');
+    assert.equal(a.run('planningView()'),view);
+    assert.equal(a.run('getCardInfo(later).isRunning'),false);
+    assert.deepEqual(a.json('DATA.dailyHistory'),a.json('before'));
+  }
+});
+
+test('calendar clicks select the exact module tab or question without changing an active timer',()=>{
+  const a=app();
+  a.run(`DATA.modules.m.tabs.push({id:'other',label:'기타이론',questions:[{id:'q2',src:'기타 기출'}]});
+    DATA.modules.m.activeTab='core'; DATA.modules.m.tabs[0].isRunning=true;
+    const topicPlan=planningPlaceOnDate('2026-10-18',{source:'main',type:'detail',id:'topic',pid:'a'});
+    const theoryPlan=planningPlaceOnDate('2026-10-18',{source:'main',type:'theory',id:'other',pid:'m'});
+    const questionPlan=planningPlaceOnDate('2026-10-18',{source:'main',type:'question',id:'q2',pid:'m'});
+    const event=pointer('mouse'); planningCalendarClick(event,topicPlan.planId);`);
+  assert.equal(a.run('location.hash'),'#/module/m');
+  a.run('planningCalendarClick(event,theoryPlan.planId)');
+  assert.equal(a.run('DATA.modules.m.activeTab'),'other');
+  assert.equal(a.run('location.hash'),'#/module/m?focus=theory-m-other');
+  a.run(`DATA.modules.m.activeTab='core'; MODULE_QSRC_FILTER['m:other']='숨긴 기출'; planningCalendarClick(event,questionPlan.planId);`);
+  assert.equal(a.run('location.hash'),'#/module/m?focus=q2');
+  assert.equal(a.run('DATA.modules.m.activeTab'),'other');
+  assert.equal(a.run("MODULE_QSRC_FILTER['m:other']"),'all');
+  assert.equal(a.run('DATA.modules.m.tabs[0].isRunning'),true);
+  assert.equal(a.run('getCardInfo(questionPlan).isRunning'),false);
+  assert.equal(a.run('planningModalState'),null);
 });
 
 test('calendar deletion follows the selected plan identity and preserves source cards and execution history',()=>{
@@ -126,7 +160,7 @@ test('touch hold opens a calendar menu and release never opens the edit dialog',
   assert.deepEqual(a.json('[later.startMinute,later.endMinute]'),[540,600]);
 });
 
-test('calendar touch movement and cancellation cancel hold while a short tap still edits',()=>{
+test('calendar touch movement and cancellation cancel hold while a short tap opens the source',()=>{
   for(const eventType of ['pointermove','pointercancel']){
     const a=app();
     const down=calendarHandler(a,'week','onpointerdown');
@@ -141,7 +175,8 @@ test('calendar touch movement and cancellation cancel hold while a short tap sti
   a.advance(100);
   a.dispatch('pointerup','pointer()');
   a.run(click);
-  assert.equal(a.run('planningModalState.id'),a.run('later.planId'));
+  assert.equal(a.run('planningModalState'),null);
+  assert.equal(a.run('location.hash'),'#/detail/a');
 });
 
 test('dragging cancels pending calendar hold and keeps cross-date plan transfer data',()=>{
@@ -152,6 +187,9 @@ test('dragging cancels pending calendar hold and keeps cross-date plan transfer 
   a.advance(600);
   assert.equal(a.run('timelineMenuState'),null);
   assert.deepEqual(a.json('payload'),{source:'planning',planId:a.run('later.planId'),date:'2026-10-18'});
+  a.run(`finishPlanningCalendarPointer(event); planningCalendarClick(event,later.planId);`);
+  assert.equal(a.run('location.hash'),'#/');
+  assert.equal(a.run('planningModalState'),null);
 });
 
 test('keyboard context-menu shortcut exposes the same calendar edit and delete actions',()=>{
@@ -185,7 +223,7 @@ test('a native touch context event does not cancel the pending calendar hold',()
   assert.equal(a.run('getCardInfo(later).isRunning'),false);
 });
 
-test('a fresh tap after a long press edits normally rather than being blocked by the previous release',()=>{
+test('a fresh tap after a long press opens the source instead of being blocked by the previous release',()=>{
   const a=app();
   const down=calendarHandler(a,'week','onpointerdown'),click=calendarHandler(a,'week','onclick');
   a.run(`const event=pointer();${down}`);
@@ -196,7 +234,8 @@ test('a fresh tap after a long press edits normally rather than being blocked by
   a.run(down);
   a.dispatch('pointerup','pointer()');
   a.run(click);
-  assert.equal(a.run('planningModalState?.id'),a.run('later.planId'));
+  assert.equal(a.run('planningModalState'),null);
+  assert.equal(a.run('location.hash'),'#/detail/a');
 });
 
 test('calendar context menus and hold cannot edit plans while time-block editing is active',()=>{

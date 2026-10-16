@@ -205,6 +205,76 @@ test('touch dragging and edge resizing snap to ten minutes without opening menus
   assert.deepEqual(a.json('DATA.dailyHistory[VIEW_DATE].slots[0].cardIds.map(r=>[r.startMinute,r.endMinute])'), [[320,350]]);
 });
 
+if(IS_V2) test('timetable pointer dragging moves a plan onto either diary calendar without changing its time or records',()=>{
+  for(const view of ['week','month']) for(const pointerType of ['mouse','touch']){
+    const a=gestureApp();
+    a.run(`planningActiveView='${view}'; renderPlanningPage=()=>{}; planningEnsureData(DATA);
+      const ref=DATA.dailyHistory[VIEW_DATE].slots[0].cardIds[0],planId=ref.planId;
+      ref.time=60; ref.progressTargets=[{type:'detail',id:'topic',pid:'a'}];
+      DATA.dailyHistory[VIEW_DATE].totalSeconds=60; DATA.dailyHistory[VIEW_DATE].sessions=[{id:'run',ref:{type:'subject',id:'a'},startMs:1000,endMs:61000}];
+      const sessions=clonePlain(DATA.dailyHistory[VIEW_DATE].sessions);
+      const target=node('calendar-day'); target.dataset={planDate:'2026-10-18'};
+      let highlighted=false; target.classList={add(){highlighted=true},remove(){highlighted=false}};
+      document.elementFromPoint=(x,y)=>x>=420?{closest:()=>target}:null;
+      const down={...pointer(),pointerType:'${pointerType}'},up={...pointer(500,220),pointerType:'${pointerType}'};
+      startTimelineGesture(down,'card',0,0);moveTimelineGesture(up);`);
+    assert.equal(a.run('highlighted'),true);
+    assert.deepEqual(a.json('[ref.startMinute,ref.endMinute]'),[310,330]);
+    a.run('finishTimelineGesture(up)');
+    assert.equal(a.run('planningFindPlan(planId).date'),'2026-10-18');
+    assert.equal(a.run("planningPlans('2026-10-17').length"),0);
+    assert.deepEqual(a.json('[ref.startMinute,ref.endMinute]'),[310,330]);
+    assert.deepEqual(a.json('ref.progressTargets'),[{type:'detail',id:'topic',pid:'a'}]);
+    assert.deepEqual(a.json("DATA.dailyHistory['2026-10-17'].sessions"),a.json('sessions'));
+    assert.equal(a.run("DATA.dailyHistory['2026-10-17'].totalSeconds"),60);
+    assert.equal(a.run('getCardInfo(ref).isRunning'),false);
+    assert.equal(a.run('planningView()'),view);
+    assert.equal(a.run('highlighted'),false);
+  }
+});
+
+if(IS_V2) test('dropping a timetable card outside a valid target or cancelling leaves its original time intact',()=>{
+  for(const finish of ['finishTimelineGesture(up)','cancelTimelineGesture(up)']){
+    const a=gestureApp();
+    a.run(`document.elementFromPoint=()=>null; planningEnsureData(DATA); const before=clonePlain(DATA.dailyHistory);
+      const up=pointer(600,300);startTimelineGesture(pointer(),'card',0,0);moveTimelineGesture(up);${finish};`);
+    assert.deepEqual(a.json('DATA.dailyHistory'),a.json('before'));
+    assert.equal(a.run('timelineGesture'),null);
+  }
+});
+
+if(IS_V2) test('a timetable drag uses stable plan identity when the source list changes before calendar drop',()=>{
+  const a=gestureApp();
+  a.run(`renderPlanningPage=()=>{};planningEnsureData(DATA);
+    const original=DATA.dailyHistory[VIEW_DATE].slots[0].cardIds[0];
+    const target=node('calendar-day');target.dataset={planDate:'2026-10-18'};document.elementFromPoint=x=>x>=420?{closest:()=>target}:null;
+    startTimelineGesture(pointer(),'card',0,0);
+    const other={type:'adhoc',id:'other',title:'다른 계획',planId:'other-plan',startMinute:600,endMinute:630};
+    DATA.dailyHistory[VIEW_DATE].slots[0].cardIds.unshift(other);
+    finishTimelineGesture(pointer(500,220));`);
+  assert.equal(a.run('planningFindPlan(original.planId).date'),'2026-10-18');
+  assert.equal(a.run('planningFindPlan(other.planId).date'),'2026-10-17');
+  assert.deepEqual(a.json('[other.startMinute,other.endMinute]'),[600,630]);
+});
+
+if(IS_V2) test('dragging a timetable card onto period goals creates a goal without moving the daily plan',()=>{
+  const a=gestureApp();
+  a.run(`planningActiveView='month';renderPlanningPage=()=>{};planningEnsureData(DATA);
+    const before=clonePlain(DATA.dailyHistory),target=node('period-goals');target.dataset={planGoalView:'month'};
+    document.elementFromPoint=x=>x>=420?{closest:()=>target}:null;
+    startTimelineGesture(pointer(),'card',0,0);finishTimelineGesture(pointer(500,220));`);
+  assert.deepEqual(a.json('DATA.dailyHistory'),a.json('before'));
+  assert.equal(a.run('DATA.periodGoals[0].kind'),'month');
+  assert.equal(a.run('DATA.periodGoals[0].root.id'),'a');
+});
+
+if(IS_V2) test('the timetables exact right grid line remains a valid card move destination',()=>{
+  const a=gestureApp();
+  a.run(`document.elementFromPoint=()=>null;
+    startTimelineGesture(pointer(),'card',0,0);finishTimelineGesture(pointer(410,210));`);
+  assert.deepEqual(a.json('DATA.dailyHistory[VIEW_DATE].slots[0].cardIds.map(r=>[r.startMinute,r.endMinute])'),[[360,380]]);
+});
+
 test('cancel, multi-touch and a date change cancel pending long presses', () => {
   for (const cancel of ['cancelTimelineGesture()', "startTimelineGesture(pointer(180,210,2),'card',0,0)", "VIEW_DATE='2026-10-18'"]) {
     const a = gestureApp();
