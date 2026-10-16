@@ -1,129 +1,130 @@
 # Inmonite's Study Helper
 
-A browser-based study planner for managing long-term study progress, daily schedules, timers, notes, attached images, PDF exports, and D-Day targets.
+A browser-based study planner for managing long-term study progress, daily schedules, timers, notes, attached images, exports, and D-Day targets.
 
-This project is a single-page HTML study helper. It runs directly in the browser and stores user data locally through `localStorage` and IndexedDB.
+The app runs directly in the browser and stores user data locally through `localStorage` and IndexedDB. The bundled starter content is CPA-oriented; subjects, cards, notes, and daily plans can be edited for other study goals.
 
-## Main App
+## Main App and Experimental V2
 
 Published app:
 
-https://truanobis.github.io/StudyPlanner/cpa_app_timetable_monthly.html#/
+[Open Inmonite's Study Helper](https://truanobis.github.io/StudyPlanner/cpa_app_timetable_monthly.html#/)
 
-Main file:
+* Main file: `cpa_app_timetable_monthly.html`
+* Experimental staging file: `cpa_app_timetable_monthly_v2.html`
 
-`cpa_app_timetable_monthly.html`
+V2 is the workspace for trying and validating changes before applying them to the main file. It remains the experimental staging version even when the two files temporarily contain the same code after a promotion.
 
-Experimental staging file:
-
-`cpa_app_timetable_monthly_v2.html`
-
-Older files may remain in the repository for backup, archive, or comparison, but the current published working version is `cpa_app_timetable_monthly.html`.
+The features below describe the current published main app. Older files in `archive/` are retained for history or comparison.
 
 ## Features
 
 * Subject / topic / module-based study card structure
-* Daily timetable sidebar
-* D-Day panel
-* KST-based date handling
-* Study timer and accumulated time tracking
-* Daily goal tracking
+* Daily timetable sidebar with editable, reorderable time blocks
+* Add existing study cards by drag-and-drop or the card picker, or enter daily-only tasks directly
+* D-Day panel and KST-based date handling
+* Study timers, accumulated time tracking, and editable daily time goals
 * Calendar modal with monthly study-time summary
-* Markdown notes
-* KaTeX math rendering
-* Image attachment support through browser IndexedDB
-* Image upload resizing / compression and storage usage warnings
-* Card folding / unfolding
-* Card drag-and-drop
-* Card duplication, movement, deletion
-* Copyable Markdown links for cards
-* JSON backup / restore, including attached images when available
-* PDF export for pages and cards, including child pages, internal links, and PDF bookmarks
-* Dark mode support
-
-The staging v2 build additionally includes versioned backup migrations, protected
-startup recovery for unsupported or malformed local data, and Obsidian ZIP export.
+* Markdown notes and KaTeX math rendering
+* Image attachments through browser IndexedDB, with upload resizing / compression and storage usage warnings
+* Card folding / unfolding, reordering, duplication, movement, and deletion
+* Multiple-card selection for supported batch actions
+* Copyable Markdown links to cards
+* Versioned JSON backup / restore with available referenced images and migration of supported older backups
+* Startup protection that preserves malformed stored JSON or data with a newer unsupported schema
+* PDF export for pages and cards, including child pages, internal links, bookmarks, and embedded restore data
+* Import compatible StudyPlanner PDFs as additional card structures
+* Obsidian vault ZIP export
+* Anki TSV export from module question cards
+* Dark mode
 
 ## Data Storage
 
-The app stores planner data in the browser.
+Planner records are saved in `localStorage` under `universal_planner_v28_data`.
 
-Main planner data is saved in:
+Images attached in Markdown notes are saved separately in the IndexedDB database `studyplanner_assets_v1`, in the `assets` object store.
 
-`localStorage`
+Data is local to the browser profile and site origin. There is no automatic account or device synchronization. Another browser or device will not automatically have the same planner, and clearing site storage can remove it.
 
-Images attached in Markdown notes are saved in:
+### Main and V2 Share Storage
 
-`IndexedDB`
+The current main and v2 files use the same planner storage key and image database name. When opened under the same origin, such as the published GitHub Pages site, in the same browser profile, they share planner data and images.
 
-Because the data is browser-local, using another browser, another device, or clearing browser storage may make the planner appear empty.
+For experiments that should not affect the working planner, use a separate browser profile and import a copy of an official JSON backup there. Export a backup before testing changes against real study data.
 
-Use the export button regularly to create JSON backups.
+## Backup, Restore, and Export
 
-## Backup and Restore
+These formats are available in the current main app:
 
-Use the save/export button in the app to download a planner backup as a JSON file.
+| Format | Purpose | Import behavior |
+| --- | --- | --- |
+| Official JSON backup | Full planner data, including daily history, plus available referenced images | Replaces the current planner after validation |
+| Restorable StudyPlanner PDF | Readable pages/cards with restore data for the exported scope and included images | Adds imported card structures to the current planner |
+| Obsidian ZIP | Linked Markdown notes, metadata, attachments, a manifest, and structured planner data | Export only; no ZIP or edited-vault import |
+| Anki TSV | Module question cards exported as tab-separated fields | Export for use in Anki; no Anki import |
 
-Use the import button to restore a previously exported JSON backup.
+### Official JSON Backup
 
-Backups may include attached image data, so backup files can become large when many images are attached.
+Use **💾 — 전체 공식 백업(JSON + 이미지)** to download the primary full-planner backup.
 
-## Experimental V2 Data Portability
+Use **📂 — JSON/PDF 가져오기** to select a JSON backup. JSON import replaces the current planner rather than merging it, so export the current planner first if you want to keep it.
 
-`cpa_app_timetable_monthly_v2.html` includes an experimental restorable PDF workflow.
+Supported older JSON backups are migrated automatically. Unsupported future schema versions are rejected. Backups with many images can be large; image files that are already missing from browser storage cannot be recreated by exporting.
 
-PDFs exported from the v2 app can include StudyPlanner restore data, so the same import button can read either JSON backups or compatible StudyPlanner PDFs.
+### Restorable PDF
 
-This is currently a staging feature. If a PDF is edited, compressed, merged, OCR-processed, or saved again in another PDF app, the restore data may be removed even though the PDF still opens visually.
+Use the PDF export controls to export the current filtered page, an individual card, or a card with its child pages, depending on the control selected.
 
-The v2 build also separates the lossless official JSON backup from an Obsidian ZIP
-export. The Obsidian package contains linked Markdown notes, YAML metadata, attachments,
-a manifest, and a copy of the structured planner data. It is currently export-only.
+PDFs generated by the app can contain StudyPlanner restore data. The same **📂 — JSON/PDF 가져오기** button can read a compatible PDF and show a confirmation before adding its card structure.
 
-See:
+This imports the exported scope; it does not replace the full planner or restore the complete daily history. Ordinary PDFs without StudyPlanner restore data cannot be imported this way.
 
-* [`docs/DATA_FORMAT.md`](docs/DATA_FORMAT.md)
-* [`docs/REGISTRATION_READINESS.md`](docs/REGISTRATION_READINESS.md)
-* [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
+Editing, compressing, merging, OCR-processing, or re-saving a PDF in another application may remove its restore data even when it still opens visually. Keep official JSON backups for full recovery.
 
-## If the App Shows a Blank Screen
+### Obsidian ZIP
 
-Open the browser developer console and run:
+Use **🗂️ — Obsidian 보관함 ZIP 내보내기** to export linked Markdown notes, YAML metadata, image attachments, a manifest, and a copy of the structured planner data.
 
-```js
-localStorage.clear();
-location.reload();
-```
+The integration is currently export-only. Changes made in Obsidian cannot be imported back into StudyPlanner through the ZIP.
 
-This resets the local planner data and reloads the app.
+## If the App Shows an Error or Blank Screen
 
-Warning: this deletes the current local planner data in that browser. Export a backup first if possible.
+1. If the app still opens, export an official JSON backup before troubleshooting.
+2. If the recovery screen appears, use **원본 JSON 저장** to preserve the stored planner record. This raw JSON download does not include the images held separately in IndexedDB.
+3. For an unsupported newer data format, open a compatible newer app. For other loading problems, inspect the browser console and check that required scripts can load before considering a reset.
+4. Only use the app's full reset after preserving recoverable data and deciding to discard the current planner. It removes the planner record and attempts to clear the image store before loading starter content.
 
-## Optional Content File
+Malformed stored JSON and unsupported newer schemas are left untouched by startup recovery. Avoid clearing all site storage as a first troubleshooting step.
 
-The app may try to load:
+## Starter Content
 
-`cpa_content_v2.json`
+When no local planner data exists, the app tries to load `cpa_content_v2.json` as its initial content. Existing browser-saved data takes precedence. A full reset also attempts to reload this starter content.
 
-This file can be used as initial planner content when no local data exists.
-
-If local data already exists, the browser-saved data is used instead.
+The `v2` in this content filename does not make it exclusive to the experimental HTML file; the main app uses it too.
 
 ## Recommended Usage
 
-1. Open the published app or the main HTML file.
-2. Add subjects or import an existing JSON backup.
-3. Create topic cards under each subject.
-4. Click a topic card to open or create its module page.
-5. Add theory notes, questions, and image attachments.
-6. Drag cards into the daily timetable sidebar.
-7. Use timers and completion checkboxes to track study progress.
-8. Export backups regularly.
+1. Open the published app and use the starter subjects, edit them, or import a JSON backup.
+2. Create topic cards under subjects, then open a topic card to open or create its module page.
+3. Add theory notes, question cards, and image attachments.
+4. Open **≡ — 일일 계획** and select the date to plan.
+5. Add cards by dragging them into a time block or choosing **+ 카드 추가**. Use the picker's direct-entry field for a daily-only task.
+6. Edit or reorder time blocks and set a daily study-time goal as needed.
+7. Start a card timer and use completion checkboxes to track study progress.
+8. Use the calendar to browse dates and monthly study time, and export JSON backups regularly.
+
+For linked study cards, the daily sidebar's completion checkbox changes the source card's completion state; it is not a separate completion record for that day's study session. Directly entered daily-only tasks have their own completion state.
+
+## Further Documentation
+
+* [`docs/DATA_FORMAT.md`](docs/DATA_FORMAT.md): storage, schema, migration, and export format details
+* [`docs/REGISTRATION_READINESS.md`](docs/REGISTRATION_READINESS.md): dated release and registration preparation checklist
+* [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md): third-party dependencies and notices
+
+Some supporting documents retain v2/staging terminology from their preparation date. Features promoted to the main app are listed above.
 
 ## Notes
 
-This project is designed as a personal study operations tool rather than a polished production service.
+This is a personal study tool under active development.
 
-Most data is stored locally in the browser, so backup management is important.
-
-The current version is under active development and may change frequently.
+Browser-local storage makes regular backups important. Libraries and fonts are loaded from external CDNs, so fully offline operation is not guaranteed.
