@@ -215,7 +215,9 @@ with their start/end handles at the actual ten-minute edges.
   Moving a goal's source updates its watched topic. Previously selected daily
   subgoals remain visible after source moves, keeping the daily timer source.
 * **일간 → 다른 날짜로 복사** copies time blocks to a date range and selected
-  weekdays. **계획 카드도 포함** also copies placement and selected subgoals.
+  weekdays. Clicking either date field opens the native calendar dropdown;
+  keyboard entry is also supported, and choosing destinations keeps the source
+  date unchanged. **계획 카드도 포함** also copies placement and selected subgoals.
   The preview reports overlaps; existing destination entries remain. Repeating
   the same copy skips previously copied entries. Timers, elapsed time, and
   execution sessions are never copied. Linked cards retain their source

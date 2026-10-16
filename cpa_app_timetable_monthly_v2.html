@@ -912,7 +912,7 @@ const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
 const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
 const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-10-17-planning-workspace-7';
+const APP_BUILD_ID = '2026-10-17-planning-workspace-8';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
 const PLANNER_SCHEMA_VERSION = 7;
@@ -5633,7 +5633,7 @@ function planningWeekdayHTML(days){
 }
 function planningSelectedWeekdays(){ return [...document.querySelectorAll('#planningModal input[name=planningWeekday]:checked')].map(el=>Number(el.value)); }
 function planningRangeFields(start,end){
-  return `<div class="planning-fields"><label class="planning-field">시작 날짜<input id="planningFrom" type="date" value="${start}" required></label><label class="planning-field">종료 날짜<input id="planningTo" type="date" value="${end}" required></label></div>`;
+  return `<div class="planning-fields"><label class="planning-field">시작 날짜<input id="planningFrom" type="date" value="${start}" onclick="planningOpenDatePicker(this,false)" required></label><label class="planning-field">종료 날짜<input id="planningTo" type="date" value="${end}" onclick="planningOpenDatePicker(this,false)" required></label></div>`;
 }
 function planningOpenGoal(id){
   const goal=id?planningGoal(id):null;if(id&&!goal) return;
@@ -6614,8 +6614,9 @@ function planningDateKeydown(ev,input){
   if(ev.key==='Enter'){ev.preventDefault();input.blur();}
   else if(/^[0-9]$/.test(ev.key)||ev.key==='Backspace'||ev.key==='Delete') input.dataset.typing='1';
 }
-function planningOpenDatePicker(input){
-  planningDateInput(input,true);
+function planningOpenDatePicker(input,updateView=true){
+  // Range fields edit a form draft without changing the viewed/source date.
+  if(updateView) planningDateInput(input,true);
   // Open from the date text as well as the browser's small calendar icon.
   try{input.showPicker?.();}catch(_){/* Keep native keyboard/icon controls available. */}
 }
