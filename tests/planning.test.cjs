@@ -254,7 +254,7 @@ test('changing goal hours after preview requires a fresh allocation and old goal
   assert.ok(old.run('Object.values(DATA.dailyHistory).every(d=>d.slots.every(s=>s.cardIds.every(r=>r.startMinute===null&&r.endMinute===null)))'));
 });
 
-test('goal forms save daily hours per goal, reject half-filled ranges and keep daily plans until allocation',()=>{
+test('goal forms reject half-filled hours and immediately retime allocated plans when saved',()=>{
   for(const kind of ['week','month']){
     const a=app();
     a.run(`location.hash='#/plans/${kind}'; planningOpenGoal();
@@ -272,9 +272,142 @@ test('goal forms save daily hours per goal, reject half-filled ranges and keep d
     assert.deepEqual(a.json('goal.dailyTime'),{startMinute:540,endMinute:660});
     a.run(`document.getElementById('planningGoalEnd').value='960'; planningSaveGoal();`);
     assert.deepEqual(a.json('goal.dailyTime'),{startMinute:840,endMinute:960});
-    assert.deepEqual(a.json('DATA.dailyHistory'),a.json('dailyBefore'));
+    assert.deepEqual(a.json('planningPlans(VIEW_DATE).map(p=>[p.ref.startMinute,p.ref.endMinute])'),[[840,880],[880,920],[920,960]]);
+    assert.deepEqual(a.json("planningPlans('2026-10-18').map(p=>[p.ref.startMinute,p.ref.endMinute])"),[[840,900],[900,960]]);
+    a.run(`function withoutTimes(daily){const copy=clonePlain(daily);Object.values(copy).forEach(day=>day.slots.forEach(slot=>slot.cardIds.forEach(ref=>{delete ref.startMinute;delete ref.endMinute})));return copy;}`);
+    assert.deepEqual(a.json('withoutTimes(DATA.dailyHistory)'),a.json('withoutTimes(dailyBefore)'));
     assert.match(a.run(`planningPeriodHTML('${kind}',{start:config.startDate,end:config.endDate})`),/매일 14:00–16:00/);
   }
+});
+
+function prepareGoalTimeEdit(a,goal='goal',start='840',end='960',inherit=false){
+  a.run(`planningOpenGoal(${goal}.id);
+    document.getElementById('planningFrom').value=${goal}.startDate;document.getElementById('planningTo').value=${goal}.endDate;
+    document.querySelectorAll=selector=>selector.includes('planningWeekday')?${goal}.weekdays.map(value=>({value})):[];
+    document.getElementById('planningInheritTime').checked=${inherit};
+    document.getElementById('planningGoalStart').value='${start}';document.getElementById('planningGoalEnd').value='${end}';`);
+}
+
+test('monthly time edits update inherited plans but preserve weekly overrides and real execution',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal({...config,dailyTime:{startMinute:540,endMinute:660}});
+    planningApplyAllocation(planningBuildAllocation(goal.id));
+    const child=DATA.periodGoals.find(g=>g.parentGoalId===goal.id&&g.root.id==='loose');
+    child.dailyTime={startMinute:600,endMinute:660};
+    const override=planningPlans('2026-10-18').find(p=>p.ref.goalId===child.id).ref,overrideBefore=clonePlain(override);
+    const recorded=planningPlans(VIEW_DATE)[0].ref;recorded.time=90;recorded.progressTargets=[{type:'question',id:'q1',pid:'m'}];
+    DATA.modules.m.tabs[0].done=true;DATA.modules.m.tabs[0].isRunning=true;
+    DATA.dailyHistory[VIEW_DATE].totalSeconds=90;
+    DATA.dailyHistory[VIEW_DATE].sessions=[{id:'run',ref:{type:'theory',id:'core',pid:'m'},startMs:now-90000,endMs:now}];
+    const sessions=clonePlain(DATA.dailyHistory[VIEW_DATE].sessions),subgoals=clonePlain(recorded.progressTargets);
+    const ids=Object.keys(DATA.dailyHistory).flatMap(date=>planningPlans(date).map(p=>p.ref.planId));`);
+  prepareGoalTimeEdit(a);a.run('planningSaveGoal()');
+  assert.deepEqual(a.json('planningPlans(VIEW_DATE).map(p=>[p.ref.startMinute,p.ref.endMinute])'),[[840,880],[880,920],[920,960]]);
+  assert.deepEqual(a.json('override'),a.json('overrideBefore'));
+  assert.deepEqual(a.json('DATA.dailyHistory[VIEW_DATE].sessions'),a.json('sessions'));
+  assert.deepEqual(a.json('recorded.progressTargets'),a.json('subgoals'));
+  assert.deepEqual(a.json('[recorded.time,DATA.dailyHistory[VIEW_DATE].totalSeconds,DATA.modules.m.tabs[0].isRunning]'),[90,90,true]);
+  assert.deepEqual(a.json('Object.keys(DATA.dailyHistory).flatMap(date=>planningPlans(date).map(p=>p.ref.planId)).sort()'),a.json('ids.slice().sort()'));
+});
+
+test('weekly hours can clear plan times and restore inherited times without changing other goals',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal({...config,dailyTime:{startMinute:540,endMinute:660}});
+    planningApplyAllocation(planningBuildAllocation(goal.id));const child=DATA.periodGoals.find(g=>g.parentGoalId===goal.id&&g.root.id==='topic');
+    const other=planningPlans('2026-10-18').find(p=>p.ref.id==='loose').ref,otherBefore=clonePlain(other);`);
+  prepareGoalTimeEdit(a,'child','','');a.run('planningSaveGoal()');
+  assert.equal(a.run('planningPlans(VIEW_DATE).every(p=>p.ref.startMinute===null&&p.ref.endMinute===null)'),true);
+  assert.deepEqual(a.json('other'),a.json('otherBefore'));
+  prepareGoalTimeEdit(a,'child','540','660',true);a.run('planningSaveGoal()');
+  assert.deepEqual(a.json('planningPlans(VIEW_DATE).map(p=>[p.ref.startMinute,p.ref.endMinute])'),[[540,580],[580,620],[620,660]]);
+});
+
+test('retiming excludes its own old ranges and avoids unrelated and overnight plans atomically',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal({...config,dailyTime:{startMinute:540,endMinute:660}});
+    planningApplyAllocation(planningBuildAllocation(goal.id));
+    const unrelated=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'subject',id:'a'});unrelated.startMinute=860;unrelated.endMinute=880;`);
+  prepareGoalTimeEdit(a);a.run('planningSaveGoal()');
+  assert.deepEqual(a.json('planningPlans(VIEW_DATE).filter(p=>p.ref.goalId).map(p=>[p.ref.startMinute,p.ref.endMinute])'),[[840,860],[880,920],[920,960]]);
+  assert.deepEqual(a.json('[unrelated.startMinute,unrelated.endMinute]'),[860,880]);
+  a.run(`const overnight=planningPlaceOnDate('2026-10-19',{source:'main',type:'subject',id:'a'});overnight.startMinute=0;overnight.endMinute=60;const before=clonePlain(DATA);`);
+  prepareGoalTimeEdit(a,'goal','1440','1470');
+  assert.throws(()=>a.run('planningSaveGoal()'),/빈 시간|부족/);
+  assert.deepEqual(a.json('DATA'),a.json('before'));
+});
+
+test('saving a goal without changing its effective hours preserves manually positioned cards',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal({...config,dailyTime:{endMinute:660,startMinute:540}});planningApplyAllocation(planningBuildAllocation(goal.id));
+    planningPlans(VIEW_DATE)[0].ref.startMinute=300;planningPlans(VIEW_DATE)[0].ref.endMinute=330;const before=clonePlain(DATA.dailyHistory);`);
+  prepareGoalTimeEdit(a,'goal','540','660');a.run('planningSaveGoal()');
+  assert.deepEqual(a.json('DATA.dailyHistory'),a.json('before'));
+});
+
+test('unscheduled list counts individual plans across groups and exposes one enabled automatic placement action',()=>{
+  const a=app();
+  a.run(`planningPlaceOnDate(VIEW_DATE,{source:'main',type:'subject',id:'a'});
+    planningPlaceOnDate(VIEW_DATE,{source:'main',type:'theory',id:'core',pid:'m'});
+    ensureDailyData(VIEW_DATE).slots.push({id:'named',label:'별도 블록',startMinute:540,endMinute:600,cardIds:[{type:'question',id:'q1',pid:'m'}]});
+    renderTimeline(ensureDailyData(VIEW_DATE));`);
+  const html=a.nodes.get('dailySlots').innerHTML,section=html.match(/<details\b[\s\S]*?<\/details>/)?.[0];
+  assert.match(section,/<summary>시간 미지정 3개<\/summary>/);
+  assert.equal((section.match(/시간 미지정/g)||[]).length,1);
+  const actions=[...section.matchAll(/<button\b([^>]*)>시간표에 배치<\/button>/g)];
+  assert.equal(actions.length,1);
+  assert.doesNotMatch(actions[0][1],/disabled/);
+  const click=actions[0][1].match(/onclick="([^"]+)"/)[1];a.run(click);
+  assert.deepEqual(a.json('planningPlans(VIEW_DATE).map(p=>[p.ref.startMinute,p.ref.endMinute])'),[[0,30],[30,60],[60,90]]);
+});
+
+test('automatic placement uses list order and free ten-minute cells without moving plans, blocks or execution',()=>{
+  const a=app();
+  a.run(`const first=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'theory',id:'core',pid:'m'});
+    const second=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'question',id:'q1',pid:'m'});
+    const third=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'detail',id:'loose',pid:'a'});
+    planningSetCalendarOrder(VIEW_DATE,third.planId,first.planId);
+    const timed=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'subject',id:'a'});timed.startMinute=30;timed.endMinute=60;
+    const previous=planningPlaceOnDate('2026-10-16',{source:'main',type:'subject',id:'a'});previous.startMinute=1440;previous.endMinute=1460;
+    const block=createTimelineSlot(VIEW_DATE,60,180),blockBefore=clonePlain(block);
+    const before=clonePlain(timed);first.time=20;first.progressTargets=[{type:'question',id:'q1',pid:'m'}];
+    const records=clonePlain(DATA.dailyHistory[VIEW_DATE].sessions);
+    autoScheduleUnscheduledPlans();`);
+  assert.deepEqual(a.json('[third,first,second].map(ref=>[ref.startMinute,ref.endMinute])'),[[20,30],[60,90],[90,120]]);
+  assert.deepEqual(a.json('timed'),a.json('before'));
+  assert.deepEqual(a.json('block'),a.json('blockBefore'));
+  assert.deepEqual(a.json('DATA.dailyHistory[VIEW_DATE].sessions'),a.json('records'));
+  assert.equal(a.run('first.time'),20);
+});
+
+test('automatic placement leaves excess plans unscheduled instead of overlapping or exceeding 26 hours',()=>{
+  const a=app();
+  a.run(`const first=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'theory',id:'core',pid:'m'});
+    const second=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'question',id:'q1',pid:'m'});
+    const timed=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'subject',id:'a'});timed.startMinute=0;timed.endMinute=1550;
+    renderDailySidebar=()=>renderTimeline(ensureDailyData(VIEW_DATE));
+    autoScheduleUnscheduledPlans();`);
+  assert.deepEqual(a.json('[first.startMinute,first.endMinute,second.startMinute,second.endMinute]'),[1550,1560,null,null]);
+  assert.equal(a.run('timelineAdding'),false);
+  assert.match(a.run('planningMessage'),/1개.*남/);
+  assert.match(a.nodes.get('dailySlots').innerHTML,/<[^>]+role="status"[^>]*>[^<]*1개.*남/);
+});
+
+test('unscheduled expanded state survives timer navigation and plan placement rerenders',()=>{
+  const a=app();
+  a.run(`const first=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'subject',id:'a'});
+    const second=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'theory',id:'core',pid:'m'});
+    const expanded={open:true,scrollTop:24,dataset:{date:VIEW_DATE}};
+    document.getElementById('dailySlots').querySelector=selector=>selector==='.tl-unscheduled'?expanded:null;
+    renderDailySidebar=()=>renderTimeline(ensureDailyData(VIEW_DATE));
+    renderWithScrollPreserved=()=>renderDailySidebar();
+    toggleTimelineCardTimer(0,0);`);
+  assert.match(a.nodes.get('dailySlots').innerHTML,/<details\b[^>]*\bopen\b/);
+  assert.equal(a.run('DATA.home.subjects[0].isRunning'),true);
+  a.run(`planningMovePlan(first.planId,VIEW_DATE,540,570);renderDailySidebar();`);
+  assert.match(a.nodes.get('dailySlots').innerHTML,/<details\b[^>]*\bopen\b/);
+  assert.match(a.nodes.get('dailySlots').innerHTML,/<summary>시간 미지정 1개<\/summary>/);
+  a.run('expanded.open=false;renderDailySidebar()');
+  assert.doesNotMatch(a.nodes.get('dailySlots').innerHTML,/<details\b[^>]*\bopen\b/);
 });
 
 test('weekly goal form can override, clear or resume inheriting its monthly hours',()=>{

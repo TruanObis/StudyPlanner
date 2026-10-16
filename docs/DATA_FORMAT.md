@@ -130,7 +130,15 @@ in a daily subject/topic card. Already timed plans and actual records remain
 intact. Assigned units (across dates/goals) and completed units are skipped for
 new plans. Selected, incomplete, untimed references linked to the goal or its
 generated children can receive times without changing their date or `planId`.
-Timing is applied only through allocation confirmation, not on goal save.
+Editing a goal's effective `dailyTime` now prepares a new time allocation for
+all existing linked plans before saving. Monthly changes include inheriting
+weekly goals but preserve explicit weekly overrides. Plans keep their dates,
+IDs, source references, subgoals, completion and elapsed records; only their
+planned endpoints change. Null effective hours clear those endpoints. Completed
+and running plans are included without changing their timers or real sessions.
+Unchanged effective hours leave manual placements alone. Retiming excludes its
+own previous ranges from occupied time and aborts the entire goal save if the
+new window lacks capacity. It never creates additional plans.
 The preview divides free 10-minute cells between that day's pending cards,
 keeping each card contiguous. Existing and newly proposed ranges reserve time
 across date boundaries; insufficient capacity aborts before any allocation is

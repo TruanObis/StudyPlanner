@@ -296,6 +296,7 @@
     #timelineGhost { position:absolute; inset:0; pointer-events:none; z-index:8; }
     .tl-ghost { position:absolute; border:2px solid var(--primary); background:rgba(59,130,246,.22); pointer-events:none; font-size:10px; overflow:hidden; }
     .tl-unscheduled { padding:6px 12px; font-size:12px; max-height:120px; overflow:auto; border-bottom:1px solid var(--line); }
+    .tl-placement-notice, .tl-unscheduled-blocks { padding:6px 12px; font-size:12px; color:var(--text-sub); }
     .tl-menu { position:fixed; z-index:2000; min-width:140px; padding:5px; background:var(--card-bg); border:1px solid var(--line); border-radius:8px; box-shadow:0 4px 18px #0002; }
     #planningCalendarMenu { max-height:calc(100dvh - 8px); overflow-y:auto; }
     .tl-menu button { display:block; width:100%; padding:8px 12px; text-align:left; border:0; border-radius:4px; color:var(--text); background:transparent; cursor:pointer; }
@@ -927,7 +928,7 @@ const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
 const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
 const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-10-17-planning-workspace-12';
+const APP_BUILD_ID = '2026-10-17-planning-workspace-13';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
 const PLANNER_SCHEMA_VERSION = 7;
@@ -5222,10 +5223,7 @@ function planningAllocationStamp(goal){
 }
 function planningAllocateTimes(goal,entries,selected,goalIds){
   const catalog=new Map(planningCatalog().map((item,index)=>[planningKey(item.ref),{...item,index}])),groups=new Map();
-  // Absolute minutes also catch overlaps between 24:00–26:00 and the next day's 00:00–02:00.
-  const occupied=Object.keys(DATA.dailyHistory || {}).flatMap(date=>planningPlans(date).filter(p=>hasTimelineRange(p.ref)).map(({ref})=>{
-    const base=ymdToUtcDayMs(date)/60000; return [base+ref.startMinute,base+ref.endMinute];
-  }));
+  const occupied=planningOccupiedMinutes();
   entries.forEach(row=>{
     const ownerFor=ref=>goal.kind==='month' ? planningFindWeeklyGoal(DATA,goal,row.date,catalog.get(planningKey(ref)).scope) || goal : goal;
     row.placements=row.refs.map(ref=>({ref,startMinute:null,endMinute:null}));
@@ -5243,7 +5241,17 @@ function planningAllocateTimes(goal,entries,selected,goalIds){
       groups.get(key).placements.push(placement);
     });
   });
-  const allGroups=[...groups.values()],minimumSlots=new Set();
+  planningFillTimeGroups([...groups.values()],occupied);
+  return entries.filter(row=>row.placements.length);
+}
+function planningOccupiedMinutes(excluded=new Set()){
+  // Absolute minutes also catch overlaps between 24:00–26:00 and the next day's 00:00–02:00.
+  return Object.keys(DATA.dailyHistory || {}).flatMap(date=>planningPlans(date).filter(p=>hasTimelineRange(p.ref) && !excluded.has(p.ref.planId)).map(({ref})=>{
+    const base=ymdToUtcDayMs(date)/60000;return [base+ref.startMinute,base+ref.endMinute];
+  }));
+}
+function planningFillTimeGroups(allGroups,occupied){
+  const minimumSlots=new Set();
   const overlaps=min=>occupied.some(([start,end])=>min<end && start<min+10);
   // Reserve one cell per card by earliest deadline before sharing spare time.
   // Wide windows must not consume a narrower weekly or following-day window.
@@ -5271,7 +5279,24 @@ function planningAllocateTimes(goal,entries,selected,goalIds){
       if(run.startMinute===run.endMinute) runs.shift();
     });
   });
-  return entries.filter(row=>row.placements.length);
+}
+function planningGoalTimeChanges(updated){
+  const nextData={...DATA,periodGoals:DATA.periodGoals.map(goal=>goal.id===updated.id?updated:goal)};
+  const changedGoals=new Map(nextData.periodGoals.filter(goal=>{
+    const before=planningGoalDailyTime(planningGoal(goal.id)),after=planningGoalDailyTime(goal,nextData);
+    return before?.startMinute!==after?.startMinute || before?.endMinute!==after?.endMinute;
+  }).map(goal=>[goal.id,goal]));
+  const changes=[],groups=new Map();
+  Object.keys(DATA.dailyHistory || {}).sort().forEach(date=>planningPlans(date).forEach(({ref})=>{
+    const owner=changedGoals.get(ref.goalId);if(!owner)return;
+    const placement={ref,startMinute:null,endMinute:null};changes.push(placement);
+    const range=planningGoalDailyTime(owner,nextData);if(!range)return;
+    const key=`${date}:${range.startMinute}:${range.endMinute}`;
+    if(!groups.has(key))groups.set(key,{...range,date,base:ymdToUtcDayMs(date)/60000,placements:[],reserved:[]});
+    groups.get(key).placements.push(placement);
+  }));
+  planningFillTimeGroups([...groups.values()],planningOccupiedMinutes(new Set(changes.map(item=>item.ref.planId))));
+  return changes;
 }
 function planningBuildAllocation(goalId,refs,from,to){
   const goal=planningGoal(goalId); if(!goal) throw new Error('기간 목표를 찾을 수 없습니다.');
@@ -5793,7 +5818,7 @@ function planningGoalTimeFields(goal){
   return `<strong>이 목표의 매일 공부 시간</strong>
     ${goal?.parentGoalId?`<label class="planning-check"><input id="planningInheritTime" type="checkbox" ${inherit?'checked':''} onchange="planningToggleGoalTimeInheritance(this.checked)">월간 목표 시간 사용</label>`:''}
     <div class="planning-fields"><label class="planning-field">공부 시작<select id="planningGoalStart" ${inherit?'disabled':''}>${planningTimeOptions(range?.startMinute)}</select></label><label class="planning-field">공부 종료<select id="planningGoalEnd" ${inherit?'disabled':''}>${planningTimeOptions(range?.endMinute)}</select></label></div>
-    <p class="planning-muted">선택한 요일에 이 시간 안에서 세부 카드를 10분 단위로 나눕니다. 저장 후 ‘배분’에서 반영할 수 있습니다. 이미 시간을 정한 계획은 유지됩니다.</p>`;
+    <p class="planning-muted">시간을 수정하고 저장하면 이미 배분된 계획도 같은 날짜의 새 시간대에 10분 단위로 다시 배치합니다. 실제 공부 기록은 유지됩니다.</p>`;
 }
 function planningToggleGoalTimeInheritance(inherit){
   const state=planningModalState,goal=planningGoal(state?.id);if(state?.type!=='goal'||!goal?.parentGoalId)return;
@@ -5813,7 +5838,7 @@ function planningOpenGoal(id){
     <span class="planning-muted">공부할 요일</span>${planningWeekdayHTML(goal?.weekdays || [1,2,3,4,5])}
     ${planningGoalTimeFields(goal)}
     <p class="planning-muted" id="planningScopeLabel"></p><div class="planning-section-head"><strong>배분할 카드</strong><div class="planning-actions">${planningButton('미완료 선택','planningSelectGoalTargets',[true])}${planningButton('선택 해제','planningSelectGoalTargets',[false])}</div></div><div id="planningGoalTargets" class="planning-target-picker"></div>
-    ${goal?'<p class="planning-muted">목표를 편집해도 이미 배정한 일간 계획은 유지됩니다.</p>':''}`);
+    ${goal?'<p class="planning-muted">배정된 카드와 날짜는 유지됩니다. 공부 시간을 바꾸면 연결된 계획의 시각도 바뀝니다.</p>':''}`);
   planningRenderGoalTargets();
 }
 function planningChangeGoalRoot(index){
@@ -5907,10 +5932,13 @@ function planningSaveGoal(){
     const updated={...goal,...config,targets:planningUnique(config.targets).filter(r=>allowed.has(planningKey(r)))};
     if(inherit) delete updated.dailyTime;
     validateImportedPlannerData({...DATA,periodGoals:DATA.periodGoals.map(g=>g.id===goal.id?updated:g)});
+    const timeChanges=planningGoalTimeChanges(updated);
     if(inherit) delete goal.dailyTime;
-    Object.assign(goal,updated); saveData();
+    Object.assign(goal,updated);
+    timeChanges.forEach(({ref,startMinute,endMinute})=>Object.assign(ref,{startMinute,endMinute}));
+    saveData();
   } else planningCreateGoal(config);
-  planningCloseModal();planningRefresh('기간 목표를 저장했습니다. 배분 버튼으로 날짜별 계획을 만들 수 있습니다.');
+  planningCloseModal();planningRefresh(state.id?'기간 목표와 연결된 계획 시간을 저장했습니다.':'기간 목표를 저장했습니다. 배분 버튼으로 날짜별 계획을 만들 수 있습니다.');
 }
 function planningRemoveGoal(id){
   const goal=planningGoal(id),preview=planningGoalDeletionPreview(id); if(!goal || !preview) return;
@@ -6406,8 +6434,33 @@ function timelineHandles(kind,sIdx,cIdx,label,first,last){
   return `${first ? `<button class="tl-resize start" aria-label="${escapeHtml(label)} 시작 시각 조절" onpointerdown="startTimelineGesture(event,'${kind}-start',${sIdx},${cIdx})" onkeydown="timelineKey(event,'${kind}-start',${sIdx},${cIdx})"></button>` : ''}
     ${last ? `<button class="tl-resize end" aria-label="${escapeHtml(label)} 종료 시각 조절" onpointerdown="startTimelineGesture(event,'${kind}-end',${sIdx},${cIdx})" onkeydown="timelineKey(event,'${kind}-end',${sIdx},${cIdx})"></button>` : ''}`;
 }
+const timelineUnscheduledState=new Map();
+let timelineAutoPlacementNotice=null;
+function rememberTimelineUnscheduled(element){
+  if(element?.dataset.date) timelineUnscheduledState.set(element.dataset.date,{open:element.open,scrollTop:element.scrollTop});
+}
+function autoScheduleUnscheduledPlans(){
+  if(timelineAdding)return;
+  const plans=planningCalendarPlans(VIEW_DATE).filter(item=>!hasTimelineRange(item.ref)),occupied=planningOccupiedMinutes();
+  const base=ymdToUtcDayMs(VIEW_DATE)/60000,free=min=>!occupied.some(([start,end])=>base+min<end && start<base+min+10);
+  let cursor=0,placed=0;
+  for(const {ref} of plans){
+    while(cursor<TIMELINE_END && !free(cursor))cursor+=10;
+    if(cursor>=TIMELINE_END)break;
+    const startMinute=cursor;
+    while(cursor<TIMELINE_END && cursor<startMinute+30 && free(cursor))cursor+=10;
+    Object.assign(ref,{startMinute,endMinute:cursor});placed++;
+  }
+  const message=`${placed}개 계획을 시간표에 배치했습니다.${placed<plans.length?` 빈 시간이 부족해 ${plans.length-placed}개가 남았습니다.`:''}`;
+  timelineAutoPlacementNotice=placed<plans.length?{date:VIEW_DATE,message}:null;
+  saveData();planningRefresh(message);
+}
 function renderTimeline(daily){
   const container = document.getElementById('dailySlots');
+  rememberTimelineUnscheduled(container.querySelector?.('.tl-unscheduled'));
+  const unscheduledState=timelineUnscheduledState.get(VIEW_DATE);
+  const placementNotice=timelineAutoPlacementNotice?.date===VIEW_DATE?timelineAutoPlacementNotice.message:'';
+  timelineAutoPlacementNotice=null;
   const oldScroll = document.getElementById('timelineScroll');
   const sameDate = oldScroll?.dataset.date === VIEW_DATE;
   if(oldScroll && !sameDate){ timelineAdding=false; timelinePendingSlot=null; }
@@ -6442,9 +6495,13 @@ function renderTimeline(daily){
           <div class="tl-plan-edge" style="right:${100-shape.last.right}%;top:${shape.last.top}%;height:${shape.last.height}%">${timelineHandles('card',ref.sIdx,ref.index,`${info.title} 계획`,false,true)}</div>`}
       </div></div>`;
   }).join('');
-  const unscheduled = daily.slots.map((slot,index)=>({slot,index})).filter(({slot})=>(!slot.cardOnly && !hasTimelineRange(slot)) || slot.cardIds.some(ref=>!hasTimelineRange(ref)));
-  container.innerHTML = `${unscheduled.length ? `<details class="tl-unscheduled"><summary>시간 미지정 ${unscheduled.length}개</summary>${unscheduled.map(({slot,index})=>`<div><span oncontextmenu="openTimelineMenu(event,${index})">${escapeHtml(slot.label || '시간 미지정')}</span> <button class="btn btn-outline" ${timelineAdding ? '' : 'disabled'} onclick="scheduleLegacySlot(${index})">시간표에 배치</button>
-      ${slot.cardIds.map((ref,cIdx)=>!hasTimelineRange(ref) ? `<button class="btn btn-outline" ${timelineAdding ? 'disabled' : ''} draggable="${!timelineAdding}" ondragstart="handleSidebarDragStart(event,${index},${cIdx})" onclick="toggleTimelineCardTimer(${index},${cIdx})" oncontextmenu="openTimelineMenu(event,${index},${cIdx})">${escapeHtml(getCardInfo(ref).title)}</button>` : '').join('')}</div>`).join('')}</details>` : ''}
+  const unscheduled=planningCalendarPlans(VIEW_DATE).filter(item=>!hasTimelineRange(item.ref));
+  const legacySlots=daily.slots.map((slot,index)=>({slot,index})).filter(({slot})=>!slot.cardOnly && !hasTimelineRange(slot));
+  container.innerHTML = `${unscheduled.length ? `<details class="tl-unscheduled" data-date="${VIEW_DATE}" ${unscheduledState?.open?'open':''} ontoggle="rememberTimelineUnscheduled(this)"><summary>시간 미지정 ${unscheduled.length}개</summary>
+      <div><button class="btn btn-outline" ${timelineAdding?'disabled':''} onclick="autoScheduleUnscheduledPlans()">시간표에 배치</button></div>
+      ${unscheduled.map(({ref,sIdx,cIdx})=>`<button class="btn btn-outline" ${timelineAdding ? 'disabled' : ''} draggable="${!timelineAdding}" ondragstart="handleSidebarDragStart(event,${sIdx},${cIdx})" onclick="toggleTimelineCardTimer(${sIdx},${cIdx})" oncontextmenu="openTimelineMenu(event,${sIdx},${cIdx})">${escapeHtml(getCardInfo(ref).title)}</button>`).join('')}</details>` : ''}
+    ${timelineAdding && legacySlots.length?`<div class="tl-unscheduled-blocks">${legacySlots.map(({slot,index})=>`<button class="btn btn-outline" onclick="scheduleLegacySlot(${index})">${escapeHtml(slot.label || '미배치 시간 블록')} 그리기</button>`).join('')}</div>`:''}
+    ${placementNotice?`<div class="tl-placement-notice" role="status">${escapeHtml(placementNotice)}</div>`:''}
     <div id="timelineScroll" class="tl-scroll" data-date="${VIEW_DATE}">
       <div id="timelineCanvas" class="tl-canvas ${timelineAdding ? 'adding' : ''}"
         onpointerdown="startTimelineGesture(event,'create')" ondragover="timelineDragOver(event)" ondrop="dropOnTimeline(event)" oncontextmenu="openTimelineMenu(event)">
@@ -6454,6 +6511,8 @@ function renderTimeline(daily){
         ${slotHtml}${cardHtml}<div id="timelineActual"></div><div id="timelineNow" class="tl-now" hidden></div>
       </div>
     </div><div id="timelineMenu" class="tl-menu" role="menu" hidden></div>`;
+  const unscheduledList=container.querySelector?.('.tl-unscheduled');
+  if(unscheduledList && unscheduledState)unscheduledList.scrollTop=unscheduledState.scrollTop;
   const add = document.getElementById('addTimelineSlot');
   if(add){ add.textContent = timelineAdding ? '시간 블록 편집 완료' : '시간 블록 편집'; add.className = `btn ${timelineAdding ? 'btn-primary' : 'btn-outline'}`; add.setAttribute('aria-pressed',String(timelineAdding)); }
   updateTimelineExecution();

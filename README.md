@@ -171,6 +171,14 @@ Clicking the date text or calendar icon opens the native dropdown in both the
 sidebar and details panel. Keyboard focus still allows direct numeric entry.
 Multi-hour planned cards have one connected outline and one name/duration label,
 with their start/end handles at the actual ten-minute edges.
+**시간 미지정 N개** counts individual unscheduled cards across all groups.
+Its list stays expanded, retaining its scroll position, when a card is clicked
+or dragged and the timetable redraws. **시간표에 배치** places the list in order
+from the earliest free time in the 26-hour grid, using up to 30 minutes per card
+on 10-minute boundaries. It skips existing plans, including overnight overlap
+from neighboring dates; time-block backgrounds do not block placement. If the
+grid is full, remaining cards stay unscheduled and the result reports the count.
+Legacy untimed time blocks can still be drawn in **시간 블록 편집** mode.
 
 * **일간** lists every plan for the selected date, including unscheduled plans.
   Assigned subgoals are expanded by default. Check completion, edit subgoals,
@@ -215,6 +223,13 @@ with their start/end handles at the actual ten-minute edges.
   10-minute steps up to the following day's 02:00. Both times can be left unset.
   Generated weekly goals inherit their monthly goal's window; uncheck
   **월간 목표 시간 사용** to set an independent weekly window or leave it untimed.
+  Editing and saving these hours immediately redistributes linked daily plans
+  within the new window on their existing dates, including already timed or
+  completed plans. A monthly edit updates inheriting weekly goals; explicit
+  weekly overrides stay unchanged. Clearing hours makes linked plans untimed.
+  Plan identities, subgoals, calendar order, timers and actual study records stay
+  intact. Saving without changing effective hours preserves manual placement.
+  Insufficient free time rejects the save before changing any goal or plan.
   **배분할 카드** has two
   panes: topics/parent cards on the left and the active topic's learning cards
   on the right. Click a topic name to browse its cards without changing the
@@ -233,9 +248,9 @@ with their start/end handles at the actual ten-minute edges.
   monthly tab lists monthly goals. Existing assignments and completed cards are
   skipped for new allocation. Selected, incomplete, untimed plans already linked
   to this goal can receive times on their existing eligible dates without being
-  duplicated. Save the goal, then use **배분 → 배분 미리보기 → 배분 확정** to apply
-  its window. Plans with times already set and all actual study records remain
-  intact. Other scheduled plans, including overlaps from adjacent dates, occupy
+  duplicated. Use **배분 → 배분 미리보기 → 배분 확정** to add new plans or time
+  untimed assignments with the goal's existing window. This allocation operation
+  preserves already timed plans. Other scheduled plans, including overlaps from adjacent dates, occupy
   time in the window; time blocks alone do not. If fewer than 10 free minutes per
   card remain, the preview asks for a wider window or fewer cards before applying
   any changes. New cards use remaining free time without rearranging earlier plans.
