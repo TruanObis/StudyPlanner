@@ -325,16 +325,72 @@ test('legacy planning URLs replace their history entry so browser Back can leave
   assert.equal(a.run('planningView()'),'week');
 });
 
-test('diary calendars render empty dates and neighboring month dates with drop targets before goals',()=>{
+test('period goals precede diary calendars while all empty and neighboring dates remain droppable',()=>{
   const a=app();
   a.run("renderPlanningPage('month');");
   const month=a.nodes.get('planningContent').innerHTML;
   assert.equal((month.match(/data-plan-date=/g)||[]).length,35);
   assert.match(month,/data-plan-date="2026-09-28"/);
   assert.match(month,/data-plan-date="2026-11-01"/);
-  assert.ok(month.indexOf('planning-calendar')<month.indexOf('기간 목표'));
+  assert.ok(month.indexOf('기간 목표')<month.indexOf('planning-calendar'));
   a.run("renderPlanningPage('week');");
   assert.equal((a.nodes.get('planningContent').innerHTML.match(/data-plan-date=/g)||[]).length,7);
+});
+
+test('dropping a source card assigns it to the displayed period without duplicate goals or daily allocation',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningAssignPeriodGoal'),'function');
+  a.run(`DATA.modules.m.tabs[0].questions[0].done=true;
+    const sourceBefore=clonePlain(DATA.modules);
+    const first=planningAssignPeriodGoal('week',{source:'main',type:'subject',id:'a',pid:'a'});`);
+  assert.deepEqual(a.json('[first.goal.kind,first.goal.root,first.goal.startDate,first.goal.endDate]'),
+    ['week',{type:'subject',id:'a'},'2026-10-12','2026-10-18']);
+  assert.deepEqual(a.json('first.goal.weekdays'),[0,1,2,3,4,5,6]);
+  assert.deepEqual(a.json('first.goal.targets.map(r=>r.id)'),['core','other','q2','loose']);
+  assert.equal(a.run('first.created'),true);
+  a.run(`first.goal.weekdays=[2];first.goal.targets=[];
+    const repeated=planningAssignPeriodGoal('week',{source:'main',type:'subject',id:'a'});
+    const monthly=planningAssignPeriodGoal('month',{source:'main',type:'subject',id:'a'});`);
+  assert.equal(a.run('repeated.created'),false);
+  assert.equal(a.run('repeated.goal.id'),a.run('first.goal.id'));
+  assert.deepEqual(a.json('[first.goal.weekdays,first.goal.targets]'),[[2],[]]);
+  assert.deepEqual(a.json('[monthly.goal.startDate,monthly.goal.endDate]'),['2026-10-01','2026-10-31']);
+  assert.equal(a.run('DATA.periodGoals.length'),2);
+  assert.deepEqual(a.json('DATA.dailyHistory'),{});
+  assert.deepEqual(a.json('DATA.modules'),a.json('sourceBefore'));
+  assert.doesNotThrow(()=>a.run('validateImportedPlannerData(unpackPlannerBackup(buildPlannerBackupEnvelope(DATA)).data)'));
+});
+
+test('period goal drops from existing plans preserve their placement and execution records',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningAssignPeriodGoal'),'function');
+  a.run(`const plan=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'question',id:'q1',pid:'m'});
+    plan.startMinute=600;plan.endMinute=630;plan.time=60;
+    DATA.dailyHistory[VIEW_DATE].sessions=[{id:'run',ref:{type:'question',id:'q1',pid:'m'},startMs:now-60000,endMs:now}];
+    const before=clonePlain(DATA.dailyHistory);
+    const assigned=planningAssignPeriodGoal('month',{source:'planning',planId:plan.planId,date:VIEW_DATE});
+    const sidebarAssigned=planningAssignPeriodGoal('week',{source:'sidebar',date:VIEW_DATE,sIdx:0,cIdx:0});`);
+  assert.deepEqual(a.json('assigned.goal.targets'),[{type:'question',id:'q1',pid:'m'}]);
+  assert.deepEqual(a.json('sidebarAssigned.goal.root'),{type:'question',id:'q1',pid:'m'});
+  assert.deepEqual(a.json('DATA.dailyHistory'),a.json('before'));
+});
+
+test('period goal drops ignore missing cards, stale plans and block edit mode',()=>{
+  const a=app();
+  assert.equal(a.run('typeof planningAssignPeriodGoal'),'function');
+  a.run(`const plan=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'question',id:'q1',pid:'m'});`);
+  for(const [view,payload] of [
+    ['day',{source:'main',type:'subject',id:'a'}],
+    ['week',{source:'main',type:'detail',id:'missing',pid:'a'}],
+    ['week',{source:'main',type:'adhoc',id:'local'}],
+    ['month',{source:'planning',planId:'missing'}],
+    ['month',{source:'slot',sIdx:0}],
+    ['month',null]
+  ]) assert.equal(a.run(`planningAssignPeriodGoal(${JSON.stringify(view)},${JSON.stringify(payload)})`),null);
+  assert.equal(a.run("planningAssignPeriodGoal('month',{source:'planning',planId:plan.planId,date:'2026-10-18'})"),null);
+  a.run('timelineAdding=true;');
+  assert.equal(a.run("planningAssignPeriodGoal('week',{source:'main',type:'subject',id:'a'})"),null);
+  assert.equal(a.run('DATA.periodGoals.length'),0);
 });
 
 test('calendar source drops add unscheduled plans and date moves preserve sessions and plan identity',()=>{

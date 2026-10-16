@@ -175,7 +175,14 @@ sidebar and details panel. Keyboard focus still allows direct numeric entry.
   move a plan to another date, set its time in 10-minute steps, start/stop its
   timer, or open its source card. Completion uses the source card's current
   state, including when viewing past dates.
-* **주간 / 월간** start with a diary calendar: seven dated sections for the week,
+* **주간 / 월간** show **기간 목표** directly below the date controls. Drag a
+  learning card into this area to create a goal for the displayed week or month,
+  initially including its unfinished learning cards and all seven study weekdays.
+  Repeating the same drop reuses the existing goal without changing its settings.
+  **편집** adjusts dates, weekdays, and selected cards; **배분** assigns them to days.
+  Dropping an existing daily plan here also creates a period goal while preserving
+  the daily plan and its execution records.
+  The diary calendar follows: seven dated sections for the week,
   or a Monday-first month grid including adjacent dates. Drag a learning card
   onto a date to add an unscheduled plan. Drag a planned card to another date
   to move it, keeping its duration and subgoals; actual study records remain on

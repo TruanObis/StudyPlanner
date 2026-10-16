@@ -74,6 +74,15 @@ User requested keeping the learning page usable beside the expanded panel, calen
 
 Follow-up verification: V2 85/85 tests and main 59/59 tests passed. Native browser checks covered source-card body drops onto calendar dates, date-to-date dragging, source navigation with the panel open, month overflow counts, and 1280/667/390px layouts. At 390px the document fits its viewport and the planning panel remains under half its width. Numeric year entry, Enter/blur commit, native date-picker selection, and one-click tab switching after date entry were verified. Review found and resolved the partial-year reset and legacy-URL Back loop; navigation controls now retain their DOM identity during date commits.
 
+### Follow-up: period goals below the date
+
+The user subsequently requested period goals directly below the date and card assignment by drag-and-drop. This supersedes the calendar-first order above.
+
+- [x] Put the period-goal section before the calendar in both week and month views.
+- [x] Accept source and existing-plan card drops for the displayed period, reuse duplicate goals, and retain original daily plans and execution records.
+- [x] Keep goal editing and allocation available, update README/design and V2 build metadata.
+- [x] Verify all 88 V2 tests, unchanged main file, and browser card-body drops into weekly/monthly goals. Check date → goals → calendar order at desktop and narrow widths, retaining the source-card page and half-screen panel limit.
+
 - Baseline: V2 59/59 timeline tests pass on 02fa3f8.
 - Ruling: Continue in existing feature checkout so the user's 8767 preview follows changes; no additional worktree or repeated approval is needed for the requested V2 implementation.
 - Ruling: The user has explicitly approved the design and requested V2 implementation. Plan creation is an implementation detail; continue directly rather than introducing another approval gate.

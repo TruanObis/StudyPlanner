@@ -342,6 +342,9 @@
     .planning-nav input[type=date] { max-width:150px; padding:5px; font-size:12px; }
     .planning-page input[type=date],.planning-dialog input:not([type=checkbox]),.planning-dialog select { color:var(--text); background:var(--input-bg); border:1px solid var(--line); border-radius:8px; padding:9px; font:inherit; min-width:0; }
     .planning-section { margin-top:24px; }
+    .planning-goals { margin-top:0; border-radius:10px; }
+    .planning-goal-drop { padding:14px 10px; border:1px dashed var(--line); border-radius:10px; color:var(--text-sub); font-size:12px; text-align:center; }
+    .planning-goals.drag-over { outline:2px solid var(--primary); outline-offset:3px; background:color-mix(in srgb,var(--primary) 8%,var(--card-bg)); }
     .planning-section-head { margin-bottom:10px; }
     .planning-section-head h2 { margin:0; font-size:1.05rem; }
     .planning-item { border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:10px; background:var(--card-bg); }
@@ -905,7 +908,7 @@ const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
 const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
 const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-10-17-planning-workspace-3';
+const APP_BUILD_ID = '2026-10-17-planning-workspace-4';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
 const PLANNER_SCHEMA_VERSION = 6;
@@ -5333,7 +5336,7 @@ function planningCalendarHTML(view,bounds){
     const outside=date<bounds.start||date>bounds.end,weekday=['일','월','화','수','목','금','토'][new Date(ymdToUtcDayMs(date)).getUTCDay()];
     const rows=planningPlans(date);
     return `<div class="planning-calendar-day${outside?' outside':''}${date===getLogicalDate()?' is-today':''}${date===VIEW_DATE?' is-selected':''}" data-plan-date="${date}"
-      ondragover="planningCalendarOver(event)" ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('drag-over')" ondrop="planningCalendarDrop(event,'${date}')">
+      ondragover="planningDropOver(event)" ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('drag-over')" ondrop="planningCalendarDrop(event,'${date}')">
       <button type="button" class="planning-date-button" aria-label="${date} 일간 계획" onclick="${planningCall('planningSetDate',[date,'day'])}">${view==='week'?`${date.slice(5)} ${weekday}`:Number(date.slice(8))}</button>
       ${(view==='month'?rows.slice(0,2):rows).map(({ref})=>{const progress=timelinePlanProgress(ref);return `<button type="button" class="planning-calendar-card${progress.done===progress.total?' done':''}" draggable="${!timelineAdding}" aria-label="${escapeHtml(getCardInfo(ref).title)} ${date} 계획 편집"
         ondragstart="${planningCall('planningDragCalendar',[],`event,${JSON.stringify(ref.planId)}`)}" onclick="${planningCall('planningOpenEdit',[ref.planId])}"><span>${escapeHtml(getCardInfo(ref).title)}</span>${hasTimelineRange(ref)?`<small>${timelineRange(ref)}</small>`:''}</button>`;}).join('')}
@@ -5360,7 +5363,7 @@ function planningPlaceOnDate(date,data){
   if(item.date!==date) planningMovePlan(item.ref.planId,date,item.ref.startMinute,item.ref.endMinute);
   return item.ref;
 }
-function planningCalendarOver(ev){
+function planningDropOver(ev){
   ev.preventDefault();ev.stopPropagation();
   ev.dataTransfer.dropEffect=timelineAdding?'none':'move';
   if(!timelineAdding) ev.currentTarget.classList.add('drag-over');
@@ -5378,6 +5381,35 @@ function planningDragCalendar(ev,id){
   ev.stopPropagation();ev.dataTransfer.effectAllowed='move';
   ev.dataTransfer.setData('application/json',JSON.stringify({source:'planning',planId:id,date:item.date}));
 }
+function planningAssignPeriodGoal(view,data){
+  if(!['week','month'].includes(view)||!data||timelineAdding) return null;
+  let ref;
+  if(data.source==='main') ref=data;
+  else if(data.source==='planning'){
+    const item=planningFindPlan(data.planId);
+    if(!item || (data.date && data.date!==item.date)) return null;
+    ref=item.ref;
+  }else if(data.source==='sidebar'){
+    ref=DATA.dailyHistory?.[data.date || VIEW_DATE]?.slots?.[data.sIdx]?.cardIds?.[data.cIdx];
+  }
+  if(!ref) return null;
+  const entry=planningCatalog().find(item=>planningKey(item.ref)===planningKey(ref));
+  if(!entry) return null;
+  const bounds=planningPeriodBounds(view);
+  const existing=(DATA.periodGoals || []).find(goal=>goal.kind===view && planningKey(goal.root)===planningKey(entry.ref)
+    && goal.startDate===bounds.start && goal.endDate===bounds.end);
+  if(existing) return {goal:existing,created:false};
+  const goal=planningCreateGoal({kind:view,root:entry.ref,startDate:bounds.start,endDate:bounds.end,weekdays:[0,1,2,3,4,5,6]});
+  return {goal,created:true};
+}
+function planningDropGoal(ev,view){
+  ev.preventDefault();ev.stopPropagation();ev.currentTarget.classList.remove('drag-over');
+  let data;try{data=JSON.parse(ev.dataTransfer.getData('application/json'));}catch(_){return;}
+  try{
+    const result=planningAssignPeriodGoal(view,data);if(!result)return;
+    planningRefresh(result.created?`${view==='week'?'주간':'월간'} 목표에 추가했습니다.`:'이미 이 기간의 목표에 있습니다.');
+  }catch(error){planningRefresh(error.message);}
+}
 function planningPeriodHTML(view,bounds){
   const goals=planningVisibleGoals(bounds.start,bounds.end),catalog=planningCatalog(),keys=new Set(catalog.map(e=>planningKey(e.ref)));
   planningNewRows=planningNewCards(bounds.start,bounds.end);
@@ -5387,10 +5419,11 @@ function planningPeriodHTML(view,bounds){
       <button type="button" class="planning-title" onclick="${planningCall('planningOpenSource',[goal.root])}">${escapeHtml(getCardInfo(goal.root).title)}</button>
       <div class="planning-muted">${goal.startDate} – ${goal.endDate} · ${done} / ${targets.length} 완료</div></div>
       <div class="planning-actions">${planningButton('배분','planningOpenAllocation',[goal.id],true)}${planningButton('편집','planningOpenGoal',[goal.id])}${planningButton('삭제','planningRemoveGoal',[goal.id])}</div></div></article>`;
-  }).join('') || '<div class="planning-empty">기간 목표를 추가하면 하위 카드를 날짜별로 배분할 수 있습니다.</div>';
+  }).join('');
   const newHTML=planningNewRows.length ? `<div class="planning-new"><div>${planningNewRows.map((row,index)=>`<label class="planning-check"><input type="checkbox" class="planning-new-check" value="${index}"><span><strong>${escapeHtml(row.label)}</strong><span class="planning-muted">${escapeHtml(row.path)}<br>${row.goalIds.map(id=>escapeHtml(getCardInfo(planningGoal(id).root).title)).join(' · ')}${getCardInfo(row.ref).done?' · 완료':''}${row.assignedDates.length?` · 배정: ${row.assignedDates.join(', ')}`:''}</span></span></label>`).join('')}</div>
     <div class="planning-actions" style="margin-top:12px">${planningButton('선택 카드 배분','planningAllocateSelectedNew',[],true)}${planningButton('이번 목표에서 제외','planningDismissSelectedNew')}</div></div>` : '<div class="planning-empty">새로 추가된 관련 카드가 없습니다.</div>';
-  return `${planningCalendarHTML(view,bounds)}<section class="planning-section"><div class="planning-section-head"><h2>기간 목표</h2>${planningButton('+ 목표','planningOpenGoal',[],true)}</div>${goalHTML}</section>
+  return `<section class="planning-section planning-goals" aria-label="기간 목표" ondragover="planningDropOver(event)" ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('drag-over')" ondrop="planningDropGoal(event,'${view}')"><div class="planning-section-head"><h2>기간 목표</h2>${planningButton('+ 목표','planningOpenGoal',[],true)}</div>${goalHTML}<div class="planning-goal-drop">카드를 놓아 ${view==='week'?'주간':'월간'} 목표 추가</div></section>
+    ${planningCalendarHTML(view,bounds)}
     <section class="planning-section"><div class="planning-section-head"><h2>새 카드 <span class="planning-badge">${planningNewRows.length}</span></h2></div>${newHTML}</section>`;
 }
 function renderPlanningPage(view='day'){
