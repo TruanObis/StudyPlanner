@@ -111,6 +111,18 @@ its time. Already assigned units (across dates/goals) and completed units are
 skipped. Moving a plan outside its goal's date range detaches `goalId`; deleting
 the goal detaches links but preserves all daily plans and execution history.
 
+Allocated plans set `progressTargetsFollowMoves: true`. This retains their
+explicit, still-existing selected cards even after those cards move outside the
+daily parent's hierarchy. The daily parent's source identity and timer remain
+unchanged. The flag survives copy and goal detachment. A moved goal root updates
+its watched scope; subsequent allocations still append to any existing plan for
+the same goal/date. New dates use the new scope as their parent.
+
+Duplicate-allocation checks expand an assigned subject or non-leaf topic into
+its covered learning units. An assigned theory covers that theory only, since
+theory and questions are separate learning units. Distribution uses the current
+source-card order, regardless of checkbox selection order.
+
 V2 ensures stable slot IDs, including imported legacy slots. Copies receive new
 slot/plan IDs and optional `copiedFromBlock` / `copiedFromPlan` provenance values
 in `sourceDate:sourceId` form. These prevent repeated copies from duplicating

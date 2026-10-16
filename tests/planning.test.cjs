@@ -249,3 +249,55 @@ test('legacy blocks receive distinct stable identities before a copy preview',()
   assert.equal(a.run('planningApplyCopy(preview).stale'),false);
   assert.equal(a.run("planningCopyPreview(VIEW_DATE,['2026-10-18'],false).rows[0].blocks.length"),0);
 });
+
+test('new goal forms default to the selected period even when it is in the past',()=>{
+  const a=app();
+  a.run(`VIEW_DATE='2026-09-12'; location.hash='#/plans/month'; planningOpenGoal();`);
+  const body=a.nodes.get('planningModalBody').innerHTML;
+  assert.match(body,/id="planningFrom"[^>]*value="2026-09-01"/);
+  assert.match(body,/id="planningTo"[^>]*value="2026-09-30"/);
+});
+
+test('allocation uses current source order rather than checkbox selection history',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal(config); goal.targets.push(goal.targets.shift());`);
+  assert.deepEqual(a.json('planningBuildAllocation(goal.id).entries.flatMap(e=>e.refs.map(r=>r.id))'),['core','q1','other','q2','loose']);
+  a.run('DATA.modules.m.tabs.reverse();');
+  assert.deepEqual(a.json('planningBuildAllocation(goal.id).entries.flatMap(e=>e.refs.map(r=>r.id))'),['other','q2','core','q1','loose']);
+});
+
+test('aggregate plans cover their child units without treating a theory as its questions',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal(config);
+    DATA.dailyHistory[VIEW_DATE]={slots:[{id:'s',cardOnly:true,cardIds:[{type:'subject',id:'a',goalId:goal.id,progressTargets:[{type:'detail',id:'topic',pid:'a'}]}]}],sessions:[]};
+    const preview=planningBuildAllocation(goal.id);`);
+  assert.deepEqual(a.json('preview.entries.flatMap(e=>e.refs.map(r=>r.id))'),['loose']);
+  assert.equal(a.run('preview.skipped.length'),4);
+  a.run(`DATA.dailyHistory[VIEW_DATE].slots[0].cardIds[0].progressTargets=[{type:'theory',id:'core',pid:'m'}];`);
+  assert.ok(a.run("planningBuildAllocation(goal.id).entries.some(e=>e.refs.some(r=>r.id==='q1'))"));
+});
+
+test('moving a goal root follows its new scope and preserves allocated targets, copies and timer source',()=>{
+  const a=app();
+  a.run(`DATA.details.a.cards.push({id:'destination',title:'새 단원',module:'n'});
+    DATA.modules.n={id:'n',tabs:[{id:'keep',label:'기존 이론',questions:[]}]};
+    const goal=planningCreateGoal({...config,root:{type:'theory',id:'core',pid:'m'},endDate:VIEW_DATE});
+    planningApplyAllocation(planningBuildAllocation(goal.id));
+    planningApplyAllocation(planningBuildAllocation(goal.id,[{type:'theory',id:'other',pid:'m'}]));
+    const plan=planningPlans(VIEW_DATE)[0].ref;
+    plan.startMinute=540;plan.endMinute=600;
+    moveState={fromMid:'m',fromTabId:'core'}; selectorMoveTheory('n');`);
+  assert.deepEqual(a.json('goal.scope'),{type:'detail',id:'destination',pid:'a'});
+  assert.equal(a.run('plan.id'),'topic');
+  assert.deepEqual(a.json('selectedTimelineSubgoals(plan).map(r=>r.id).sort()'),['core','other','q1']);
+  assert.deepEqual(a.json('[plan.startMinute,plan.endMinute]'),[540,600]);
+  a.run(`DATA.modules.n.tabs[0].questions.push({id:'new-n',src:'새 기출'});
+    const fresh=planningNewCards(VIEW_DATE,VIEW_DATE).find(r=>r.ref.id==='new-n');
+    planningApplyAllocation(planningBuildAllocation(goal.id,[fresh.ref]));`);
+  assert.equal(a.run('planningPlans(VIEW_DATE).length'),1);
+  assert.equal(a.run('selectedTimelineSubgoals(plan).length'),4);
+  a.run(`planningApplyCopy(planningCopyPreview(VIEW_DATE,['2026-10-18'],true)); planningDeleteGoal(goal.id);`);
+  assert.equal(a.run('selectedTimelineSubgoals(plan).length'),4);
+  assert.equal(a.run("selectedTimelineSubgoals(planningPlans('2026-10-18')[0].ref).length"),4);
+  assert.doesNotThrow(()=>a.run('validateImportedPlannerData(unpackPlannerBackup(buildPlannerBackupEnvelope(DATA)).data)'));
+});

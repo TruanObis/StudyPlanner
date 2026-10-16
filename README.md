@@ -179,6 +179,8 @@ opens **계획 상세**. The desktop timetable stays open alongside it; on mobil
   dates. Lower-level goals watch their owning topic, including new siblings.
   Select cards to allocate them or exclude them from the relevant goals.
   Existing daily plans and times are not automatically rearranged.
+  Moving a goal's source updates its watched topic. Previously selected daily
+  subgoals remain visible after source moves, keeping the daily timer source.
 * **일간 → 다른 날짜로 복사** copies time blocks to a date range and selected
   weekdays. **계획 카드도 포함** also copies placement and selected subgoals.
   The preview reports overlaps; existing destination entries remain. Repeating
