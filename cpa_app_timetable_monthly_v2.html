@@ -912,7 +912,7 @@ const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
 const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
 const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-10-17-planning-workspace-6';
+const APP_BUILD_ID = '2026-10-17-planning-workspace-7';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
 const PLANNER_SCHEMA_VERSION = 7;
@@ -5251,10 +5251,23 @@ function planningMovePlan(id,date,start,end){
   } else if(goal && (date<goal.startDate || date>goal.endDate)) delete item.ref.goalId;
   saveData(); return item.ref;
 }
-function planningDeleteGoal(id){
-  const removed=new Set([id,...(DATA.periodGoals || []).filter(g=>g.parentGoalId===id).map(g=>g.id)]);
+function planningGoalDeletionPreview(id){
+  if(!planningGoal(id)) return null;
+  const goalIds=[id,...(DATA.periodGoals || []).filter(g=>g.parentGoalId===id).map(g=>g.id)];
+  const linked=new Set(goalIds);
+  const plans=Object.keys(DATA.dailyHistory || {}).sort().flatMap(date=>(DATA.dailyHistory[date].slots || [])
+    .flatMap(slot=>(slot.cardIds || []).filter(ref=>linked.has(ref.goalId)).map(ref=>[date,ref.planId,ref.goalId])));
+  return {id,goalIds,planCount:plans.length,stamp:JSON.stringify([goalIds.slice().sort(),plans])};
+}
+function planningDeleteGoal(id,removePlans=false){
+  const preview=planningGoalDeletionPreview(id); if(!preview) return;
+  const removed=new Set(preview.goalIds);
+  if(removePlans) tickOneSecond();
   DATA.periodGoals=(DATA.periodGoals || []).filter(g=>!removed.has(g.id));
-  Object.keys(DATA.dailyHistory || {}).forEach(date=>planningPlans(date).forEach(({ref})=>{if(removed.has(ref.goalId)) delete ref.goalId;}));
+  Object.values(DATA.dailyHistory || {}).forEach(day=>(day.slots || []).forEach(slot=>{
+    if(removePlans) slot.cardIds=(slot.cardIds || []).filter(ref=>!removed.has(ref.goalId));
+    else (slot.cardIds || []).forEach(ref=>{if(removed.has(ref.goalId)) delete ref.goalId;});
+  }));
   saveData();
 }
 function planningCopyContent(date){
@@ -5669,8 +5682,30 @@ function planningSaveGoal(){
   planningCloseModal();planningRefresh('기간 목표를 저장했습니다. 배분 버튼으로 날짜별 계획을 만들 수 있습니다.');
 }
 function planningRemoveGoal(id){
-  if(!planningGoal(id)||!confirm('기간 목표를 삭제할까요? 이미 배정한 일간 계획과 원본 카드는 유지됩니다.'))return;
-  planningDeleteGoal(id);planningRefresh('목표를 삭제했습니다. 배정한 일간 계획은 유지됩니다.');
+  const goal=planningGoal(id),preview=planningGoalDeletionPreview(id); if(!goal || !preview) return;
+  planningModalState={type:'delete-goal',id,preview};
+  const weeks=preview.goalIds.length-1;
+  planningShowModal(`${goal.kind==='month'?'월간':'주간'} 목표 삭제`,
+    `<p><strong>${escapeHtml(getCardInfo(goal.root).title)}</strong><br><span class="planning-muted">${goal.startDate} – ${goal.endDate}</span></p>
+    ${weeks?`<p>이 목표와 연동된 주간 목표 ${weeks}개가 삭제됩니다.</p>`:'<p>이 목표를 삭제합니다.</p>'}
+    ${preview.planCount?`<p>연동된 일간 계획 ${preview.planCount}개도 함께 삭제할까요?</p>
+      <label class="planning-check"><input type="radio" name="planningGoalDeleteMode" value="keep" checked><span>일간 계획 유지</span></label>
+      <label class="planning-check"><input type="radio" name="planningGoalDeleteMode" id="planningDeleteLinked" value="delete"><span>일간 계획도 삭제</span></label>`:'<p>연동된 일간 계획이 없습니다.</p>'}
+    <p class="planning-muted">원본 학습 카드, 시간 블록, 실제 실행 기록은 유지됩니다.</p>`,'삭제');
+  const linked=document.getElementById('planningDeleteLinked'); if(linked) linked.checked=false;
+}
+function planningConfirmGoalDeletion(){
+  const state=planningModalState; if(state?.type!=='delete-goal') return;
+  const current=planningGoalDeletionPreview(state.id);
+  if(!current){planningCloseModal();planningRefresh('이미 삭제된 목표입니다.');return;}
+  if(current.stamp!==state.preview.stamp){
+    planningRemoveGoal(state.id);
+    throw new Error('연동된 계획이 변경되었습니다. 갱신된 개수를 확인하고 다시 선택해 주세요.');
+  }
+  const removePlans=document.getElementById('planningDeleteLinked')?.checked===true;
+  planningDeleteGoal(state.id,removePlans);
+  planningCloseModal();
+  planningRefresh(removePlans?`목표와 연동된 일간 계획 ${current.planCount}개를 삭제했습니다.`:'목표를 삭제했습니다. 연동된 일간 계획은 유지됩니다.');
 }
 function planningSelectedNew(){
   return [...document.querySelectorAll('.planning-new-check:checked')].map(el=>planningNewRows[Number(el.value)]).filter(Boolean);
@@ -5771,6 +5806,7 @@ function planningSubmitModal(){
     else if(planningModalState?.type==='allocation')planningConfirmAllocation();
     else if(planningModalState?.type==='edit')planningSaveEdit();
     else if(planningModalState?.type==='copy')planningConfirmCopy();
+    else if(planningModalState?.type==='delete-goal')planningConfirmGoalDeletion();
   }catch(error){document.getElementById('planningModalError').textContent=error.message;}
 }
 

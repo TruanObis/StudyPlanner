@@ -223,10 +223,15 @@ with their start/end handles at the actual ten-minute edges.
 
 Allocation and copy previews are rechecked before applying; changed source or
 destination plans require a fresh confirmation. A single operation supports up
-to 366 dates. Editing or deleting a period goal preserves its existing daily
-plans. These planning features are V2-only and are not yet promoted to main.
-Deleting a monthly goal removes its generated weekly goals while preserving
-their daily plans. Moving a linked daily card into another week within the
+to 366 dates. Editing a period goal preserves its existing daily plans.
+Deleting a monthly or weekly goal first shows the number of linked daily plans
+and asks whether to keep them (the default) or delete them together. Keeping
+plans detaches them from the deleted goals. Deleting a monthly goal also removes
+its generated weekly goals, whose count is shown in the dialog; their daily
+plans follow the same keep/delete choice. Original learning cards, time blocks,
+and actual execution history remain in either case. Changed links require a
+fresh choice before deletion. These planning features are V2-only and are not
+yet promoted to main. Moving a linked daily card into another week within the
 monthly period updates its weekly topic goal.
 
 V2 automatically converts older allocated, untimed parent plans into their

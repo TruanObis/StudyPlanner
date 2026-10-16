@@ -118,9 +118,13 @@ parent scope handles discovery in both period views.
 
 Moving a generated plan within the monthly period relinks it to the destination
 week's topic goal. Moving outside its goal's date range detaches `goalId`.
-Deleting a monthly goal also removes generated weekly goals and detaches their
-plans. All daily plans and execution history remain. Source identity moves also
-relink generated plans to the correct topic while retaining plan IDs and times.
+Deleting a monthly goal also removes generated weekly goals. The deletion
+dialog counts daily references linked by `goalId` to the selected goal or its
+generated children, and offers to keep them (detaching `goalId`, the default)
+or remove them together. Deleting a weekly goal leaves its parent and sibling
+goals intact. Unrelated plans, source cards, time blocks, and execution history
+remain. Source identity moves also relink generated plans to the correct topic
+while retaining plan IDs and times.
 
 The 6-to-7 migration splits only generated parent wrappers with explicit valid
 learning-unit subgoals and no assigned time, elapsed time, running state, or

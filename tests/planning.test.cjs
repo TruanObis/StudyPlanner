@@ -288,6 +288,69 @@ test('source identity updates follow period goals and removing goals preserves a
   assert.equal(a.run('Object.values(DATA.dailyHistory).flatMap(d=>d.slots.flatMap(s=>s.cardIds)).some(r=>r.goalId)'),false);
 });
 
+test('goal deletion asks before changing data and cancel preserves the whole planner',()=>{
+  for(const kind of ['month','week']){
+    const a=app();
+    a.run(`const goal=planningCreateGoal({...config,kind:'${kind}'}); planningApplyAllocation(planningBuildAllocation(goal.id));
+      const before=clonePlain(DATA); planningRemoveGoal(goal.id);`);
+    assert.deepEqual(a.json('DATA'),a.json('before'));
+    assert.match(a.nodes.get('planningModalBody').innerHTML,/일간 계획 5개/);
+    assert.match(a.nodes.get('planningModalBody').innerHTML,/일간 계획 유지/);
+    assert.match(a.nodes.get('planningModalBody').innerHTML,/일간 계획도 삭제/);
+    if(kind==='month') assert.match(a.nodes.get('planningModalBody').innerHTML,/주간 목표 2개/);
+    a.run('planningCloseModal();');
+    assert.deepEqual(a.json('DATA'),a.json('before'));
+  }
+});
+
+test('deleting a monthly goal with linked plans removes only that goal tree and preserves records, sources and blocks',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal(config); planningApplyAllocation(planningBuildAllocation(goal.id));
+    const other=planningCreateGoal({...config,kind:'week'});
+    const manual=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'theory',id:'core',pid:'m'});
+    const unrelated=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'question',id:'q1',pid:'m'});unrelated.goalId=other.id;
+    const legacy=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'subject',id:'a'});legacy.goalId=goal.id;
+    DATA.dailyHistory[VIEW_DATE].slots.push({id:'block',label:'집중',startMinute:540,endMinute:600,cardIds:[]});
+    DATA.dailyHistory[VIEW_DATE].totalSeconds=60;
+    DATA.dailyHistory[VIEW_DATE].sessions=[{id:'run',ref:{type:'theory',id:'core',pid:'m'},startMs:now-60000,endMs:now}];
+    const before=clonePlain(DATA);
+    planningRemoveGoal(goal.id); document.getElementById('planningDeleteLinked').checked=true; planningSubmitModal();`);
+  assert.deepEqual(a.json('DATA.periodGoals.map(g=>g.id)'),[a.run('other.id')]);
+  assert.deepEqual(a.json('Object.keys(DATA.dailyHistory).flatMap(d=>planningPlans(d).map(p=>p.ref.planId))'),[a.run('manual.planId'),a.run('unrelated.planId')]);
+  assert.deepEqual(a.json('DATA.dailyHistory[VIEW_DATE].sessions'),a.json('before.dailyHistory[VIEW_DATE].sessions'));
+  assert.equal(a.run('DATA.dailyHistory[VIEW_DATE].totalSeconds'),60);
+  assert.deepEqual(a.json('DATA.dailyHistory[VIEW_DATE].slots.find(s=>s.id==="block")'),a.json('before.dailyHistory[VIEW_DATE].slots.find(s=>s.id==="block")'));
+  assert.deepEqual(a.json('[DATA.home,DATA.details,DATA.modules]'),a.json('[before.home,before.details,before.modules]'));
+  assert.doesNotThrow(()=>a.run('validateImportedPlannerData(DATA)'));
+});
+
+test('weekly linked deletion preserves its parent and sibling plans, and keeping plans remains the default',()=>{
+  for(const removePlans of [false,true]){
+    const a=app();
+    a.run(`const goal=planningCreateGoal(config); planningApplyAllocation(planningBuildAllocation(goal.id));
+      const child=DATA.periodGoals.find(g=>g.parentGoalId===goal.id && g.root.id==='topic');
+      const kept=Object.keys(DATA.dailyHistory).flatMap(d=>planningPlans(d)).filter(p=>p.ref.goalId!==child.id).map(p=>p.ref.planId);
+      planningRemoveGoal(child.id); document.getElementById('planningDeleteLinked').checked=${removePlans}; planningSubmitModal();`);
+    assert.equal(a.run('!!planningGoal(goal.id)'),true);
+    assert.equal(a.run('!!planningGoal(child.id)'),false);
+    assert.equal(a.run('Object.keys(DATA.dailyHistory).flatMap(d=>planningPlans(d)).length'),removePlans?1:5);
+    assert.ok(a.run('kept.every(id=>planningFindPlan(id))'));
+  }
+});
+
+test('goal deletion refreshes changed linked plans and requires a new choice before deleting',()=>{
+  const a=app();
+  a.run(`const goal=planningCreateGoal(config); planningApplyAllocation(planningBuildAllocation(goal.id));
+    planningRemoveGoal(goal.id); document.getElementById('planningDeleteLinked').checked=true;
+    const added=planningPlaceOnDate(VIEW_DATE,{source:'main',type:'subject',id:'a'});added.goalId=goal.id;
+    const before=clonePlain(DATA); planningSubmitModal();`);
+  assert.deepEqual(a.json('DATA'),a.json('before'));
+  assert.match(a.nodes.get('planningModalError').textContent,/변경|다시/);
+  assert.match(a.nodes.get('planningModalBody').innerHTML,/일간 계획 6개/);
+  a.run(`document.getElementById('planningDeleteLinked').checked=true; planningSubmitModal();`);
+  assert.equal(a.run('Object.keys(DATA.dailyHistory).flatMap(d=>planningPlans(d)).length'),0);
+});
+
 test('daily details expose assigned subgoals and completion changes the original card',()=>{
   const a=app();
   assert.equal(a.run('typeof renderPlanningPage'),'function');
