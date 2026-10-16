@@ -248,3 +248,122 @@ test('calendar context menus and hold cannot edit plans while time-block editing
     assert.equal(a.run('getCardInfo(later).isRunning'),false);
   }
 });
+
+function orderingApp(){
+  const a=app();
+  a.run(`const first=planningPlaceOnDate('2026-10-18',{source:'main',type:'subject',id:'b'});
+    first.startMinute=480; first.endMinute=510;
+    const last=planningPlaceOnDate('2026-10-18',{source:'main',type:'question',id:'q1',pid:'m'});
+    last.startMinute=660; last.endMinute=690;
+    const day=document.getElementById('calendarDay'); day.dataset.planDate='2026-10-18';
+    function drawCalendarCards(ids){
+      const cards=ids.map((id,i)=>{const card=document.getElementById('card-'+id);card.dataset.planId=id;
+        card.getBoundingClientRect=()=>({top:150+i*40,bottom:180+i*40,height:30});return card;});
+      day.querySelectorAll=()=>cards;
+    }
+    drawCalendarCards([first.planId,later.planId,last.planId]);
+    function dragEvent(y,data){return {...pointer('mouse',120,y),currentTarget:day,
+      dataTransfer:{getData:()=>JSON.stringify(data),setData(){}}};}`);
+  return a;
+}
+
+test('calendar order can move above, between and below plans without changing chronological time or execution',()=>{
+  const a=orderingApp();
+  a.run(`later.progressTargets=[{type:'theory',id:'core',pid:'m'}];
+    const before=clonePlain(DATA.dailyHistory['2026-10-18']);
+    const move={source:'planning',planId:last.planId,date:'2026-10-18'};
+    planningPlaceOnDate('2026-10-18',move,{beforePlanId:first.planId});`);
+  assert.deepEqual(a.json("planningCalendarPlans('2026-10-18').map(p=>p.ref.planId)"),a.json('[last.planId,first.planId,later.planId]'));
+  assert.deepEqual(a.json("planningPlans('2026-10-18').map(p=>p.ref.planId)"),a.json('[first.planId,later.planId,last.planId]'));
+  for(const view of ['week','month']){
+    const html=a.run(`planningCalendarHTML('${view}',planningPeriodBounds('${view}'))`);
+    assert.ok(html.indexOf(`data-plan-id="${a.run('last.planId')}"`)<html.indexOf(`data-plan-id="${a.run('first.planId')}"`));
+  }
+  a.run("planningPlaceOnDate('2026-10-18',move,{beforePlanId:later.planId})");
+  assert.deepEqual(a.json("planningCalendarPlans('2026-10-18').map(p=>p.ref.planId)"),a.json('[first.planId,last.planId,later.planId]'));
+  a.run("planningPlaceOnDate('2026-10-18',move,{beforePlanId:null})");
+  assert.deepEqual(a.json("planningCalendarPlans('2026-10-18').map(p=>p.ref.planId)"),a.json('[first.planId,later.planId,last.planId]'));
+  assert.deepEqual(a.json("planningPlans('2026-10-18').map(p=>p.ref.planId)"),a.json('[first.planId,later.planId,last.planId]'));
+  assert.deepEqual(a.json("DATA.dailyHistory['2026-10-18'].slots"),a.json('before.slots'));
+  assert.deepEqual(a.json("DATA.dailyHistory['2026-10-18'].sessions"),a.json('before.sessions'));
+  assert.equal(a.run("DATA.dailyHistory['2026-10-18'].totalSeconds"),60);
+});
+
+test('moving across dates and adding a source card insert at the requested position',()=>{
+  const a=orderingApp();
+  a.run(`planningPlaceOnDate('2026-10-18',{source:'planning',planId:later.planId,date:'2026-10-18'},{beforePlanId:first.planId});
+    planningPlaceOnDate('2026-10-17',{source:'planning',planId:later.planId,date:'2026-10-18'},{beforePlanId:current.planId});
+    const added=planningPlaceOnDate('2026-10-17',{source:'main',type:'question',id:'q1',pid:'m'},{beforePlanId:current.planId});`);
+  assert.deepEqual(a.json("planningCalendarPlans('2026-10-17').map(p=>p.ref.planId)"),a.json('[later.planId,added.planId,current.planId]'));
+  assert.equal(a.run("DATA.dailyHistory['2026-10-18'].calendarPlanOrder.includes(later.planId)"),false);
+  assert.deepEqual(a.json('[later.startMinute,later.endMinute]'),[540,600]);
+  assert.equal(a.run("DATA.dailyHistory['2026-10-18'].sessions.length"),1);
+});
+
+test('stale insertion anchors cancel both new-card and cross-date drops before changing data',()=>{
+  const a=orderingApp();
+  a.run('const before=clonePlain(DATA.dailyHistory)');
+  for(const data of ["{source:'main',type:'subject',id:'a'}","{source:'planning',planId:current.planId,date:'2026-10-17'}"]){
+    assert.equal(a.run(`planningPlaceOnDate('2026-10-18',${data},{beforePlanId:'deleted-plan'})`),null);
+    assert.deepEqual(a.json('DATA.dailyHistory'),a.json('before'));
+  }
+});
+
+test('calendar order survives storage and backup restoration while deleted IDs are ignored and new plans append',()=>{
+  const a=orderingApp();
+  a.run(`DATA.dailyHistory['2026-10-18'].sessions=[];
+    planningPlaceOnDate('2026-10-18',{source:'planning',planId:last.planId,date:'2026-10-18'},{beforePlanId:first.planId});
+    const stored=JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const backup=unpackPlannerBackup(buildPlannerBackupEnvelope(DATA)).data;
+    validateImportedPlannerData(backup); DATA=backup;`);
+  assert.deepEqual(a.json("stored.dailyHistory['2026-10-18'].calendarPlanOrder"),a.json('[last.planId,first.planId,later.planId]'));
+  assert.deepEqual(a.json("planningCalendarPlans('2026-10-18').map(p=>p.ref.planId)"),a.json('[last.planId,first.planId,later.planId]'));
+  a.run(`const removed=planningFindPlan(first.planId);removed.slot.cardIds.splice(removed.cIdx,1);
+    const added=planningPlaceOnDate('2026-10-18',{source:'main',type:'subject',id:'b'});`);
+  assert.deepEqual(a.json("planningCalendarPlans('2026-10-18').map(p=>p.ref.planId)"),a.json('[last.planId,later.planId,added.planId]'));
+  assert.doesNotThrow(()=>a.run('validateImportedPlannerData(DATA)'));
+  for(const value of ["'bad'","[last.planId,last.planId]","[null]"]){
+    assert.throws(()=>a.run(`{const invalid=clonePlain(DATA);invalid.dailyHistory['2026-10-18'].calendarPlanOrder=${value};validateImportedPlannerData(invalid);}`),/순서|카드/);
+  }
+});
+
+test('native calendar drags choose either half of cards and clear insertion hints after drop or cancellation',()=>{
+  const a=orderingApp();
+  a.run(`planningDragCalendar(dragEvent(230),last.planId);planningDropOver(dragEvent(151));`);
+  assert.equal(a.run("document.getElementById('card-'+first.planId).classList.contains('calendar-insert-before')"),true);
+  a.run(`planningCalendarDrop(dragEvent(151,{source:'planning',planId:last.planId,date:'2026-10-18'}),'2026-10-18')`);
+  assert.deepEqual(a.json("planningCalendarPlans('2026-10-18').map(p=>p.ref.planId)"),a.json('[last.planId,first.planId,later.planId]'));
+  assert.equal(a.run("document.getElementById('card-'+first.planId).classList.contains('calendar-insert-before')"),false);
+  a.run(`drawCalendarCards([last.planId,first.planId,later.planId]);planningDropOver(dragEvent(260));`);
+  assert.equal(a.run("document.getElementById('card-'+later.planId).classList.contains('calendar-insert-after')"),true);
+  a.dispatch('dragend',"dragEvent(260)");
+  assert.equal(a.run("document.getElementById('card-'+later.planId).classList.contains('calendar-insert-after')"),false);
+  assert.equal(a.run("day.classList.contains('drag-over')"),false);
+  a.run(`planningCalendarDrop(dragEvent(220,{source:'planning',planId:last.planId,date:'2026-10-18'}),'2026-10-18')`);
+  assert.deepEqual(a.json("planningCalendarPlans('2026-10-18').map(p=>p.ref.planId)"),a.json('[first.planId,last.planId,later.planId]'));
+});
+
+test('monthly insertion below visible cards stays before hidden cards and leaving a day removes the hint',()=>{
+  const a=orderingApp();
+  a.run(`drawCalendarCards([first.planId,later.planId]);planningDropOver(dragEvent(240));`);
+  assert.equal(a.run("document.getElementById('card-'+later.planId).classList.contains('calendar-insert-after')"),true);
+  a.run(`day.contains=()=>false;planningCalendarLeave({...dragEvent(240),relatedTarget:null});`);
+  assert.equal(a.run("document.getElementById('card-'+later.planId).classList.contains('calendar-insert-after')"),false);
+  a.run(`planningCalendarDrop(dragEvent(240,{source:'planning',planId:current.planId,date:'2026-10-17'}),'2026-10-18')`);
+  assert.deepEqual(a.json("planningCalendarPlans('2026-10-18').map(p=>p.ref.planId)"),a.json('[first.planId,later.planId,current.planId,last.planId]'));
+});
+
+test('drop clears native drag state before rerender detaches the source, allowing the next drag',()=>{
+  const a=orderingApp();
+  a.run(`planningDragCalendar(dragEvent(230),last.planId);planningDropOver(dragEvent(151));`);
+  a.dispatch('drop',"dragEvent(151,{source:'planning',planId:last.planId,date:'2026-10-18'})");
+  a.run(`planningCalendarDrop(dragEvent(151,{source:'planning',planId:last.planId,date:'2026-10-18'}),'2026-10-18');`);
+  // The source node has been replaced, so no bubbling dragend is available.
+  assert.equal(a.run('planningDraggedPlanId'),null);
+  a.run("planningCalendarClick(pointer('mouse'),last.planId)");
+  assert.equal(a.run('location.hash'),'#/');
+  a.dispatch('pointerdown',"pointer('mouse')");
+  a.run("const nextDrag=dragEvent(160);planningDragCalendar(nextDrag,last.planId)");
+  assert.equal(a.run('nextDrag.prevented'),undefined);
+  assert.equal(a.run('planningDraggedPlanId'),a.run('last.planId'));
+});

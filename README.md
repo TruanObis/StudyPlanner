@@ -191,6 +191,14 @@ with their start/end handles at the actual ten-minute edges.
   their recorded dates. Click a plan to open its source page (including its exact
   module tab or question), without starting/stopping a timer, or a date to see its daily
   list. Month cells show two compact cards and **+N** for the remaining plans.
+  Drop above or below a card to choose its position within that date; a line
+  previews the insertion point. This works for same-date reordering, cross-date
+  moves, and cards arriving from the timetable or source page. Week and month
+  share the saved order, including after reload or backup restore. Moving a card
+  in this list leaves its scheduled clock time unchanged. In a compact month
+  cell, dropping below the last visible card inserts before the hidden remainder.
+  Dates without a manual order retain chronological sorting; later additions
+  without an explicit insertion position append to an existing manual order.
   Calendar plans can also be dragged onto the timetable to set their time.
   Drag a timetable card's body onto a weekly/monthly date cell to move it there
   while keeping its clock time, duration, and subgoals. The destination highlights

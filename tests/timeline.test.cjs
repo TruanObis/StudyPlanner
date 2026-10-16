@@ -243,6 +243,21 @@ if(IS_V2) test('dropping a timetable card outside a valid target or cancelling l
   }
 });
 
+if(IS_V2) test('a timetable pointer drop inserts above an existing calendar plan without changing either time',()=>{
+  const a=gestureApp();
+  a.run(`renderPlanningPage=()=>{};planningEnsureData(DATA);
+    const original=DATA.dailyHistory[VIEW_DATE].slots[0].cardIds[0];
+    const other=planningPlaceOnDate('2026-10-18',{source:'main',type:'subject',id:'a'});
+    other.startMinute=60;other.endMinute=90;
+    const target=node('calendar-day');target.dataset={planDate:'2026-10-18'};
+    const card=node('destination-card');card.dataset.planId=other.planId;
+    card.getBoundingClientRect=()=>({top:200,bottom:240,height:40});target.querySelectorAll=()=>[card];
+    document.elementFromPoint=x=>x>=420?{closest:()=>target}:null;
+    startTimelineGesture(pointer(),'card',0,0);finishTimelineGesture(pointer(500,205));`);
+  assert.deepEqual(a.json("planningCalendarPlans('2026-10-18').map(p=>p.ref.planId)"),a.json('[original.planId,other.planId]'));
+  assert.deepEqual(a.json('[original.startMinute,original.endMinute,other.startMinute,other.endMinute]'),[310,330,60,90]);
+});
+
 if(IS_V2) test('a timetable drag uses stable plan identity when the source list changes before calendar drop',()=>{
   const a=gestureApp();
   a.run(`renderPlanningPage=()=>{};planningEnsureData(DATA);

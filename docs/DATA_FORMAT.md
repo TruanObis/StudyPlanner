@@ -80,6 +80,16 @@ identity changes update these references, and source deletion removes them.
 
 ### V2 Period Goals and Planning Identity (Schema 7)
 
+An optional `dailyHistory[date].calendarPlanOrder` array stores unique `planId`
+strings in the manual display order shared by weekly and monthly calendars.
+It does not change slot membership, scheduled times, the chronological daily
+list, or execution records. Without this array, calendars sort chronologically.
+Unlisted plans follow the listed plans in chronological order; deleted or moved
+plan IDs are ignored. Cross-date moves remove the ID from the source order.
+Explicit insertion saves the destination's complete current order, including
+cards hidden by the month view. Official backups retain this additive schema-7
+field; imports reject a non-array, invalid IDs, or duplicates.
+
 V2 adds a root `periodGoals` array:
 
 ```json
