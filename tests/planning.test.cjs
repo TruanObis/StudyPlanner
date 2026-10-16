@@ -98,7 +98,7 @@ test('a rounded percentage never marks an unfinished parent complete',()=>{
   assert.equal(a.run('getCardInfo(parentPlan).done'),true);
 });
 
-test('overlapping parent and child subgoals count each learning card once per plan',()=>{
+test('overlapping parent and child subgoals count each learning card once across daily plans',()=>{
   const a=partialProgressApp();
   a.run(`DATA.modules.m.tabs[0].questions=[{id:'q',done:false}];
     setTimelineSubgoals(parentPlan,[{type:'detail',id:'topic',pid:'a'},{type:'theory',id:'core',pid:'m'}]);`);
@@ -106,7 +106,61 @@ test('overlapping parent and child subgoals count each learning card once per pl
   a.run(`setTimelineSubgoals(parentPlan,[{type:'detail',id:'topic',pid:'a'},{type:'question',id:'q',pid:'m'}]);`);
   assert.deepEqual(a.json('timelinePlanProgress(parentPlan)'),{total:2,done:1,pct:50});
   a.run(`DATA.dailyHistory[VIEW_DATE].slots[0].cardIds.push({...clonePlain(parentPlan),planId:'repeat'});`);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:2,done:1,pct:50});
+});
+
+test('Chapter4 and its vocabulary plan share one daily completion item without changing either plan',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.home.subjects[0].name='The Master of Ballantrae';
+    DATA.details.a.cards[0].title='Chapter4';DATA.modules.m.tabs[0].label='단어';DATA.modules.m.tabs[0].done=false;
+    Object.assign(parentPlan,{type:'detail',id:'topic',pid:'a'});
+    DATA.dailyHistory[VIEW_DATE].slots.push({id:'later',cardOnly:true,cardIds:[
+      {type:'theory',id:'core',pid:'m',planId:'vocabulary',startMinute:600,endMinute:630,time:12,isRunning:false}]});
+    const plansBefore=clonePlain(DATA.dailyHistory[VIEW_DATE].slots);
+    renderDailySidebar=realRenderDailySidebar;renderDailySidebar();`);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:1,done:0,pct:0});
+  assert.equal(a.nodes.get('remainCount').innerText,1);
+  a.run(`toggleCheck({checked:true},'theory','m',0,'core');`);
+  assert.equal(a.run('getCardInfo(parentPlan).done'),true);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:1,done:1,pct:100});
+  assert.equal(a.nodes.get('remainCount').innerText,0);
+  assert.deepEqual(a.json('DATA.dailyHistory[VIEW_DATE].slots'),a.json('plansBefore'));
+  a.run(`DATA.dailyHistory[VIEW_DATE].slots[0].cardIds.push({type:'adhoc',id:'next',planId:'next-plan',title:'다른 공부',done:false});
+    DATA.dailyHistory['2026-10-18']={slots:[{cardIds:[{type:'theory',id:'core',pid:'m'}]}]};`);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:2,done:1,pct:50});
+  assert.deepEqual(a.json("dailyPlanProgress(DATA.dailyHistory['2026-10-18'])"),{total:1,done:1,pct:100});
+});
+
+test('daily deduplication respects selected scopes, source identity and independent daily-only tasks',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.modules.m.tabs[0].questions=[{id:'q',done:false}];
+    DATA.details.a.cards.push({id:'other-topic',title:'Chapter5',module:'n'});
+    DATA.modules.n={id:'n',tabs:[{id:'core',label:'단어',done:false,questions:[]}]};
+    setTimelineSubgoals(parentPlan,[{type:'theory',id:'core',pid:'m'}]);
+    DATA.dailyHistory[VIEW_DATE].slots[0].cardIds.push(
+      {type:'theory',id:'core',pid:'m'}, {type:'theory',id:'core',pid:'n'},
+      {type:'adhoc',id:'task1',title:'읽기',done:true}, {type:'adhoc',id:'task2',title:'읽기',done:false});`);
   assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:4,done:2,pct:50});
+  a.run(`DATA.dailyHistory[VIEW_DATE].slots[0].cardIds.push({type:'question',id:'q',pid:'m'});`);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:5,done:2,pct:40});
+});
+
+test('daily checklist shows a selected chapter and its vocabulary once and checks the original leaf',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.home.subjects[0].name='The Master of Ballantrae';
+    DATA.details.a.cards[0].title='Chapter4';DATA.modules.m.tabs[0].label='단어';DATA.modules.m.tabs[0].done=false;
+    setTimelineSubgoals(parentPlan,[{type:'detail',id:'topic',pid:'a'},{type:'theory',id:'core',pid:'m'}]);
+    const before=clonePlain(parentPlan.progressTargets);`);
+  const html=a.run('planningDayHTML(VIEW_DATE)');
+  assert.equal((html.match(/type="checkbox"/g)||[]).length,1);
+  assert.match(html,/The Master of Ballantrae \/ Chapter4 \/ 단어 완료/);
+  a.run(`planningToggleDone(parentPlan.planId,planningKey({type:'theory',id:'core',pid:'m'}),true);`);
+  assert.equal(a.run('DATA.modules.m.tabs[0].done'),true);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:1,done:1,pct:100});
+  assert.deepEqual(a.json('parentPlan.progressTargets'),a.json('before'));
+  a.run(`setTimelineSubgoals(parentPlan,[{type:'detail',id:'topic',pid:'a'}]);
+    planningToggleDone(parentPlan.planId,planningKey({type:'theory',id:'core',pid:'m'}),false);`);
+  assert.equal(a.run('DATA.modules.m.tabs[0].done'),false);
 });
 
 test('checking a module card refreshes detail and daily progress together without changing execution',()=>{

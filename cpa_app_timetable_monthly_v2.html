@@ -928,7 +928,7 @@ const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
 const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
 const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-10-17-planning-workspace-14';
+const APP_BUILD_ID = '2026-10-17-planning-workspace-15';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
 const PLANNER_SCHEMA_VERSION = 7;
@@ -5519,9 +5519,12 @@ function planningToggleTimer(id){
   toggleTimerFromSidebar(item.ref.type,item.ref.id,item.ref.pid,item.sIdx,item.cIdx);
   planningRefresh();
 }
+function planningChecklistTargets(ref){
+  return selectedTimelineSubgoals(ref).length?timelinePlanUnits(ref):[ref];
+}
 function planningToggleDone(id,key,checked){
   const item=planningFindPlan(id); if(!item) return;
-  const selected=selectedTimelineSubgoals(item.ref),targets=selected.length?selected:[item.ref];
+  const targets=planningChecklistTargets(item.ref);
   const target=targets.find(r=>planningKey(r)===key); if(!target) return;
   tickOneSecond(); VIEW_DATE=item.date;
   const own=target===item.ref;
@@ -5547,7 +5550,7 @@ function planningDayHTML(date){
   const rows=planningPlans(date);
   if(!rows.length) return '<div class="planning-empty">아직 계획이 없습니다. 시간표에 카드를 놓거나 주간·월간 목표를 배분해 보세요.</div>';
   return rows.map(({ref})=>{
-    const info=getCardInfo(ref),selected=selectedTimelineSubgoals(ref),targets=selected.length?selected:[ref],progress=timelinePlanProgress(ref);
+    const info=getCardInfo(ref),targets=planningChecklistTargets(ref),progress=timelinePlanProgress(ref);
     return `<article class="planning-item" data-plan-id="${escapeHtml(ref.planId)}" draggable="${!timelineAdding}" ondragstart="${planningCall('planningDragPlan',[],`event,${JSON.stringify(ref.planId)}`)}">
       <div class="planning-item-head"><div><span class="planning-time">${hasTimelineRange(ref)?timelineRange(ref):'시간 미지정'}</span>
         <button class="planning-title" type="button" onclick="${planningCall('planningOpenSource',[planningRef(ref)])}">${escapeHtml(info.title)}</button>
@@ -6129,7 +6132,7 @@ function setTimelineSubgoals(ref,targets){
   else delete ref.progressTargets;
 }
 
-function timelinePlanProgress(ref){
+function timelinePlanUnits(ref){
   const selected = selectedTimelineSubgoals(ref), targets = selected.length ? selected : [ref];
   const units=new Map();
   targets.forEach(target=>{
@@ -6137,15 +6140,23 @@ function timelinePlanProgress(ref){
     // A selected parent and its selected descendants must not count the same work twice.
     (children.length?children:[target]).forEach(unit=>units.set(planningKey(unit),unit));
   });
-  const total=units.size,done=[...units.values()].filter(unit=>getCardInfo(unit).done).length;
+  return [...units.values()];
+}
+
+function timelinePlanProgress(ref){
+  const units=timelinePlanUnits(ref),total=units.length,done=units.filter(unit=>getCardInfo(unit).done).length;
   return {total,done,pct:Math.round(done/total*100)};
 }
 
 function dailyPlanProgress(daily){
-  let total=0, done=0;
+  const units=new Map();
   (daily?.slots || []).forEach(slot=>(slot.cardIds || []).forEach(ref=>{
-    const progress = timelinePlanProgress(ref); total += progress.total; done += progress.done;
+    timelinePlanUnits(ref).forEach(unit=>{
+      // Linked cards share completion across plans; daily-only tasks are independent.
+      units.set(unit.type==='adhoc'?unit:planningKey(unit),unit);
+    });
   }));
+  const total=units.size,done=[...units.values()].filter(unit=>getCardInfo(unit).done).length;
   return {total,done,pct:total ? Math.round(done/total*100) : 0};
 }
 

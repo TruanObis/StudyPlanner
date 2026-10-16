@@ -82,9 +82,13 @@ V2 computes partial progress from learning-card counts instead of treating each
 parent as only complete/incomplete. Subject and detail progress sum the completed
 and total theory/question cards underneath; a detail with no module content is
 one item. Daily progress expands selected subject/detail targets (or the default
-parent) into those same learning units, deduplicating overlapping targets within
-each plan. Explicit theory and question targets each remain one item. Distinct
-plans count separately. These derived counts are not stored; adding/removing
+parent) into those same learning units, deduplicating source identities across
+all plans on that date. A parent plan and a separate plan for its child therefore
+share one completion item for that child, even in different time blocks.
+Explicit theory and question targets each remain one item. Independent daily-only
+tasks and different dates remain separate. Selected subgoal checklists display
+the expanded unique units while preserving the stored `progressTargets` choices.
+These derived counts are not stored; adding/removing
 source cards or changing completion immediately updates the percentages without
 rewriting plans, completion flags or execution records. Full-completion checks
 compare counts exactly rather than relying on rounded percentages.

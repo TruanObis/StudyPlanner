@@ -177,8 +177,13 @@ learning card; a detail card without module content counts on its own. A parent
 containing two learning cards therefore shows **50%** when one is complete.
 Daily progress and remaining tasks use these counts within the selected
 subgoals, or within the parent when no valid subgoals are set. Overlapping parent
-and child selections count each learning card once per plan; separate planned
-copies still count separately. Selecting only a theory card counts that card,
+and child selections, including separate or repeated plans, count each source
+learning card only once across that day's progress and remaining tasks. For
+example, planning both Chapter4 and its sole vocabulary card counts one item.
+Different dates and independent daily-only tasks remain separate. The selected
+subgoal checklist shows the same unique learning cards instead of repeating a
+parent and its children; the saved target selections stay intact.
+Selecting only a theory card counts that card,
 not its questions. Adding another unfinished card updates progress immediately,
 without changing stored completion flags, plans or study-time records.
 **시간 미지정 N개** counts individual unscheduled cards across all groups.
