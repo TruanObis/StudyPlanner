@@ -15,7 +15,7 @@ Published app:
 
 V2 is the workspace for trying and validating changes before applying them to the main file. It remains the experimental staging version even when the two files temporarily contain the same code after a promotion.
 
-The features below describe the current published main app. Older files in `archive/` are retained for history or comparison.
+The planning workspace was promoted to main on **2026-10-17** (build `2026-10-17-planning-workspace-16`). Main and V2 now share the features below and schema 7, while retaining separate planner storage. This includes daily goal hierarchies and timers, weekly/monthly diaries and allocation, and the latest progress-counting fixes. Older files in `archive/` are retained for history or comparison.
 
 ## Features
 
@@ -23,7 +23,9 @@ The features below describe the current published main app. Older files in `arch
 * A 26-hour daily timetable with 10-minute planning, continuous time blocks, and independent card movement/resizing
 * Add study cards by dragging their bodies or handles, or use the empty-cell context menu for cards and daily-only tasks
 * Pale planned cards with actual execution overlaid at the real recording time
-* Per-plan subgoals for daily progress, with parent-card progress as the default
+* Daily planning details with indented parent/subgoal checklists, per-goal timers, and deduplicated learning-card progress
+* Weekly/monthly diary calendars, period goals, per-goal study windows, and hierarchical card allocation
+* New-card review, calendar plan editing/reordering, and time-block/plan copying across dates
 * Context menus for names and colors, plus touch hold support on the timetable
 * D-Day panel and KST-based date handling
 * Study timers, accumulated time tracking, and editable daily time goals
@@ -64,8 +66,8 @@ Buttons, checkboxes, links, and editable inputs retain their normal interactions
 The timetable fits all 26 hours and its footer into the available screen height.
 The goal and actual study-time row sits below the timetable, above the footer.
 The 06:00, 12:00, 18:00, and following midnight grid lines are slightly stronger.
-Blocks spanning multiple hours have one continuous outline and one name; partial
-first/last hours form a polygon. Resizing the window preserves the 10-minute grid.
+Blocks and planned cards spanning multiple hours have one continuous outline
+and one label; partial first/last hours form a polygon. Resizing the window preserves the 10-minute grid.
 Arrow keys move a focused item; its edge handles adjust that edge by 10 minutes.
 Time-block editing and card editing are mutually exclusive. The old card-list
 panel below the timetable has been removed.
@@ -82,12 +84,13 @@ to change completion and daily progress. Marking it complete also stops its time
 after recording the elapsed time.
 Right-click a parent plan (or hold it on touch screens) and choose **세부목표 설정**
 to select descendant topic, theory, or question cards. Selections belong to that
-date's plan. Daily progress and remaining tasks count the selected cards using
-their existing completion states; an unconfigured plan counts its parent card
-once. Clearing all selections restores this fallback. Deleted or no-longer-child
-targets are excluded, with the same fallback when none remain. Repeated copies
-of a plan retain their own targets and count separately, as before. Text copy
-includes selected subgoals, and official backups retain the selections.
+date's plan. Daily progress and remaining tasks count the learning cards within
+selected goals, or within the planned parent when no valid subgoals are set.
+Each source learning card counts once across that day's plans, including
+overlapping parent/child selections and repeated plans. Independent daily-only
+tasks remain separate. Deleted targets are excluded; allocated subgoals retain
+their source links after moves. Text copy includes selected subgoals, and
+official backups retain the selections.
 Recording always uses the current timestamp and date, even when the selected
 plan is scheduled for later. Right-click a card to remove it, or an empty cell
 to add a card or daily-only task. In block editing mode, right-click a block to
@@ -118,20 +121,22 @@ the source cards' cumulative study times remain; active timers keep recording
 from the reset moment. Next-day execution shown in the 26-hour view belongs to
 that next date and is reset from that date.
 
-The main app uses schema 5; the current V2 planning experiment uses schema 7.
-The main app keeps the existing
-`universal_planner_v28_data` key and automatically migrates supported older data.
+Both apps use schema 7. The main app keeps the existing
+`universal_planner_v28_data` key and automatically migrates supported older data,
+including schema-5 main records, while preserving plans and execution history.
 V2 uses the separate `studyplanner_v2_timeline_data` key. On its first use in a
 browser profile, V2 copies and migrates the main record if present. Subsequent
 changes are independent. Updating the main app never replaces its planner with
-V2's experimental data. Schema-7 V2 backups can be restored in V2, but cannot
-yet be imported into the schema-5 main app. Keep the main backup when testing V2.
+V2's experimental data. To transfer a V2 planner, export its official JSON backup
+and explicitly import it in main; this replaces the main planner after validation,
+so export the main backup first if you want to retain it.
 Old time labels such as `오전 (09-12)` are placed on the grid; blocks without a
 recognizable range remain available under **시간 미지정 블록** for manual placement.
 Plans, notes, completion states, and accumulated times are retained. Older totals
 have no timestamp history, so the app does not invent execution blocks for them.
-Both current apps can import schema-5 official backups; V2 migrates them to schema 7.
-Older schema-3 builds cannot import these backups.
+Both current apps can import schema-7 official backups and migrate supported
+older backups, including schema 5. Older schema-3 or schema-5 builds cannot
+import the new schema-7 backups.
 
 Image blobs share the IndexedDB database. A full reset in either app preserves
 that image store. Unused-image cleanup checks both planners' references and
@@ -142,7 +147,7 @@ For experiments that should not affect the working planner, use a separate brows
 Run the main app's data, migration, timer, and interaction regression tests:
 
 ```powershell
-node --test tests/timeline.test.cjs
+node --test tests/timeline.test.cjs tests/planning.test.cjs tests/planning-calendar.test.cjs
 ```
 
 Run the same suite against V2 in PowerShell:
@@ -157,10 +162,10 @@ The main file sets `IS_EXPERIMENTAL_BUILD` to `false`; V2 sets it to `true`.
 Release version checks use `app_version.json`'s `buildId` for main and
 `v2BuildId` for V2. Keep the appropriate field aligned with each file's `APP_BUILD_ID`.
 
-## V2 Experiment: Planning Details
+## Planning Details
 
-In `cpa_app_timetable_monthly_v2.html`, the arrow at the right of **일일 계획**
-opens **계획 상세** beside the current learning page. The timetable and expanded
+In both main and V2, the arrow at the right of **일일 계획** opens
+**계획 상세** beside the current learning page. The timetable and expanded
 panel together occupy at most half the viewport, leaving source cards visible
 and usable for editing and dragging. On narrow screens, the left half switches
 between details and the timetable via **시간표**. Opening a source card keeps the
@@ -171,7 +176,7 @@ Clicking the date text or calendar icon opens the native dropdown in both the
 sidebar and details panel. Keyboard focus still allows direct numeric entry.
 Multi-hour planned cards have one connected outline and one name/duration label,
 with their start/end handles at the actual ten-minute edges.
-V2 carries partial completion through subject/topic parents into the home,
+Both apps carry partial completion through subject/topic parents into the home,
 detail and daily progress displays. Each theory card and question counts as one
 learning card; a detail card without module content counts on its own. A parent
 containing two learning cards therefore shows **50%** when one is complete.
@@ -308,11 +313,10 @@ plans detaches them from the deleted goals. Deleting a monthly goal also removes
 its generated weekly goals, whose count is shown in the dialog; their daily
 plans follow the same keep/delete choice. Original learning cards, time blocks,
 and actual execution history remain in either case. Changed links require a
-fresh choice before deletion. These planning features are V2-only and are not
-yet promoted to main. Moving a linked daily card into another week within the
-monthly period updates its weekly topic goal.
+fresh choice before deletion. Moving a linked daily card into another week
+within the monthly period updates its weekly topic goal.
 
-V2 automatically converts older allocated, untimed parent plans into their
+Both apps automatically convert older allocated, untimed parent plans into their
 individual selected learning cards at the same dates. Manually timed, running,
 or recorded parent plans remain intact; execution history is never split or
 reattributed. Manually added parent plans retain their selected subgoals.
@@ -375,8 +379,9 @@ The `v2` in this content filename does not make it exclusive to the experimental
 4. Open **≡ — 일일 계획** and select the date to plan.
 5. Drag a study card onto the timetable, or right-click/hold an empty cell to add a card or daily-only task. Drag either card edge to adjust its time in 10-minute steps.
 6. Use **시간 블록 편집** to draw or adjust time blocks, then finish editing to work with cards. Set the study-time goal beneath the timetable.
-7. Click a planned card to start/stop recording; starting also opens its page. Right-click/hold a parent plan and choose **세부목표 설정** to select the day's goals. Mark completion on the source cards.
-8. Use the calendar to browse dates and monthly study time, and export JSON backups regularly.
+7. Click a planned card to start/stop recording; starting also opens its page. Open **계획 상세 → 일간** to check indented subgoals and use each goal's timer, or right-click/hold a parent plan to edit its subgoals.
+8. Use **주간 / 월간** to drag cards onto diary dates, set period goals and daily study windows, and preview/confirm card allocation.
+9. Use **일간 → 다른 날짜로 복사** for time blocks and optional plans. Export official JSON backups regularly.
 
 Daily progress reads linked cards' existing completion states. Selected subgoals
 belong to a particular date's plan, while their completion states are shared with

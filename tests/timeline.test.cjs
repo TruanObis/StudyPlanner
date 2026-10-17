@@ -102,6 +102,37 @@ test('startup migrates its own existing planner to the timeline without adopting
   assert.equal(a.run('startupError'),'');
 });
 
+test('schema-five upgrade preserves existing plans, subgoals and execution independently of the peer planner', async () => {
+  const a = startupApp();
+  const original = a.json(`({...baseData(),schemaVersion:5,
+    home:{title:'Existing planner',subjects:[{id:'a',name:'경영학',time:123}],dDays:[]},
+    details:{a:{id:'a',cards:[{id:'topic',title:'메모',done:true,userNote:'![keep](app://asset/retained-image)'}]}},
+    timelineColors:{'subject|a|':265},
+    dailyHistory:{'2026-10-16':{goalStr:'02:00:00',totalSeconds:123,
+      sessions:[{id:'record',ref:{type:'subject',id:'a'},startMs:1792108800000,endMs:1792108923000}],
+      slots:[{id:'s',label:'집중 공부',color:42,startMinute:540,endMinute:660,
+        cardIds:[{type:'subject',id:'a',startMinute:550,endMinute:580,time:123,isRunning:false,
+          progressTargets:[{type:'detail',id:'topic',pid:'a'}]}]}]}}})`);
+  delete original.periodGoals;
+  const peer = JSON.stringify({...original,home:{...original.home,title:'Separate peer'}});
+  a.storage.set(STORAGE_KEY,JSON.stringify(original));
+  a.storage.set(PEER_STORAGE_KEY,peer);
+  await a.run('init()');
+  const saved = JSON.parse(a.storage.get(STORAGE_KEY));
+  assert.equal(saved.schemaVersion,7);
+  assert.deepEqual(saved.periodGoals,[]);
+  assert.deepEqual(saved.home,original.home);
+  assert.deepEqual(saved.details,original.details);
+  assert.deepEqual(saved.timelineColors,original.timelineColors);
+  const upgradedDay=structuredClone(saved.dailyHistory['2026-10-16']);
+  assert.ok(upgradedDay.slots[0].cardIds[0].planId);
+  delete upgradedDay.slots[0].cardIds[0].planId;
+  assert.deepEqual(upgradedDay,original.dailyHistory['2026-10-16']);
+  assert.equal(a.storage.get(PEER_STORAGE_KEY),peer);
+  assert.deepEqual(a.json('migratePlannerData(DATA)'),saved);
+  assert.equal(a.run('startupError'),'');
+});
+
 test('only experimental first use can copy the main planner', async () => {
   const a = startupApp();
   const peer = JSON.stringify(a.json(`({...baseData(),home:{title:'Peer only',subjects:[],dDays:[]}})`));
@@ -205,7 +236,7 @@ test('touch dragging and edge resizing snap to ten minutes without opening menus
   assert.deepEqual(a.json('DATA.dailyHistory[VIEW_DATE].slots[0].cardIds.map(r=>[r.startMinute,r.endMinute])'), [[320,350]]);
 });
 
-if(IS_V2) test('timetable pointer dragging moves a plan onto either diary calendar without changing its time or records',()=>{
+test('timetable pointer dragging moves a plan onto either diary calendar without changing its time or records',()=>{
   for(const view of ['week','month']) for(const pointerType of ['mouse','touch']){
     const a=gestureApp();
     a.run(`planningActiveView='${view}'; renderPlanningPage=()=>{}; planningEnsureData(DATA);
@@ -233,7 +264,7 @@ if(IS_V2) test('timetable pointer dragging moves a plan onto either diary calend
   }
 });
 
-if(IS_V2) test('dropping a timetable card outside a valid target or cancelling leaves its original time intact',()=>{
+test('dropping a timetable card outside a valid target or cancelling leaves its original time intact',()=>{
   for(const finish of ['finishTimelineGesture(up)','cancelTimelineGesture(up)']){
     const a=gestureApp();
     a.run(`document.elementFromPoint=()=>null; planningEnsureData(DATA); const before=clonePlain(DATA.dailyHistory);
@@ -243,7 +274,7 @@ if(IS_V2) test('dropping a timetable card outside a valid target or cancelling l
   }
 });
 
-if(IS_V2) test('a timetable pointer drop inserts above an existing calendar plan without changing either time',()=>{
+test('a timetable pointer drop inserts above an existing calendar plan without changing either time',()=>{
   const a=gestureApp();
   a.run(`renderPlanningPage=()=>{};planningEnsureData(DATA);
     const original=DATA.dailyHistory[VIEW_DATE].slots[0].cardIds[0];
@@ -258,7 +289,7 @@ if(IS_V2) test('a timetable pointer drop inserts above an existing calendar plan
   assert.deepEqual(a.json('[original.startMinute,original.endMinute,other.startMinute,other.endMinute]'),[310,330,60,90]);
 });
 
-if(IS_V2) test('a timetable drag uses stable plan identity when the source list changes before calendar drop',()=>{
+test('a timetable drag uses stable plan identity when the source list changes before calendar drop',()=>{
   const a=gestureApp();
   a.run(`renderPlanningPage=()=>{};planningEnsureData(DATA);
     const original=DATA.dailyHistory[VIEW_DATE].slots[0].cardIds[0];
@@ -272,7 +303,7 @@ if(IS_V2) test('a timetable drag uses stable plan identity when the source list 
   assert.deepEqual(a.json('[other.startMinute,other.endMinute]'),[600,630]);
 });
 
-if(IS_V2) test('dragging a timetable card onto period goals creates a goal without moving the daily plan',()=>{
+test('dragging a timetable card onto period goals creates a goal without moving the daily plan',()=>{
   const a=gestureApp();
   a.run(`planningActiveView='month';renderPlanningPage=()=>{};planningEnsureData(DATA);
     const before=clonePlain(DATA.dailyHistory),target=node('period-goals');target.dataset={planGoalView:'month'};
@@ -283,7 +314,7 @@ if(IS_V2) test('dragging a timetable card onto period goals creates a goal witho
   assert.equal(a.run('DATA.periodGoals[0].root.id'),'a');
 });
 
-if(IS_V2) test('the timetables exact right grid line remains a valid card move destination',()=>{
+test('the timetables exact right grid line remains a valid card move destination',()=>{
   const a=gestureApp();
   a.run(`document.elementFromPoint=()=>null;
     startTimelineGesture(pointer(),'card',0,0);finishTimelineGesture(pointer(410,210));`);
@@ -363,7 +394,7 @@ test('a multi-hour block renders one outline, one name and exactly two edge hand
   });
 });
 
-test('a V2 multi-hour plan has one continuous surface, one label and two terminal handles', {skip:!IS_V2}, () => {
+test('a multi-hour plan has one continuous surface, one label and two terminal handles', () => {
   for (const [startMinute,endMinute] of [[240,480],[260,460],[590,640],[1440,1560]]) {
     const a = gestureApp();
     a.run(`DATA.home.subjects[0].name='경영학'; const slot=DATA.dailyHistory[VIEW_DATE].slots[0]; slot.cardOnly=true;
@@ -382,7 +413,7 @@ test('a V2 multi-hour plan has one continuous surface, one label and two termina
   }
 });
 
-test('V2 short wrapped cards have a filled connection between their first and last hourly bands', {skip:!IS_V2}, () => {
+test('short wrapped cards have a filled connection between their first and last hourly bands', () => {
   const a=app(), missing=[];
   const cases=[
     {lane:0,lanes:1,inset:0,path:[[90,25],[83.7,25],[83.7,50],[66.2,50],[66.2,75]]},
@@ -407,7 +438,7 @@ test('V2 short wrapped cards have a filled connection between their first and la
   assert.deepEqual(missing,[]);
 });
 
-test('V2 overlapping continuous plans keep their hourly lanes and exact terminal positions', {skip:!IS_V2}, () => {
+test('overlapping continuous plans keep their hourly lanes and exact terminal positions', () => {
   const a = gestureApp();
   a.run(`const slot=DATA.dailyHistory[VIEW_DATE].slots[0]; slot.cardOnly=true;
     slot.cardIds=[{type:'subject',id:'a',startMinute:260,endMinute:460},
@@ -490,7 +521,7 @@ test('unplanned execution is recorded, continuous ticks merge, and a pause remai
   assert.equal(a.run('DATA.dailyHistory[VIEW_DATE].sessions[0].endMs - DATA.dailyHistory[VIEW_DATE].sessions[0].startMs'),120000);
 });
 
-test('V2 multi-hour execution renders once per session with precise times and a preserved pause', {skip:!IS_V2}, () => {
+test('multi-hour execution renders once per session with precise times and a preserved pause', () => {
   const a=gestureApp();
   a.run(`const ref={type:'subject',id:'a',title:'경영학'};
     recordTimelineSession(ref,Date.parse('2026-10-17T04:20:30+09:00'),Date.parse('2026-10-17T07:40:15+09:00'));
@@ -509,7 +540,7 @@ test('V2 multi-hour execution renders once per session with precise times and a 
   assert.deepEqual(a.json('DATA.dailyHistory[VIEW_DATE].sessions'),recorded);
 });
 
-test('V2 overlapping execution near an hour boundary keeps its fractional-minute endpoints', {skip:!IS_V2}, () => {
+test('overlapping execution near an hour boundary keeps its fractional-minute endpoints', () => {
   const a=gestureApp();
   a.run(`for(const id of ['a','b']) recordTimelineSession({type:'subject',id,title:id},
     Date.parse('2026-10-17T09:59:59.500+09:00'),Date.parse('2026-10-17T10:00:00.500+09:00'));
@@ -524,7 +555,7 @@ test('V2 overlapping execution near an hour boundary keeps its fractional-minute
   }
 });
 
-test('V2 overnight execution joins only adjacent same-source sessions for display', {skip:!IS_V2}, () => {
+test('overnight execution joins only adjacent same-source sessions for display', () => {
   const a=gestureApp();
   a.run(`recordTimelineSession({type:'subject',id:'a',title:'경영학'},
     Date.parse('2026-10-17T23:50:00+09:00'),Date.parse('2026-10-18T00:40:00+09:00'));
@@ -807,7 +838,7 @@ function subgoalApp() {
 
 test('daily progress replaces a parent with its selected subgoals only on that day', () => {
   const a = subgoalApp();
-  const parentProgress=IS_V2?{total:5,done:2,pct:40}:{total:1,done:0,pct:0};
+  const parentProgress={total:5,done:2,pct:40};
   assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),parentProgress);
   a.run(`DATA.dailyHistory['2026-10-18']=JSON.parse(JSON.stringify(DATA.dailyHistory[VIEW_DATE]));
     setTimelineSubgoals(parentPlan,[{type:'theory',id:'other',pid:'m'},{type:'question',id:'core-q',pid:'m'}]);`);
@@ -854,7 +885,7 @@ test('stale, unrelated and duplicate subgoals do not inflate progress and an emp
     {type:'question',id:'missing',pid:'m'},{type:'detail',id:'foreign',pid:'b'}]);`);
   assert.equal(a.run('parentPlan.progressTargets.length'),1);
   a.run(`DATA.modules.m.tabs[0].questions=[]`);
-  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),IS_V2?{total:4,done:2,pct:50}:{total:1,done:0,pct:0});
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:4,done:2,pct:50});
   a.run(`setTimelineSubgoals(parentPlan,[{type:'theory',id:'other',pid:'m'}]); purgeDailyRefs(r=>r.type==='theory' && r.id==='other');`);
   assert.equal(a.run('selectedTimelineSubgoals(parentPlan).length'),0);
 });
@@ -894,7 +925,7 @@ test('schema four plans migrate without adding subgoals or changing stored study
   const before = a.json('DATA.dailyHistory');
   const migrated = a.json('migratePlannerData({...DATA,schemaVersion:4})');
   assert.equal(migrated.schemaVersion,a.run('PLANNER_SCHEMA_VERSION'));
-  if(IS_V2) Object.values(migrated.dailyHistory).forEach(day=>day.slots.forEach(slot=>slot.cardIds.forEach(ref=>{
+  Object.values(migrated.dailyHistory).forEach(day=>day.slots.forEach(slot=>slot.cardIds.forEach(ref=>{
     assert.ok(ref.planId); delete ref.planId;
   })));
   assert.deepEqual(migrated.dailyHistory,before);

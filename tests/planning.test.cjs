@@ -3,9 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
+const APP_FILE = process.env.PLANNER_APP_FILE || 'cpa_app_timetable_monthly.html';
 
 function app(){
-  const html=fs.readFileSync(path.join(__dirname,'../cpa_app_timetable_monthly_v2.html'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'..',APP_FILE),'utf8');
   const script=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join('\n').replace(/\ninit\(\);\s*$/,'');
   const storage=new Map(), nodes=new Map();
   const classes=()=>{const values=new Set();return {contains:v=>values.has(v),add:(...vs)=>vs.forEach(v=>values.add(v)),remove:(...vs)=>vs.forEach(v=>values.delete(v)),toggle(v,on){if(on??!values.has(v))values.add(v);else values.delete(v);}};};

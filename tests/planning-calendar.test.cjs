@@ -3,10 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
+const APP_FILE = process.env.PLANNER_APP_FILE || 'cpa_app_timetable_monthly.html';
 
 // Run the shipped app, replacing browser I/O and the clock only.
 function app(){
-  const html=fs.readFileSync(path.join(__dirname,'../cpa_app_timetable_monthly_v2.html'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'..',APP_FILE),'utf8');
   const script=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join('\n').replace(/\ninit\(\);\s*$/,'');
   const nodes=new Map(),storage=new Map(),listeners=new Map(),timeouts=new Map();
   let clock=0,nextTimer=1;

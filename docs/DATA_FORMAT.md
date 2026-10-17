@@ -9,8 +9,8 @@ Planner records are stored in `localStorage` under:
 
 `universal_planner_v28_data` (main) and `studyplanner_v2_timeline_data` (V2).
 V2 copies the main record only when its own record is absent. Main reads only its
-own record and never adopts V2 storage automatically. Main migrates supported
-older records to schema 5; the V2 planning experiment migrates them to schema 7.
+own record and never adopts V2 storage automatically. Both apps migrate
+supported older records, including schema-5 main records, to schema 7.
 Migration failures preserve the original record.
 
 Attached image blobs are stored separately in IndexedDB:
@@ -25,13 +25,13 @@ cleanup considers references in both planner records before deleting any assets.
 
 ## Planner Schema
 
-The main planner schema is version 5 (example below). V2 uses version 7 and
-adds the planning fields described below. A V2 schema-7 backup cannot be
-imported into the schema-5 main app.
+Both main and V2 use planner schema version 7. Their official backups are
+compatible with each other; importing one replaces the destination planner
+after validation. The two browser storage records remain independent.
 
 ```json
 {
-  "schemaVersion": 5,
+  "schemaVersion": 7,
   "meta": {
     "version": "2.6",
     "dataModel": "studyplanner"
@@ -44,7 +44,8 @@ imported into the schema-5 main app.
   },
   "details": {},
   "modules": {},
-  "dailyHistory": {}
+  "dailyHistory": {},
+  "periodGoals": []
 }
 ```
 
@@ -72,13 +73,8 @@ slots and references can have null endpoints until they are placed.
 A daily plan reference may have `progressTargets: [{type, id, pid}, ...]`.
 These refer to selected descendant detail, theory, or question cards. The list
 belongs only to that date and plan; it never changes the source card's completion.
-In the main app, each currently valid selected card contributes one item to daily progress and
-remaining tasks, using its source completion state. An absent, empty, or entirely
-stale list counts the parent plan once. Duplicate targets in a single selection
-are counted once; separate planned copies continue to count separately. Source
-identity changes update these references, and source deletion removes them.
-
-V2 computes partial progress from learning-card counts instead of treating each
+Source identity changes update these references, and source deletion removes
+them. Both apps compute partial progress from learning-card counts instead of treating each
 parent as only complete/incomplete. Subject and detail progress sum the completed
 and total theory/question cards underneath; a detail with no module content is
 one item. Daily progress expands selected subject/detail targets (or the default
@@ -98,7 +94,7 @@ source cards or changing completion immediately updates the percentages without
 rewriting plans, completion flags or execution records. Full-completion checks
 compare counts exactly rather than relying on rounded percentages.
 
-### V2 Period Goals and Planning Identity (Schema 7)
+### Period Goals and Planning Identity (Schema 7)
 
 An optional `dailyHistory[date].calendarPlanOrder` array stores unique `planId`
 strings in the manual display order shared by weekly and monthly calendars.
@@ -110,7 +106,7 @@ Explicit insertion saves the destination's complete current order, including
 cards hidden by the month view. Official backups retain this additive schema-7
 field; imports reject a non-array, invalid IDs, or duplicates.
 
-V2 adds a root `periodGoals` array:
+The root `periodGoals` array stores weekly and monthly goals:
 
 ```json
 {
@@ -200,7 +196,7 @@ An assigned theory covers that theory only, since
 theory and questions are separate learning units. Distribution uses the current
 source-card order, regardless of checkbox selection order.
 
-V2 ensures stable slot IDs, including imported legacy slots. Copies receive new
+Both apps ensure stable slot IDs, including imported legacy slots. Copies receive new
 slot/plan IDs and optional `copiedFromBlock` / `copiedFromPlan` provenance values
 in `sourceDate:sourceId` form. These prevent repeated copies from duplicating
 the same source entry. Copies retain geometry, colors and subgoal selection but
@@ -251,7 +247,8 @@ Data is migrated one version at a time before normalization.
 | 2 | 3 | Add root schema metadata and `meta.dataModel`. |
 | 3 | 4 | Add slot/card time ranges and empty execution-session arrays. Parse recognizable legacy slot time labels; retain unknown ranges as unscheduled. Preserve accumulated time and card references. |
 | 4 | 5 | Support optional per-plan progress targets. Existing plans keep parent-card progress without adding selections or modifying study records. |
-| 5 | 6 (V2 only) | Add an empty period-goal list and stable daily-plan/slot identities; retain existing plans, targets, names, colors and execution data. |
+| 5 | 6 | Add an empty period-goal list and stable daily-plan/slot identities; retain existing plans, targets, names, colors and execution data. |
+| 6 | 7 | Split eligible generated, untimed parent wrappers into selected learning-card plans and link monthly allocations to weekly topic goals. Preserve manual, timed, running, recorded or completed plans and all execution history. |
 
 Data without `schemaVersion` is treated as version 1 for backward compatibility.
 
@@ -275,7 +272,7 @@ The lossless backup format is:
 {
   "format": "inmonite-studyplanner-backup",
   "formatVersion": 1,
-  "schemaVersion": 5,
+  "schemaVersion": 7,
   "appBuildId": "build-id",
   "exportedAt": "2026-07-24T00:00:00.000Z",
   "data": {},
@@ -286,7 +283,7 @@ The lossless backup format is:
 `data` contains the complete migrated planner. `assets` contains referenced IndexedDB
 records with a base64 data URL. Asset hash collisions are remapped during import, and
 all affected `app://asset/` references are rewritten.
-The envelope's `schemaVersion` is 5 for main and 7 for V2.
+The envelope's `schemaVersion` is 7 for both main and V2.
 
 Legacy root JSON backups and root-level `__assets` are still accepted and migrated.
 
@@ -321,7 +318,7 @@ and order. Wiki links preserve the subject-to-question navigation tree. App imag
 references are rewritten to Obsidian embeds under `attachments/`.
 
 `manifest.json` identifies every generated note and attachment.
-`planner-data.json` preserves the complete record (schema 5 for main, 6 for V2)
+`planner-data.json` preserves the complete record (schema 7 in both apps)
 for a future round-trip importer.
 
 The current ZIP is export-only. Editing files in Obsidian and importing them back into
