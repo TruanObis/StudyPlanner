@@ -145,15 +145,18 @@ test('daily deduplication respects selected scopes, source identity and independ
   assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:5,done:2,pct:40});
 });
 
-test('daily checklist shows a selected chapter and its vocabulary once and checks the original leaf',()=>{
+test('daily checklist keeps the chapter above its vocabulary while progress counts the leaf once',()=>{
   const a=partialProgressApp();
   a.run(`DATA.home.subjects[0].name='The Master of Ballantrae';
     DATA.details.a.cards[0].title='Chapter4';DATA.modules.m.tabs[0].label='단어';DATA.modules.m.tabs[0].done=false;
     setTimelineSubgoals(parentPlan,[{type:'detail',id:'topic',pid:'a'},{type:'theory',id:'core',pid:'m'}]);
     const before=clonePlain(parentPlan.progressTargets);`);
   const html=a.run('planningDayHTML(VIEW_DATE)');
-  assert.equal((html.match(/type="checkbox"/g)||[]).length,1);
+  assert.equal((html.match(/type="checkbox"/g)||[]).length,2);
+  assert.match(html,/aria-label="The Master of Ballantrae \/ Chapter4 완료"/);
   assert.match(html,/The Master of Ballantrae \/ Chapter4 \/ 단어 완료/);
+  assert.deepEqual(a.json('planningChecklistRows(parentPlan).map(row=>[row.ref.type,row.ref.id,row.depth])'),[['detail','topic',0],['theory','core',1]]);
+  assert.equal((html.match(/class="planning-timer-toggle/g)||[]).length,3);
   a.run(`planningToggleDone(parentPlan.planId,planningKey({type:'theory',id:'core',pid:'m'}),true);`);
   assert.equal(a.run('DATA.modules.m.tabs[0].done'),true);
   assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:1,done:1,pct:100});
@@ -161,6 +164,118 @@ test('daily checklist shows a selected chapter and its vocabulary once and check
   a.run(`setTimelineSubgoals(parentPlan,[{type:'detail',id:'topic',pid:'a'}]);
     planningToggleDone(parentPlan.planId,planningKey({type:'theory',id:'core',pid:'m'}),false);`);
   assert.equal(a.run('DATA.modules.m.tabs[0].done'),false);
+});
+
+test('a selected question retains ancestor rows without completing unselected learning cards',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.modules.m.tabs[0].questions=[{id:'q',src:'문제',done:false}];
+    setTimelineSubgoals(parentPlan,[{type:'question',id:'q',pid:'m'}]);`);
+  assert.deepEqual(a.json('planningChecklistRows(parentPlan).map(row=>[row.ref.id,row.depth,row.checkable])'),[['topic',0,false],['core',1,false],['q',2,true]]);
+  a.run(`planningToggleDone('plan','theory|m|core',false);`);
+  assert.equal(a.run('DATA.modules.m.tabs[0].done'),true);
+  a.run(`planningToggleDone('plan','question|m|q',true);`);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:1,done:1,pct:100});
+});
+
+test('shared module children stay beneath the selected parent rather than catalog order',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.home.subjects.push({id:'b',name:'다른 과목'});DATA.details.b={cards:[{id:'shared',title:'다른 단원',module:'m'}]};
+    parentPlan.id='b';setTimelineSubgoals(parentPlan,[{type:'detail',id:'shared',pid:'b'},{type:'theory',id:'core',pid:'m'}]);`);
+  assert.deepEqual(a.json('planningChecklistRows(parentPlan).map(row=>[row.ref.id,row.depth])'),[['shared',0],['core',1]]);
+});
+
+test('shared module parent counters include execution through that actual branch',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.home.subjects.push({id:'b',name:'다른 과목'});DATA.details.b={cards:[{id:'shared',title:'다른 단원',module:'m'}]};
+    DATA.dailyHistory[VIEW_DATE].sessions=[{ref:{type:'theory',id:'core',pid:'m'},startMs:now-5000,endMs:now}];`);
+  assert.equal(a.run("planningTargetSeconds({type:'detail',id:'shared',pid:'b'},VIEW_DATE)"),5);
+  assert.equal(a.run("planningTargetSeconds({type:'subject',id:'b'},VIEW_DATE)"),5);
+});
+
+test('selected goals moved outside the root retain their new subject and chapter context',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.home.subjects.push({id:'b',name:'이동한 과목'});DATA.details.b={cards:[{id:'new-chapter',title:'이동한 단원',module:'n'}]};
+    DATA.modules.n={id:'n',tabs:[DATA.modules.m.tabs[0]]};DATA.modules.m.tabs=[];
+    parentPlan.progressTargetsFollowMoves=true;parentPlan.progressTargets=[{type:'theory',id:'core',pid:'n'}];`);
+  assert.deepEqual(a.json('planningChecklistRows(parentPlan).map(row=>[row.ref.id,row.depth,row.checkable])'),[['b',0,false],['new-chapter',1,false],['core',2,true]]);
+  assert.match(a.run('planningDayHTML(VIEW_DATE)'),/이동한 단원/);
+  assert.deepEqual(a.json('dailyPlanProgress(DATA.dailyHistory[VIEW_DATE])'),{total:1,done:1,pct:100});
+});
+
+test('a daily-only goal retains old recorded time when timestamped recording begins',()=>{
+  const a=app();
+  a.run(`const adhoc={type:'adhoc',id:'reading',title:'읽기',planId:'reading-plan',time:120};
+    DATA.dailyHistory[VIEW_DATE]={slots:[{cardIds:[adhoc]}],sessions:[]};
+    planningToggleTimer('reading-plan');now+=1000;tickOneSecond();`);
+  assert.equal(a.run('planningTargetSeconds(adhoc,VIEW_DATE)'),121);
+  a.run(`planningToggleTimer('reading-plan');now=Date.parse('2026-10-18T09:00:00+09:00');
+    planningToggleTimer('reading-plan');now+=2000;tickOneSecond();planningToggleTimer('reading-plan');`);
+  assert.equal(a.run("planningTargetSeconds(adhoc,'2026-10-17')"),121);
+  assert.equal(a.run("planningTargetSeconds(adhoc,'2026-10-18')"),2);
+});
+
+test('resetting either execution or plan date never shifts daily-only time onto another date',()=>{
+  const a=app();
+  a.run(`const adhoc={type:'adhoc',id:'reading',title:'읽기',planId:'reading-plan',time:0};
+    VIEW_DATE='2026-10-18';DATA.dailyHistory[VIEW_DATE]={slots:[{cardIds:[adhoc]}],sessions:[]};
+    planningToggleTimer('reading-plan');now+=3000;planningToggleTimer('reading-plan');`);
+  assert.equal(a.run("planningTargetSeconds(adhoc,'2026-10-17')"),3);
+  assert.equal(a.run("planningTargetSeconds(adhoc,'2026-10-18')"),0);
+  a.run(`VIEW_DATE='2026-10-17';resetDailyToday();`);
+  assert.equal(a.run("planningTargetSeconds(adhoc,'2026-10-17')"),0);
+  assert.equal(a.run("planningTargetSeconds(adhoc,'2026-10-18')"),0);
+  a.run(`planningToggleTimer('reading-plan');now+=2000;planningToggleTimer('reading-plan');resetDailyToday();`);
+  assert.equal(a.run("planningTargetSeconds(adhoc,'2026-10-17')"),2);
+  assert.equal(a.run("planningTargetSeconds(adhoc,'2026-10-18')"),0);
+  assert.equal(a.run("planningPlans('2026-10-18').length"),1);
+});
+
+test('subgoal play records its original source now even from a future plan without adding a plan',()=>{
+  const a=partialProgressApp();
+  a.run(`setTimelineSubgoals(parentPlan,[{type:'detail',id:'topic',pid:'a'},{type:'theory',id:'core',pid:'m'}]);
+    parentPlan.time=0;DATA.dailyHistory['2026-10-18']=DATA.dailyHistory[VIEW_DATE];delete DATA.dailyHistory[VIEW_DATE];
+    VIEW_DATE='2026-10-18';location.hash='#/plans/day';rebuildIndex();
+    planningToggleTimer('plan','theory|m|core');now+=2500;tickOneSecond();`);
+  assert.equal(a.run('DATA.modules.m.tabs[0].isRunning'),true);
+  assert.equal(a.run('!!DATA.home.subjects[0].isRunning'),false);
+  assert.equal(a.run('DATA.modules.m.tabs[0].time'),22);
+  assert.equal(a.run('location.hash'),'#/plans/day');
+  assert.deepEqual(a.json("DATA.dailyHistory['2026-10-17'].sessions.map(s=>[s.ref.type,s.ref.id])"),[['theory','core']]);
+  assert.equal(a.run("planningPlans('2026-10-18').length"),1);
+  assert.equal(a.run("planningPlans('2026-10-17').length"),0);
+  assert.equal(a.run("planningTargetSeconds({type:'theory',id:'core',pid:'m'},'2026-10-17')"),2);
+  assert.equal(a.run("planningTargetSeconds(parentPlan,'2026-10-18')"),0);
+  a.run(`now+=2000;planningToggleTimer('plan','theory|m|core');`);
+  assert.equal(a.run('DATA.modules.m.tabs[0].isRunning'),false);
+  assert.equal(a.run("DATA.dailyHistory['2026-10-17'].totalSeconds"),4);
+  a.run(`planningToggleTimer('plan','detail|a|loose');`);
+  assert.equal(a.run('!!DATA.home.subjects[0].isRunning'),false);
+});
+
+test('daily goal timers merge overlapping parent and child sessions and retain legacy daily totals',()=>{
+  const a=partialProgressApp();
+  a.run(`parentPlan.time=0;DATA.dailyHistory[VIEW_DATE].sessions=[
+    {ref:{type:'detail',id:'topic',pid:'a'},startMs:now-60000,endMs:now-30000},
+    {ref:{type:'theory',id:'core',pid:'m'},startMs:now-45000,endMs:now},
+    {ref:{type:'theory',id:'core',pid:'unrelated'},startMs:now-120000,endMs:now-90000}];`);
+  assert.equal(a.run('planningTargetSeconds(parentPlan,VIEW_DATE)'),60);
+  assert.equal(a.run("planningTargetSeconds({type:'detail',id:'topic',pid:'a'},VIEW_DATE)"),60);
+  assert.equal(a.run("planningTargetSeconds({type:'theory',id:'core',pid:'m'},VIEW_DATE)"),45);
+  a.run(`parentPlan.time=90;DATA.dailyHistory[VIEW_DATE].slots[0].cardIds.push({...parentPlan,planId:'repeat'});`);
+  assert.equal(a.run('planningTargetSeconds(parentPlan,VIEW_DATE)'),90);
+});
+
+test('daily goal timer text updates on ticks without rebuilding the checklist',()=>{
+  const a=partialProgressApp();
+  a.run(`setTimelineSubgoals(parentPlan,[{type:'theory',id:'core',pid:'m'}]);parentPlan.time=0;
+    const valueNode={textContent:''},buttonNode={textContent:'',setAttribute(k,v){this[k]=v;}};
+    const timerNode={dataset:{planId:'plan',timerKey:'theory|m|core'},querySelector:s=>s==='.planning-timer-value'?valueNode:buttonNode};
+    document.querySelectorAll=s=>s==='[data-planning-timer]'?[timerNode]:[];
+    planningActiveView='day';rebuildIndex();planningToggleTimer('plan','theory|m|core');
+    document.getElementById('planningContent').innerHTML='preserved checklist';now+=3000;tickOneSecond();`);
+  assert.equal(a.run('valueNode.textContent'),'00:00:03');
+  assert.equal(a.run("buttonNode['aria-pressed']"),'true');
+  assert.equal(a.nodes.get('planningContent').innerHTML,'preserved checklist');
 });
 
 test('checking a module card refreshes detail and daily progress together without changing execution',()=>{

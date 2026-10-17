@@ -86,8 +86,13 @@ parent) into those same learning units, deduplicating source identities across
 all plans on that date. A parent plan and a separate plan for its child therefore
 share one completion item for that child, even in different time blocks.
 Explicit theory and question targets each remain one item. Independent daily-only
-tasks and different dates remain separate. Selected subgoal checklists display
-the expanded unique units while preserving the stored `progressTargets` choices.
+tasks and different dates remain separate. Selected subgoal checklists preserve
+parent goals and indent children beneath them, independently of the deduplicated
+progress units. Ancestors shown only for context have no completion checkbox.
+The stored `progressTargets` choices are unchanged. Daily goal counters derive
+from that date's execution sessions, merging overlapping descendant intervals
+for parents and retaining legacy daily ref totals. Starting a subgoal uses its
+canonical timer and records the actual current date; no extra plan is created.
 These derived counts are not stored; adding/removing
 source cards or changing completion immediately updates the percentages without
 rewriting plans, completion flags or execution records. Full-completion checks

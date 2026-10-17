@@ -180,9 +180,11 @@ subgoals, or within the parent when no valid subgoals are set. Overlapping paren
 and child selections, including separate or repeated plans, count each source
 learning card only once across that day's progress and remaining tasks. For
 example, planning both Chapter4 and its sole vocabulary card counts one item.
-Different dates and independent daily-only tasks remain separate. The selected
-subgoal checklist shows the same unique learning cards instead of repeating a
-parent and its children; the saved target selections stay intact.
+Different dates and independent daily-only tasks remain separate. The daily
+checklist retains selected parent goals and indents their learning cards beneath
+them. Ancestors needed to show a selected child's location remain visible, with
+completion checkboxes limited to the selected work. Displaying both Chapter4
+and its vocabulary card does not add another progress item.
 Selecting only a theory card counts that card,
 not its questions. Adding another unfinished card updates progress immediately,
 without changing stored completion flags, plans or study-time records.
@@ -200,6 +202,14 @@ Legacy untimed time blocks can still be drawn in **시간 블록 편집** mode.
   move a plan to another date, set its time in 10-minute steps, start/stop its
   timer, or open its source card. Completion uses the source card's current
   state, including when viewing past dates.
+  Every parent and subgoal has a play/pause button and a live **HH:MM:SS** counter
+  for the displayed date. A subgoal button records that original card without
+  adding another plan or navigating away. Recording always uses the real current
+  date and time, including when a future plan is open. Parent counters include
+  descendant execution, counting overlapping intervals once; previously stored
+  daily totals remain available. Updating the seconds keeps the checklist in place.
+  Resetting a date also removes its execution from daily-only task counters when
+  those tasks are planned for another date, without moving time to that date.
 * **주간 / 월간** show **기간 목표** directly below the date controls. Drag a
   learning card into this area to create a goal for the displayed week or month,
   initially including its unfinished learning cards and all seven study weekdays.

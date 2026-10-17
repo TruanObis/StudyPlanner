@@ -358,10 +358,15 @@
     .planning-actions { justify-content:flex-start; gap:6px; }
     .planning-actions .btn { font-size:12px; padding:6px 9px; }
     .planning-subgoals { list-style:none; padding:8px 0 0; margin:10px 0 0; border-top:1px solid var(--line); }
-    .planning-subgoals li { display:flex; align-items:flex-start; gap:9px; padding:7px 0; }
+    .planning-subgoals li { display:flex; align-items:center; gap:9px; padding:7px 0; margin-left:calc(var(--goal-depth,0) * 18px); flex-wrap:wrap; }
     .planning-subgoals input,.planning-check input { accent-color:var(--primary); width:17px; height:17px; flex-shrink:0; margin-top:3px; }
-    .planning-subgoals .planning-title { font-weight:500; font-size:13px; }
+    .planning-subgoals .planning-title { flex:1; min-width:72px; font-weight:500; font-size:13px; }
     .planning-subgoals .is-done .planning-title { text-decoration:line-through; color:var(--text-sub); }
+    .planning-goal-marker { width:17px; flex-shrink:0; }
+    .planning-timer { display:inline-flex; align-items:center; gap:6px; margin-left:auto; flex-shrink:0; }
+    .planning-timer-value { font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--text-sub); }
+    .planning-timer-toggle { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border:1px solid var(--line); border-radius:7px; background:transparent; color:var(--text); cursor:pointer; }
+    .planning-timer-toggle[aria-pressed="true"] { color:var(--primary); border-color:var(--primary); background:color-mix(in srgb,var(--primary) 10%,transparent); }
     .planning-empty { padding:22px; border:1px dashed var(--line); border-radius:12px; color:var(--text-sub); font-size:13px; text-align:center; }
     .planning-badge { display:inline-block; border-radius:20px; padding:3px 8px; font-size:11px; background:var(--input-bg); color:var(--text-sub); }
     .planning-new { border:1px solid var(--line); border-radius:14px; padding:16px; background:var(--card-bg); }
@@ -928,7 +933,7 @@ const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
 const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
 const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-10-17-planning-workspace-15';
+const APP_BUILD_ID = '2026-10-17-planning-workspace-16';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
 const PLANNER_SCHEMA_VERSION = 7;
@@ -5513,14 +5518,92 @@ function planningOpenSource(ref){
   if(ref.type==='adhoc') return;
   navigateToCard(ref.type,ref.id,ref.pid);
 }
-function planningToggleTimer(id){
+function planningToggleTimer(id,key=null){
   const item=planningFindPlan(id); if(!item) return;
+  const target=!key || key===planningKey(item.ref) ? item.ref : planningChecklistRows(item.ref).find(row=>planningKey(row.ref)===key)?.ref;
+  if(!target) return;
   VIEW_DATE=item.date;
-  toggleTimerFromSidebar(item.ref.type,item.ref.id,item.ref.pid,item.sIdx,item.cIdx);
+  toggleTimerFromSidebar(target.type,target.id,target.pid,item.sIdx,item.cIdx);
   planningRefresh();
 }
+function planningChecklistRows(ref){
+  const selected=selectedTimelineSubgoals(ref);
+  if(!selected.length) return [{ref,label:getCardInfo(ref).title,depth:0,checkable:true}];
+  const rootKey=planningKey(ref),catalog=planningCatalog(),entries=new Map(catalog.map(entry=>[planningKey(entry.ref),entry]));
+  const targets=new Set([...selected,...timelinePlanUnits(ref)].map(planningKey)),parents=new Map(),stack=[rootKey];
+  // Use the plan's actual branch when a module is linked from more than one parent.
+  timelineSubgoalOptions(planningRef(ref)).forEach(target=>{
+    const key=planningKey(target); parents.set(key,stack[target.depth] || rootKey);
+    stack[target.depth+1]=key; stack.length=target.depth+2;
+  });
+  const parentKey=key=>{
+    if(parents.has(key)) return parents.get(key);
+    const entry=entries.get(key),target=entry?.ref; if(!target || target.type==='subject') return null;
+    if(target.type==='detail') return planningKey({type:'subject',id:target.pid});
+    if(target.type==='theory') return planningKey(entry.scope);
+    const tab=DATA.modules?.[target.pid]?.tabs?.find(t=>(t.questions || []).some(q=>q.id===target.id));
+    return tab ? planningKey({type:'theory',id:tab.id,pid:target.pid}) : null;
+  };
+  const visible=new Set();
+  targets.forEach(key=>{
+    while(key && key!==rootKey && entries.has(key) && !visible.has(key)){
+      visible.add(key); key=parentKey(key);
+    }
+  });
+  const children=new Map(),rows=[],visited=new Set();
+  catalog.filter(entry=>visible.has(planningKey(entry.ref))).forEach(entry=>{
+    const parent=parentKey(planningKey(entry.ref)),key=visible.has(parent)?parent:null;
+    if(!children.has(key)) children.set(key,[]);children.get(key).push(entry);
+  });
+  const visit=(entry,depth)=>{
+    const key=planningKey(entry.ref);if(visited.has(key)) return;visited.add(key);
+    rows.push({ref:entry.ref,label:entry.label,depth,checkable:targets.has(key)});
+    (children.get(key) || []).forEach(child=>visit(child,depth+1));
+  };
+  (children.get(null) || []).forEach(entry=>visit(entry,0));
+  return rows;
+}
 function planningChecklistTargets(ref){
-  return selectedTimelineSubgoals(ref).length?timelinePlanUnits(ref):[ref];
+  return planningChecklistRows(ref).filter(row=>row.checkable).map(row=>row.ref);
+}
+function planningSessionSeconds(sessions){
+  const intervals=sessions.map(session=>[session.startMs,session.endMs]).sort((a,b)=>a[0]-b[0]);
+  let milliseconds=0,end=-Infinity;
+  intervals.forEach(([start,stop])=>{if(stop>Math.max(start,end)) milliseconds+=stop-Math.max(start,end);end=Math.max(end,stop);});
+  return Math.floor(milliseconds/1000);
+}
+function planningTargetSeconds(ref,date){
+  const daily=DATA.dailyHistory?.[date]; if(!daily) return 0;
+  const keys=new Set([planningKey(ref),...timelineSubgoalOptions(planningRef(ref)).map(planningKey)]);
+  const seconds=planningSessionSeconds((daily.sessions || []).filter(session=>keys.has(planningKey(session.ref))));
+  const saved=(daily.slots || []).flatMap(slot=>slot.cardIds || []).filter(target=>timerRefMatches(target,ref)).map(target=>target.time || 0);
+  if(ref.type==='adhoc'){
+    // Separate lifetime timestamped execution from old totals belonging to the plan date.
+    const recorded=planningSessionSeconds(Object.values(DATA.dailyHistory || {}).flatMap(day=>day.sessions || []).filter(session=>timerRefMatches(session.ref,ref)));
+    return seconds+Math.max(0,...saved.map(time=>time-recorded));
+  }
+  return Math.max(seconds,0,...saved);
+}
+function planningTimerHTML(plan,target,date){
+  const running=getCardInfo(target).isRunning,label=planningLabel(target),key=planningKey(target);
+  return `<span class="planning-timer" data-planning-timer data-plan-id="${escapeHtml(plan.planId)}" data-timer-key="${escapeHtml(key)}"><span class="planning-timer-value" aria-label="${escapeHtml(label)} ${date} 실행시간">${formatTime(planningTargetSeconds(target,date))}</span><button type="button" class="planning-timer-toggle" aria-label="${escapeHtml(label)} 기록 ${running?'정지':'시작'}" aria-pressed="${!!running}" onclick="${planningCall('planningToggleTimer',[plan.planId,key])}">${running?'❚❚':'▶'}</button></span>`;
+}
+function updatePlanningTimerDOM(){
+  if(planningView()!=='day') return;
+  const plans=new Map(),times=new Map();
+  document.querySelectorAll('[data-planning-timer]').forEach(node=>{
+    const {planId,timerKey}=node.dataset;
+    if(!plans.has(planId)){
+      const item=planningFindPlan(planId);
+      plans.set(planId,item?{...item,targets:[item.ref,...planningChecklistRows(item.ref).map(row=>row.ref)]}:null);
+    }
+    const item=plans.get(planId),target=item?.targets.find(ref=>planningKey(ref)===timerKey); if(!target) return;
+    if(!times.has(timerKey)) times.set(timerKey,planningTargetSeconds(target,item.date));
+    node.querySelector('.planning-timer-value').textContent=formatTime(times.get(timerKey));
+    const button=node.querySelector('.planning-timer-toggle'),running=getCardInfo(target).isRunning;
+    button.textContent=running?'❚❚':'▶';button.setAttribute('aria-pressed',String(!!running));
+    button.setAttribute('aria-label',`${planningLabel(target)} 기록 ${running?'정지':'시작'}`);
+  });
 }
 function planningToggleDone(id,key,checked){
   const item=planningFindPlan(id); if(!item) return;
@@ -5550,14 +5633,14 @@ function planningDayHTML(date){
   const rows=planningPlans(date);
   if(!rows.length) return '<div class="planning-empty">아직 계획이 없습니다. 시간표에 카드를 놓거나 주간·월간 목표를 배분해 보세요.</div>';
   return rows.map(({ref})=>{
-    const info=getCardInfo(ref),targets=planningChecklistTargets(ref),progress=timelinePlanProgress(ref);
+    const info=getCardInfo(ref),targets=planningChecklistRows(ref),progress=timelinePlanProgress(ref);
     return `<article class="planning-item" data-plan-id="${escapeHtml(ref.planId)}" draggable="${!timelineAdding}" ondragstart="${planningCall('planningDragPlan',[],`event,${JSON.stringify(ref.planId)}`)}">
       <div class="planning-item-head"><div><span class="planning-time">${hasTimelineRange(ref)?timelineRange(ref):'시간 미지정'}</span>
         <button class="planning-title" type="button" onclick="${planningCall('planningOpenSource',[planningRef(ref)])}">${escapeHtml(info.title)}</button>
         <div class="planning-muted">${progress.done} / ${progress.total} 완료${ref.goalId&&planningGoal(ref.goalId)?` · ${planningGoal(ref.goalId).kind==='week'?'주간':'월간'} 목표`:''}</div></div>
-      <div class="planning-actions">${planningButton(info.isRunning?'기록 정지':'기록 시작','planningToggleTimer',[ref.planId],info.isRunning)}
+      <div class="planning-actions">${planningTimerHTML(ref,ref,date)}
         ${planningButton('날짜·시간','planningOpenEdit',[ref.planId])}${timelineSubgoalOptions(ref).length?planningButton('세부목표','planningEditSubgoals',[ref.planId]):''}${planningButton('제거','planningRemovePlan',[ref.planId])}</div></div>
-      <ul class="planning-subgoals">${targets.map(target=>{const done=getCardInfo(target).done;return `<li class="${done?'is-done':''}"><input type="checkbox" aria-label="${escapeHtml(planningLabel(target))} 완료" ${done?'checked':''} onchange="${planningCall('planningToggleDone',[ref.planId,planningKey(target)],'this.checked')}"><button type="button" class="planning-title" onclick="${planningCall('planningOpenSource',[planningRef(target)])}">${escapeHtml(planningLabel(target))}</button></li>`;}).join('')}</ul>
+      <ul class="planning-subgoals">${targets.map(({ref:target,label,depth,checkable})=>{const done=getCardInfo(target).done;return `<li class="${done?'is-done':''}" style="--goal-depth:${depth}">${checkable?`<input type="checkbox" aria-label="${escapeHtml(planningLabel(target))} 완료" ${done?'checked':''} onchange="${planningCall('planningToggleDone',[ref.planId,planningKey(target)],'this.checked')}">`:'<span class="planning-goal-marker" aria-hidden="true"></span>'}<button type="button" class="planning-title" aria-label="${escapeHtml(planningLabel(target))}" onclick="${planningCall('planningOpenSource',[planningRef(target)])}">${escapeHtml(label)}</button>${planningKey(target)!==planningKey(ref)?planningTimerHTML(ref,target,date):''}</li>`;}).join('')}</ul>
     </article>`;
   }).join('');
 }
@@ -7708,9 +7791,22 @@ function resetDailyToday() {
   if(!confirm(`[${date}] 실행시간 기록만 초기화하시겠습니까?\n계획, 시간 블록, 세부목표, 완료 상태와 목표시간은 유지됩니다.`)) return;
   tickOneSecond();
   const daily = ensureDailyData(date);
+  Object.entries(DATA.dailyHistory || {}).forEach(([planDate,day])=>{
+    (day.slots || []).forEach(slot=>(slot.cardIds || []).forEach(ref=>{
+      if(ref.type!=='adhoc') return;
+      // Adhoc time spans execution dates even when its plan lives on another date.
+      const matches=session=>timerRefMatches(session.ref,ref);
+      if(planDate===date){
+        ref.time=planningSessionSeconds(Object.entries(DATA.dailyHistory || {}).filter(([d])=>d!==date).flatMap(([,other])=>other.sessions || []).filter(matches));
+      }else{
+        const removed=planningSessionSeconds((daily.sessions || []).filter(matches));
+        if(removed) ref.time=Math.max(0,(ref.time || 0)-removed);
+      }
+    }));
+  });
   daily.totalSeconds = 0;
   daily.sessions = [];
-  (daily.slots || []).forEach(slot=>(slot.cardIds || []).forEach(ref=>{ ref.time = 0; }));
+  (daily.slots || []).forEach(slot=>(slot.cardIds || []).forEach(ref=>{ if(ref.type!=='adhoc') ref.time = 0; }));
   if(date === getLogicalDate()){
     // Keep running timers active, with no pre-reset fraction in the next session.
     __lastTimerTickAt = Date.now(); __timerCarryMs = 0;
@@ -7976,6 +8072,7 @@ function tickOneSecond(){
 
   updateTimerDOM();
   updateSidebarTimerDOM();
+  updatePlanningTimerDOM();
   updateTimelineExecution();
 
   if(document.getElementById('daily-sidebar')?.classList.contains('open')){
