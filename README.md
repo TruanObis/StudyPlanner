@@ -17,6 +17,8 @@ V2 is the workspace for trying and validating changes before applying them to th
 
 The planning workspace was promoted to main on **2026-10-17** (build `2026-10-17-planning-workspace-16`). Main and V2 now share the features below and schema 7, while retaining separate planner storage. This includes daily goal hierarchies and timers, weekly/monthly diaries and allocation, and the latest progress-counting fixes. Older files in `archive/` are retained for history or comparison.
 
+The **2026-10-18** update (build `2026-10-18-planning-workspace-17`) fixes shared-module double counting and excludes unlinked detail pages from overall progress in both apps. The data schema remains 7.
+
 ## Features
 
 * Subject / topic / module-based study card structure
@@ -180,6 +182,12 @@ Both apps carry partial completion through subject/topic parents into the home,
 detail and daily progress displays. Each theory card and question counts as one
 learning card; a detail card without module content counts on its own. A parent
 containing two learning cards therefore shows **50%** when one is complete.
+Subject progress counts a shared module's learning cards once within that
+subject. Overall progress counts them once across all subjects registered on
+the home page, even when multiple detail cards link to the same module.
+Cards in different modules remain separate even if their local IDs match.
+Detail pages without a home subject are excluded from overall progress; their
+stored cards and records are preserved and count again if the subject is restored.
 Daily progress and remaining tasks use these counts within the selected
 subgoals, or within the parent when no valid subgoals are set. Overlapping parent
 and child selections, including separate or repeated plans, count each source

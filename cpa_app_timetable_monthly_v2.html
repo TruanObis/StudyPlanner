@@ -933,7 +933,7 @@ const EXPERIMENTAL_STORAGE_KEY = 'studyplanner_v2_timeline_data';
 const STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? EXPERIMENTAL_STORAGE_KEY : MAIN_STORAGE_KEY;
 const PEER_STORAGE_KEY = IS_EXPERIMENTAL_BUILD ? MAIN_STORAGE_KEY : EXPERIMENTAL_STORAGE_KEY;
 const THEME_KEY = 'universal_planner_theme';
-const APP_BUILD_ID = '2026-10-17-planning-workspace-16';
+const APP_BUILD_ID = '2026-10-18-planning-workspace-17';
 const APP_VERSION_URL = 'app_version.json';
 const APP_UPDATE_RELOAD_KEY = IS_EXPERIMENTAL_BUILD ? 'studyplanner_v2_app_update_reload' : 'studyplanner_app_update_reload';
 const PLANNER_SCHEMA_VERSION = 7;
@@ -4474,27 +4474,34 @@ function calcModuleStats(mid) {
   }
   return { pct:t?Math.round((d/t)*100):0, timeStr:formatTime(tm), rawTime:tm, isComplete:(t>0&&t===d), total:t, done:d };
 }
-function calcSubjectStats(sid) {
-  const s=DATA.home.subjects.find(x=>x.id===sid);
-  let tm=(s?s.time:0)||0;
-  const cArr=DATA.details[sid]?DATA.details[sid].cards:[];
-  let t=0,d=0;
-  cArr.forEach(c=>{
-    const st=calcCardStats(c);
-    tm+=st.time;
-    t+=st.total; d+=st.done;
+function calcSubjectsStats(subjectIds) {
+  let t=0,d=0,tm=0;
+  const countedModules=new Set();
+  subjectIds.forEach(sid=>{
+    const subject=DATA.home.subjects.find(s=>s.id===sid);
+    tm+=subject?.time || 0;
+    (DATA.details[sid]?.cards || []).forEach(card=>{
+      const st=calcCardStats(card);
+      tm+=st.time;
+      const mid=card.module || card.moduleId;
+      // Multiple detail cards can link to the same underlying learning cards.
+      // Keep time attribution unchanged, but count that module's progress once.
+      if(mid && DATA.modules[mid]?.tabs?.length){
+        if(countedModules.has(mid)) return;
+        countedModules.add(mid);
+      }
+      t+=st.total; d+=st.done;
+    });
   });
   return { pct:t?Math.round((d/t)*100):0, timeStr:formatTime(tm), rawTime:tm, total:t, done:d, isComplete:t>0&&t===d };
 }
+function calcSubjectStats(sid) {
+  return calcSubjectsStats([sid]);
+}
 function calcTotalStats() {
-  let t=0,d=0,tm=0;
-  DATA.home.subjects.forEach(s=>tm+=calcSubjectStats(s.id).rawTime);
-  if(DATA.details) {
-    Object.values(DATA.details).forEach(x=>{
-      x.cards.forEach(c=>{ const st=calcCardStats(c); t+=st.total; d+=st.done; });
-    });
-  }
-  return { pct:t?Math.round((d/t)*100):0, timeStr:formatTime(tm) };
+  // Retained detail pages without a home subject are outside the overall scope.
+  const stats=calcSubjectsStats(DATA.home.subjects.map(subject=>subject.id));
+  return { pct:stats.pct, timeStr:stats.timeStr };
 }
 
 /* =========================

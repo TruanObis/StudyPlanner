@@ -76,6 +76,69 @@ test('subject and total progress weight individual learning cards across unequal
   assert.equal(a.run('calcTotalStats().pct'),43);
 });
 
+test('shared module progress counts each learning card once within a subject',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.details.a.cards.push({id:'alias',title:'같은 모듈',module:'m',time:5},{id:'loose',done:false});
+    const before=clonePlain(DATA);`);
+  assert.equal(a.run('calcSubjectStats("a").total'),2);
+  assert.equal(a.run('calcSubjectStats("a").done'),1);
+  assert.equal(a.run('calcSubjectStats("a").pct'),50);
+  assert.equal(a.run('calcTotalStats().pct'),50);
+  assert.deepEqual(a.json('DATA'),a.json('before'));
+  a.run(`renderRouter=()=>renderHome();toggleCheck({checked:false},'theory','m',0,'core');`);
+  assert.match(a.nodes.get('app').innerHTML,/전체 진행률<\/span><span[^>]*>0%/);
+  a.run(`toggleCheck({checked:true},'detail','a',2);`);
+  assert.match(a.nodes.get('app').innerHTML,/전체 진행률<\/span><span[^>]*>50%/);
+  a.run(`toggleCheck({checked:true},'theory','m',0,'core');`);
+  assert.match(a.nodes.get('app').innerHTML,/전체 진행률<\/span><span[^>]*>100%/);
+});
+
+test('overall progress deduplicates shared modules across subjects without losing either subject scope',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.home.subjects.push({id:'b',name:'다른 과목'});
+    DATA.details.b={cards:[{id:'alias',module:'m'},{id:'loose',done:false}]};`);
+  assert.equal(a.run('calcTotalStats().pct'),50);
+  assert.equal(a.run('calcSubjectStats("a").pct'),100);
+  assert.equal(a.run('calcSubjectStats("b").pct'),50);
+  a.run('DATA.home.subjects.reverse();');
+  assert.equal(a.run('calcTotalStats().pct'),50);
+  assert.equal(a.run('calcSubjectStats("a").pct'),100);
+  assert.equal(a.run('calcSubjectStats("b").pct'),50);
+});
+
+test('overall progress keeps distinct modules and standalone cards with matching local IDs separate',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.details.a.cards.push({id:'alias',module:'m'},{id:'loose',done:false});
+    DATA.home.subjects.push({id:'b',name:'다른 과목'});
+    DATA.details.b={cards:[{id:'topic',module:'n'},{id:'loose',done:false}]};
+    DATA.modules.n={id:'n',tabs:[{id:'core',done:false,questions:[]}]};`);
+  assert.equal(a.run('calcTotalStats().pct'),25);
+  assert.equal(a.run('calcSubjectStats("a").pct'),50);
+  assert.equal(a.run('calcSubjectStats("b").pct'),0);
+  a.run(`DATA.modules.n.tabs[0].done=true;`);
+  assert.equal(a.run('calcTotalStats().pct'),50);
+});
+
+test('overall progress excludes orphan detail pages without deleting their records',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.details.orphan={id:'orphan',title:'연결되지 않은 페이지',cards:[{id:'hidden',done:false,time:900}]};
+    normalizeData();const before=clonePlain(DATA);renderHome();`);
+  assert.equal(a.run('calcTotalStats().pct'),100);
+  assert.match(a.nodes.get('app').innerHTML,/전체 진행률<\/span><span[^>]*>100%/);
+  assert.deepEqual(a.json('DATA'),a.json('before'));
+  a.run(`DATA.home.subjects.push({id:'orphan',name:'다시 연결한 과목'});renderHome();`);
+  assert.equal(a.run('calcTotalStats().pct'),50);
+  assert.match(a.nodes.get('app').innerHTML,/전체 진행률<\/span><span[^>]*>50%/);
+});
+
+test('overall progress is zero when no home subjects remain even if detail records are retained',()=>{
+  const a=partialProgressApp();
+  a.run(`DATA.home.subjects=[];const before=clonePlain(DATA);renderHome();`);
+  assert.equal(a.run('calcTotalStats().pct'),0);
+  assert.match(a.nodes.get('app').innerHTML,/전체 진행률<\/span><span[^>]*>0%/);
+  assert.deepEqual(a.json('DATA'),a.json('before'));
+});
+
 test('selected parent subgoals retain partial progress while individual theory and question targets stay independent',()=>{
   const a=partialProgressApp();
   a.run(`DATA.modules.m.tabs[0].questions=[{id:'q',done:false}];

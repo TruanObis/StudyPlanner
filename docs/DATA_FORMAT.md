@@ -77,7 +77,14 @@ Source identity changes update these references, and source deletion removes
 them. Both apps compute partial progress from learning-card counts instead of treating each
 parent as only complete/incomplete. Subject and detail progress sum the completed
 and total theory/question cards underneath; a detail with no module content is
-one item. Daily progress expands selected subject/detail targets (or the default
+one item. Subject progress deduplicates shared module identities within that
+subject. Overall progress traverses only subjects registered in `home.subjects`
+and deduplicates shared modules across that entire scope. Different modules and
+standalone detail cards remain distinct even when their local card IDs match.
+Unlinked detail pages are retained in storage but excluded from overall progress;
+registering their subject again includes them without changing their completion
+or execution records. These calculations do not change the schema or the existing
+study-time aggregation. Daily progress expands selected subject/detail targets (or the default
 parent) into those same learning units, deduplicating source identities across
 all plans on that date. A parent plan and a separate plan for its child therefore
 share one completion item for that child, even in different time blocks.
